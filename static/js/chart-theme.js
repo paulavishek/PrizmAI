@@ -33,7 +33,7 @@
         var dark = isDark();
         return {
             isDark: dark,
-            textColor:  dark ? '#c7ccdd' : '#444',                 // axis/tick/legend labels
+            textColor:  dark ? '#eef1f8' : '#444',                 // axis/tick/legend labels (bright near-white in dark mode)
             gridColor:  dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.05)',
             titleColor: dark ? '#8fb3ff' : '#1a3d7c'               // mirrors --chart-title-color
         };

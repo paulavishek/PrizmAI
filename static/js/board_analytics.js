@@ -70,8 +70,39 @@ function initializeCharts() {
         initializeFallbackCharts();
     }
     
+    // Register every chart this page created with the shared theming helper so
+    // axis/tick/legend text recolors when the user toggles light/dark mode.
+    // These charts rely on Chart.defaults.color (set above) rather than
+    // per-chart color overrides, so PrizmCharts' recolor-on-toggle (which
+    // refreshes the defaults then calls chart.update) is enough to keep them
+    // legible in both themes. Without this they'd keep their build-time color
+    // and go near-invisible after a toggle.
+    registerChartsForThemeToggle();
+
     chartsInitialized = true;
     console.log('All charts initialized successfully');
+}
+
+/**
+ * Register all live Chart.js instances on this page with PrizmCharts so they
+ * recolor on displayModeChanged. Safe no-op if chart-theme.js isn't loaded.
+ * Uses Chart.instances (Chart.js v3/v4) so we don't have to thread a return
+ * value through every new Chart(...) call site in this file.
+ */
+function registerChartsForThemeToggle() {
+    if (!window.PrizmCharts || typeof window.PrizmCharts.register !== 'function') return;
+    if (typeof Chart === 'undefined' || !Chart.instances) return;
+    try {
+        var already = window.PrizmCharts._registered || [];
+        Object.keys(Chart.instances).forEach(function (key) {
+            var chart = Chart.instances[key];
+            if (chart && already.indexOf(chart) === -1) {
+                window.PrizmCharts.register(chart);
+            }
+        });
+    } catch (e) {
+        console.warn('Chart theme-toggle registration skipped:', e);
+    }
 }
 
 /**
