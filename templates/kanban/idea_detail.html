@@ -88,7 +88,7 @@
                     <div class="d-flex gap-1 flex-shrink-0">
                         <span class="badge badge-stage-{{ idea.stage }}">{{ idea.get_stage_display }}</span>
                         {% if not idea.is_scored %}
-                        <span class="badge" style="background:#e5e7eb;color:var(--text-muted);">Unscored</span>
+                        <span class="badge" style="background:var(--bg-tertiary);color:var(--text-muted);">Unscored</span>
                         {% endif %}
                     </div>
                 </div>
@@ -255,7 +255,7 @@
 
         <!-- ── RIGHT: AI Score card ── -->
         <div>
-            <div class="ai-score-card" id="spectraScoreCard">
+            <div class="ai-score-card" id="spectraScoreCard" data-is-scored="{{ idea.is_scored|yesno:"true,false" }}">
                 <h6 class="fw-bold mb-3"><i class="fas fa-robot me-1 text-primary"></i>Spectra AI Score</h6>
                 <div class="mb-2">{% include 'partials/ai_disclaimer.html' %}</div>
                 {% if idea.is_scored %}
@@ -356,7 +356,6 @@
 {% block extra_js %}
 <script>
 const IDEA_ID = {{ idea.pk }};
-const IDEA_IS_SCORED = {{ idea.is_scored|yesno:"true,false" }};
 const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
 const BOARD_COLUMNS = {{ board_columns_json|default:"{}"|safe }};
 
@@ -426,10 +425,13 @@ function changeStage(newStage) {
     _pendingStage = newStage;
     const label = newStage.replace(/_/g, ' ');
     document.getElementById('stageConfirmTarget').textContent = label;
-    // Warn when approving/rejecting an idea Spectra hasn't scored yet.
+    // Warn when approving/rejecting an idea Spectra hasn't scored yet. Read the
+    // scored state live off the score card's DOM (rather than a page-load-time
+    // constant) so this can't go stale after an in-place re-score.
     const warn = document.getElementById('unscoredWarning');
     if (warn) {
-        const risky = !IDEA_IS_SCORED && (newStage === 'approved' || newStage === 'rejected');
+        const isScored = document.getElementById('spectraScoreCard')?.dataset.isScored === 'true';
+        const risky = !isScored && (newStage === 'approved' || newStage === 'rejected');
         warn.style.display = risky ? '' : 'none';
     }
     const modal = new bootstrap.Modal(document.getElementById('stageConfirmModal'));
