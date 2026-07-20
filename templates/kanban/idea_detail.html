@@ -338,7 +338,7 @@
       </div>
       <div class="modal-body py-3" style="font-size:0.9rem;">
         Change stage to <span id="stageConfirmTarget" class="confirm-modal-stage"></span>?
-        <div id="unscoredWarning" class="alert alert-warning d-flex align-items-start gap-2 py-2 mt-3 mb-0" style="display:none; font-size:0.8rem;">
+        <div id="unscoredWarning" class="alert alert-warning d-none align-items-start gap-2 py-2 mt-3 mb-0" style="font-size:0.8rem;">
           <i class="fas fa-robot mt-1"></i>
           <span>Spectra hasn&rsquo;t scored this idea yet. You can still proceed, but you&rsquo;ll be deciding without the AI&rsquo;s impact, effort, and confidence assessment. Consider scoring it first.</span>
         </div>
@@ -432,7 +432,13 @@ function changeStage(newStage) {
     if (warn) {
         const isScored = document.getElementById('spectraScoreCard')?.dataset.isScored === 'true';
         const risky = !isScored && (newStage === 'approved' || newStage === 'rejected');
-        warn.style.display = risky ? '' : 'none';
+        // This alert needs Bootstrap's .d-flex (display:flex !important) for its
+        // icon+text layout, so toggling inline style.display can't hide it — an
+        // !important class rule always beats a non-!important inline style, so the
+        // warning would show for EVERY idea. Toggle the d-none/d-flex utilities
+        // (both !important) so exactly one wins and the state is honoured.
+        warn.classList.toggle('d-flex', risky);
+        warn.classList.toggle('d-none', !risky);
     }
     const modal = new bootstrap.Modal(document.getElementById('stageConfirmModal'));
     modal.show();
