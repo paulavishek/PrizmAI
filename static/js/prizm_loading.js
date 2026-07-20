@@ -784,6 +784,14 @@
             'Evaluating connection strength\u2026',
             'Preparing the connection map\u2026'
         ],
+        tripleConstraint: [
+            'Reading current scope, budget & schedule data…',
+            'Analysing how Scope, Cost and Time interact…',
+            'Weighting velocity and momentum signals…',
+            'Building trade-off scenarios…',
+            'Identifying the optimal configuration…',
+            'Finalising recommendations…'
+        ],
         spectraScore: [
             'Reading your idea\u2026',
             'Analysing business impact potential\u2026',

@@ -323,7 +323,7 @@
     <!-- Key Metrics -->
     <div class="row mb-4">
         <div class="col-md-3">
-            <div class="card stat-card success">
+            <div class="card stat-card success h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-2">Baseline</h6>
                     <h3 class="mb-0">{{ scope_status.baseline_tasks }}</h3>
@@ -335,7 +335,7 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card stat-card info">
+            <div class="card stat-card info h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-2">Current</h6>
                     <h3 class="mb-0">{{ scope_status.current_tasks }}</h3>
@@ -347,13 +347,13 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card stat-card 
+            <div class="card stat-card h-100
                 {% if scope_status.scope_change_percentage > 30 %}danger
                 {% elif scope_status.scope_change_percentage > 15 %}warning
                 {% else %}info{% endif %}">
                 <div class="card-body">
                     <h6 class="text-muted mb-2">Scope Change</h6>
-                    <h3 class="mb-0 
+                    <h3 class="mb-0
                         {% if scope_status.scope_change_percentage > 30 %}text-danger
                         {% elif scope_status.scope_change_percentage > 15 %}text-warning
                         {% else %}text-info{% endif %}">
@@ -366,7 +366,7 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card stat-card">
+            <div class="card stat-card h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-2">Baseline Set</h6>
                     <p class="mb-0">{{ scope_status.baseline_date|date:"M d, Y" }}</p>
@@ -380,7 +380,7 @@
     {% if velocity %}
     <div class="row mb-4">
         <div class="col-md-4">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-2"><i class="fas fa-tachometer-alt me-2"></i>Scope Velocity</h6>
                     <h4 class="mb-0">{{ velocity.avg_tasks_added_per_week|floatformat:1 }}</h4>
@@ -404,7 +404,7 @@
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-2"><i class="fas fa-chart-bar me-2"></i>Complexity Velocity</h6>
                     <h4 class="mb-0">{{ velocity.avg_complexity_added_per_week|floatformat:1 }}</h4>
@@ -413,7 +413,7 @@
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-2"><i class="fas fa-clock me-2"></i>Analysis Period</h6>
                     <h4 class="mb-0">{{ velocity.weeks_analyzed|floatformat:0 }}</h4>

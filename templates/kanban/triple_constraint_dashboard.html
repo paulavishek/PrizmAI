@@ -11,6 +11,10 @@
     .constraint-badge-over      { background: rgba(220,53,69,.15);  color: #842029; border: 1px solid rgba(220,53,69,.4); }
     .constraint-badge-unknown   { background: rgba(108,117,125,.1); color: var(--text-muted); border: 1px solid rgba(108,117,125,.3); }
 
+    [data-bs-theme="dark"] .constraint-badge-on-track { background: rgba(40,167,69,.22);  color: #81c995; border-color: rgba(40,167,69,.5); }
+    [data-bs-theme="dark"] .constraint-badge-at-risk  { background: rgba(255,193,7,.22);  color: #fdd663; border-color: rgba(255,193,7,.5); }
+    [data-bs-theme="dark"] .constraint-badge-over     { background: rgba(220,53,69,.22);  color: #f28b82; border-color: rgba(220,53,69,.5); }
+
     /* ── Constraint cards ── */
     .constraint-card {
         border-radius: 10px;
@@ -47,6 +51,16 @@
     .scenario-card.reduce-scope    { border-color: #0d6efd; }
     .scenario-card.increase-budget { border-color: #198754; }
     .scenario-card.extend-timeline { border-color: #dc3545; }
+    .scenario-card h6 { color: var(--text-primary) !important; }
+    .scenario-card p.text-muted { color: var(--text-secondary) !important; }
+    .scenario-card small { color: var(--text-secondary) !important; }
+    .scenario-card small strong { color: var(--text-primary) !important; }
+
+    /* ── Project Confidence heart icon + score badge ── */
+    .pc-heart-icon { color: #6f42c1; }
+    .pc-score-badge { font-size: .7rem; background: rgba(111,66,193,.12); color: #6f42c1; border: 1px solid rgba(111,66,193,.3); }
+    [data-bs-theme="dark"] .pc-heart-icon { color: #b794f6; }
+    [data-bs-theme="dark"] .pc-score-badge { background: rgba(183,148,246,.18); color: #b794f6; border-color: rgba(183,148,246,.4); }
 
     /* ── Relationship matrix ── */
     .matrix-table th, .matrix-table td { text-align: center; vertical-align: middle; padding: 10px; }
@@ -634,9 +648,8 @@
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
                     <div>
                         <h5 class="mb-0">
-                            <i class="fas fa-heartbeat me-2" style="color:#6f42c1;"></i>Project Confidence
-                            <span class="badge ms-2 fw-normal"
-                                  style="font-size:.7rem; background:rgba(111,66,193,.12); color:#6f42c1; border:1px solid rgba(111,66,193,.3);">
+                            <i class="fas fa-heartbeat me-2 pc-heart-icon"></i>Project Confidence
+                            <span class="badge ms-2 fw-normal pc-score-badge">
                                 Score 0–100
                             </span>
                         </h5>
@@ -900,15 +913,11 @@
                             ><i class="fas fa-info-circle"></i> Complements the composite score above</span>
                         </small>
                     </div>
-                    <form method="post">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="ai_analyze">
-                        <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="fas fa-wand-magic-sparkles me-1"></i>Get AI Recommendation
-                        </button>
-                    </form>
+                    <button type="button" class="btn btn-primary btn-sm" id="tcAiAnalyzeBtn" onclick="runTripleConstraintAiAnalysis()">
+                        <i class="fas fa-wand-magic-sparkles me-1"></i>Get AI Recommendation
+                    </button>
                 </div>
-                <div class="card-body">
+                <div class="card-body" id="tcAiAnalysisBody">
 
                     {% if ai_error %}
                     <div class="alert alert-danger">
@@ -1149,6 +1158,176 @@ function simUpdate(driver) {
     document.getElementById('simCostDelta').innerHTML    = budgetDelta !== 0 ? fmtDelta(budgetDelta, '') : '—';
     document.getElementById('simTimeAdj').textContent   = timeAdj !== 0 ? (timeAdj >= 0 ? '+' : '') + timeAdj + ' wks' : (WIF.predictedDate || 'No change');
     document.getElementById('simTimeDelta').innerHTML   = timeAdj !== 0 ? fmtDelta(timeAdj, ' wks') : '—';
+}
+
+/* ── AI Triple Constraint Analysis — Spectra loader + AJAX ─────────────── */
+var TC_BOARD_ID = {{ board.id }};
+var TC_CSRF = document.querySelector('[name=csrfmiddlewaretoken]') ?
+    document.querySelector('[name=csrfmiddlewaretoken]').value :
+    (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
+
+function tcEsc(s) {
+    var d = document.createElement('div');
+    d.textContent = (s === null || s === undefined) ? '' : String(s);
+    return d.innerHTML;
+}
+
+function tcHealthCircleClass(label) {
+    if (label === 'Healthy') return 'health-circle-healthy';
+    if (label === 'At Risk') return 'health-circle-at-risk';
+    return 'health-circle-critical';
+}
+
+function tcFeasibilityBadgeClass(feasibility) {
+    if (feasibility === 'High') return 'bg-success';
+    if (feasibility === 'Medium') return 'bg-warning text-dark';
+    return 'bg-danger';
+}
+
+function tcScenarioClass(title) {
+    var t = (title || '').toLowerCase();
+    if (t.indexOf('scope') !== -1 || t.indexOf('reduce') !== -1) return 'reduce-scope';
+    if (t.indexOf('budget') !== -1 || t.indexOf('cost') !== -1) return 'increase-budget';
+    return 'extend-timeline';
+}
+
+function tcRenderAiResult(ai) {
+    var mostStressedHTML = '';
+    if (ai.most_stressed_constraint && ai.most_stressed_constraint !== 'None') {
+        mostStressedHTML =
+            '<span class="badge bg-warning text-dark ms-2" style="font-size:.75rem;">' +
+            '<i class="fas fa-exclamation-triangle me-1"></i>' + tcEsc(ai.most_stressed_constraint) + ' is most stressed</span>';
+    }
+
+    var insightsHTML = '';
+    if (ai.constraint_insights) {
+        insightsHTML =
+            '<div class="row mb-4">' +
+                '<div class="col-md-4"><div class="p-3 rounded" style="background: rgba(13,110,253,.05); border-left: 3px solid #0d6efd;">' +
+                    '<h6 class="text-primary mb-1"><i class="fas fa-expand-arrows-alt me-1"></i>Scope</h6>' +
+                    '<p class="mb-0 small">' + tcEsc(ai.constraint_insights.scope) + '</p></div></div>' +
+                '<div class="col-md-4"><div class="p-3 rounded" style="background: rgba(25,135,84,.05); border-left: 3px solid #198754;">' +
+                    '<h6 class="text-success mb-1"><i class="fas fa-dollar-sign me-1"></i>Cost</h6>' +
+                    '<p class="mb-0 small">' + tcEsc(ai.constraint_insights.cost) + '</p></div></div>' +
+                '<div class="col-md-4"><div class="p-3 rounded" style="background: rgba(220,53,69,.05); border-left: 3px solid #dc3545;">' +
+                    '<h6 class="text-danger mb-1"><i class="fas fa-clock me-1"></i>Time</h6>' +
+                    '<p class="mb-0 small">' + tcEsc(ai.constraint_insights.time) + '</p></div></div>' +
+            '</div>';
+    }
+
+    var scenariosHTML = '';
+    if (ai.trade_off_scenarios && ai.trade_off_scenarios.length) {
+        scenariosHTML += '<h6 class="mb-3"><i class="fas fa-exchange-alt me-2"></i>Trade-off Scenarios</h6>';
+        ai.trade_off_scenarios.forEach(function (s) {
+            var detailsHTML = '';
+            if (s.estimated_cost_saving_pct) {
+                detailsHTML += '<small><i class="fas fa-dollar-sign text-success me-1"></i>Cost saving: <strong>~' + tcEsc(s.estimated_cost_saving_pct) + '%</strong></small>';
+            }
+            if (s.estimated_time_saving_days) {
+                detailsHTML += '<small><i class="fas fa-clock text-danger me-1"></i>Time saving: <strong>~' + tcEsc(s.estimated_time_saving_days) + ' days</strong></small>';
+            }
+            if (s.recommended_budget_increase_pct) {
+                detailsHTML += '<small><i class="fas fa-arrow-up text-warning me-1"></i>Budget increase: <strong>~' + tcEsc(s.recommended_budget_increase_pct) + '%</strong></small>';
+            }
+            if (s.recommended_extension_weeks) {
+                detailsHTML += '<small><i class="fas fa-calendar-plus text-danger me-1"></i>Extend by: <strong>~' + tcEsc(s.recommended_extension_weeks) + ' weeks</strong></small>';
+            }
+            if (s.estimated_scope_tasks_deliverable) {
+                detailsHTML += '<small><i class="fas fa-tasks text-primary me-1"></i>Tasks deliverable: <strong>~' + tcEsc(s.estimated_scope_tasks_deliverable) + '</strong></small>';
+            }
+            scenariosHTML +=
+                '<div class="scenario-card ' + tcScenarioClass(s.title) + '">' +
+                    '<div class="d-flex justify-content-between align-items-start">' +
+                        '<div class="flex-grow-1">' +
+                            '<h6 class="mb-1">' + tcEsc(s.title) +
+                                '<span class="badge ms-2 ' + tcFeasibilityBadgeClass(s.feasibility) + '" style="font-size:.7rem;">' + tcEsc(s.feasibility) + ' feasibility</span>' +
+                            '</h6>' +
+                            '<p class="mb-1 small text-muted">' + tcEsc(s.description) + '</p>' +
+                            '<div class="d-flex gap-3 mt-1 flex-wrap">' + detailsHTML + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+        });
+    }
+
+    var recommendedActionHTML = '';
+    if (ai.recommended_action) {
+        recommendedActionHTML =
+            '<div class="alert alert-primary d-flex align-items-start gap-2 mt-3">' +
+                '<i class="fas fa-lightbulb fa-lg mt-1 flex-shrink-0"></i>' +
+                '<div><strong>Recommended Action:</strong> ' + tcEsc(ai.recommended_action) + '</div>' +
+            '</div>';
+    }
+
+    var optimalConfigHTML = '';
+    if (ai.optimal_configuration) {
+        var oc = ai.optimal_configuration;
+        optimalConfigHTML =
+            '<div class="row mt-3">' +
+                '<div class="col-12"><h6 class="mb-2"><i class="fas fa-star me-2 text-warning"></i>Optimal Configuration</h6></div>' +
+                '<div class="col-md-4"><div class="bg-light rounded p-2"><small class="text-muted d-block">Scope</small><span class="small">' + tcEsc(oc.scope_recommendation) + '</span></div></div>' +
+                '<div class="col-md-4"><div class="bg-light rounded p-2"><small class="text-muted d-block">Cost</small><span class="small">' + tcEsc(oc.cost_recommendation) + '</span></div></div>' +
+                '<div class="col-md-4"><div class="bg-light rounded p-2"><small class="text-muted d-block">Time</small><span class="small">' + tcEsc(oc.time_recommendation) + '</span></div></div>' +
+            '</div>';
+    }
+
+    return (
+        '<div class="row align-items-center mb-4">' +
+            '<div class="col-auto">' +
+                '<div class="health-score-circle ' + tcHealthCircleClass(ai.overall_health_label) + '">' +
+                    '<span>' + tcEsc(ai.overall_health_score) + '</span><small style="font-size:.6rem; font-weight:400;">/ 10</small>' +
+                '</div>' +
+                '<div class="text-center mt-1" style="font-size:.65rem; color:var(--text-muted); white-space:nowrap;">' +
+                    'Health Score ' +
+                    '<span tabindex="0" data-bs-toggle="tooltip" data-bs-placement="bottom" ' +
+                    'title="Health score out of 10. Below 3 = Critical, 3&#8211;5 = At Risk, 6&#8211;8 = Healthy, 9&#8211;10 = Excellent." ' +
+                    'style="cursor:help; color:var(--text-muted);" aria-label="Health score scale info">ⓘ</span>' +
+                '</div>' +
+            '</div>' +
+            '<div class="col">' +
+                '<h5 class="mb-1">' + tcEsc(ai.overall_health_label) + mostStressedHTML + '</h5>' +
+                '<p class="text-muted mb-0">' + tcEsc(ai.risk_summary) + '</p>' +
+            '</div>' +
+        '</div>' +
+        insightsHTML + scenariosHTML + recommendedActionHTML + optimalConfigHTML
+    );
+}
+
+function runTripleConstraintAiAnalysis() {
+    var body = document.getElementById('tcAiAnalysisBody');
+    var btn = document.getElementById('tcAiAnalyzeBtn');
+    var saved = body.innerHTML;
+
+    body.innerHTML = '<div id="tcAiLoadingSlot"></div>';
+    var loader = PrizmLoading.showSpectra(document.getElementById('tcAiLoadingSlot'), {
+        messageKey: 'tripleConstraint',
+        subtitle: 'Spectra is analysing Scope, Cost & Time…'
+    });
+    var busy = PrizmLoading.buttonBusy(btn, { label: 'Analysing…' });
+
+    fetch("{% url 'triple_constraint_ai_analyze' board.id %}", {
+        method: 'POST',
+        headers: { 'X-CSRFToken': TC_CSRF, 'Content-Type': 'application/json' },
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+        loader.complete();
+        busy.done();
+        if (data.ok) {
+            body.innerHTML = tcRenderAiResult(data.ai_result);
+            body.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+                new bootstrap.Tooltip(el);
+            });
+        } else {
+            body.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i>' + tcEsc(data.error || 'AI analysis failed.') + '</div>';
+        }
+    })
+    .catch(function () {
+        loader.stop();
+        busy.done();
+        body.innerHTML = saved;
+        alert('Network error. Please try again.');
+    });
 }
 
 /* initialise display on page load */

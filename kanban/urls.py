@@ -271,6 +271,7 @@ urlpatterns = [
     path('boards/<int:board_id>/triple-constraint/set-deadline/', triple_constraint_views.set_project_deadline, name='set_project_deadline'),
     path('boards/<int:board_id>/triple-constraint/recalculate-confidence/', triple_constraint_views.recalculate_confidence, name='recalculate_confidence'),
     path('boards/<int:board_id>/triple-constraint/record-signal/', triple_constraint_views.record_manual_signal, name='record_manual_signal'),
+    path('boards/<int:board_id>/triple-constraint/ai-analyze/', triple_constraint_views.triple_constraint_ai_analyze, name='triple_constraint_ai_analyze'),
 
     # Board Automations (new engine)
     path('automations/', automation_views.workspace_automations, name='workspace_automations'),

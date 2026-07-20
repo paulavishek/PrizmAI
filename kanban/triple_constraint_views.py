@@ -49,18 +49,12 @@ def set_project_deadline(request, board_id):
     return redirect('triple_constraint_dashboard', board_id=board.id)
 
 
-@login_required
-def triple_constraint_dashboard(request, board_id):
+def _build_triple_constraint_data(board):
     """
-    Triple Constraint Dashboard – shows Scope / Cost / Time interplay.
-    Triggers AI analysis on POST with action=ai_analyze.
+    Compute the Scope / Cost / Time datasets shared by the dashboard page and
+    the AI analysis endpoint. Returns a dict of everything the AI prompt (and
+    the page context) needs.
     """
-    board = get_object_or_404(Board, id=board_id)
-    # RBAC: check board access
-    if not request.user.has_perm('prizmai.view_board', board):
-        from kanban.simple_access import get_spectra_denial_context
-        ctx = get_spectra_denial_context(request.user, board, trigger='triple_constraint')
-        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
     # ── Scope ──────────────────────────────────────────────────────────────────
     scope_status = board.get_current_scope_status()
     has_baseline = scope_status is not None
@@ -246,22 +240,38 @@ def triple_constraint_dashboard(request, board_id):
     )
     time_label = time_status_label(time_data)
 
-    # ── AI Analysis (POST action=ai_analyze) ──────────────────────────────────
-    ai_result = None
-    ai_error = None
-    if request.method == 'POST' and request.POST.get('action') == 'ai_analyze':
-        try:
-            ai_result = analyze_triple_constraints(
-                board=board,
-                scope_data=scope_status,
-                budget_data=budget_data,
-                time_data=time_data,
-            )
-            if 'error' in ai_result:
-                ai_error = ai_result['error']
-        except Exception as e:
-            logger.error('Triple constraint AI view error: %s', e)
-            ai_error = 'AI analysis failed. Please check your API key and try again.'
+    return {
+        'scope_status': scope_status,
+        'has_baseline': has_baseline,
+        'total_tasks': total_tasks,
+        'total_complexity': total_complexity,
+        'scope_label': scope_label,
+        'budget': budget,
+        'budget_data': budget_data,
+        'budget_label': budget_label,
+        'latest_prediction': latest_prediction,
+        'time_data': time_data,
+        'time_label': time_label,
+        'effective_deadline': effective_deadline,
+        'deadline_source': deadline_source,
+        'what_if': what_if,
+    }
+
+
+@login_required
+def triple_constraint_dashboard(request, board_id):
+    """
+    Triple Constraint Dashboard – shows Scope / Cost / Time interplay.
+    AI analysis is fetched separately via triple_constraint_ai_analyze (AJAX).
+    """
+    board = get_object_or_404(Board, id=board_id)
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='triple_constraint')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
+    data = _build_triple_constraint_data(board)
 
     # ── Project Confidence Score ──────────────────────────────────────────────
     confidence_data = None
@@ -288,34 +298,47 @@ def triple_constraint_dashboard(request, board_id):
 
     context = {
         'board': board,
-        # Scope
-        'scope_status': scope_status,
-        'has_baseline': has_baseline,
-        'total_tasks': total_tasks,
-        'total_complexity': total_complexity,
-        'scope_label': scope_label,
-        # Budget
-        'budget': budget,
-        'budget_data': budget_data,
-        'budget_label': budget_label,
-        # Time
-        'latest_prediction': latest_prediction,
-        'time_data': time_data,
-        'time_label': time_label,
-        'effective_deadline': effective_deadline,
-        'deadline_source': deadline_source,
-        # What-if coefficients
-        'what_if': what_if,
-        # AI
-        'ai_result': ai_result,
-        'ai_error': ai_error,
+        # AI (populated client-side via triple_constraint_ai_analyze)
+        'ai_result': None,
+        'ai_error': None,
         # Project Confidence
         'confidence_data': confidence_data,
         'confidence_history': confidence_history,
         'recent_signals': recent_signals,
+        **data,
     }
 
     return render(request, 'kanban/triple_constraint_dashboard.html', context)
+
+
+@login_required
+@require_POST
+def triple_constraint_ai_analyze(request, board_id):
+    """
+    JSON endpoint: run the AI Triple Constraint analysis and return the result
+    without a full page reload. Powers the Spectra loading animation on the
+    'Get AI Recommendation' button.
+    """
+    from django.http import JsonResponse
+
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'ok': False, 'error': 'You do not have access to this board.'}, status=403)
+
+    data = _build_triple_constraint_data(board)
+    try:
+        ai_result = analyze_triple_constraints(
+            board=board,
+            scope_data=data['scope_status'],
+            budget_data=data['budget_data'],
+            time_data=data['time_data'],
+        )
+        if 'error' in ai_result:
+            return JsonResponse({'ok': False, 'error': ai_result['error']})
+        return JsonResponse({'ok': True, 'ai_result': ai_result})
+    except Exception as e:
+        logger.error('Triple constraint AI analyze endpoint error: %s', e)
+        return JsonResponse({'ok': False, 'error': 'AI analysis failed. Please check your API key and try again.'})
 
 
 @login_required
