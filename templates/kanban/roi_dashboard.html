@@ -249,8 +249,8 @@
 
     <!-- Cost vs Value Analysis -->
     <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card">
+        <div class="col-md-6 d-flex">
+            <div class="card w-100">
                 <div class="card-header">
                     <h5 class="mb-0"><i class="fas fa-balance-scale me-2"></i>Cost vs Value</h5>
                 </div>
@@ -260,13 +260,13 @@
             </div>
         </div>
 
-        <div class="col-md-6">
-            <div class="card">
+        <div class="col-md-6 d-flex">
+            <div class="card w-100">
                 <div class="card-header">
                     <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Value Distribution</h5>
                 </div>
-                <div class="card-body">
-                    <canvas id="valueDistributionChart" height="200"></canvas>
+                <div class="card-body d-flex align-items-center justify-content-center" style="min-height: 0;">
+                    <canvas id="valueDistributionChart"></canvas>
                 </div>
             </div>
         </div>
@@ -280,6 +280,8 @@
 {% block extra_js %}
 <script src="{% static 'js/chart.umd.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
+    const chartTheme = window.getChartTheme ? window.getChartTheme() : { textColor: '#444', gridColor: 'rgba(0,0,0,0.05)' };
+
     {% if has_budget and roi_snapshots %}
     // ROI Trend Chart
     const roiDates = [{% for snapshot in roi_snapshots %}'{{ snapshot.snapshot_date|date:"M d" }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
@@ -291,7 +293,7 @@
     const roiPointBorders = roiValues.map((v, i) => i === lastIdx ? '#c85a00' : '#1e7e34');
     const roiPointRadii  = roiValues.map((v, i) => i === lastIdx ? 8 : 4);
 
-    new Chart(document.getElementById('roiTrendChart'), {
+    const roiTrendChart = new Chart(document.getElementById('roiTrendChart'), {
         type: 'line',
         data: {
             labels: roiDates,
@@ -332,17 +334,24 @@
                 }
             },
             scales: {
+                x: {
+                    ticks: { color: chartTheme.textColor },
+                    grid: { color: chartTheme.gridColor }
+                },
                 y: {
                     beginAtZero: true,
                     ticks: {
+                        color: chartTheme.textColor,
                         callback: function(value) {
                             return value + '%';
                         }
-                    }
+                    },
+                    grid: { color: chartTheme.gridColor }
                 }
             }
         }
     });
+    if (window.PrizmCharts) window.PrizmCharts.register(roiTrendChart);
 
     // Cost vs Value Chart
     const investments = [{% for snapshot in roi_snapshots %}{{ snapshot.total_cost }}{% if not forloop.last %}, {% endif %}{% endfor %}];
@@ -355,7 +364,7 @@
     const realizedBgColors = realizedValues.map((v, i) => i === lastIdx ? 'rgba(40,167,69,0.35)'  : '#28a745');
     const realizedBorderColors = realizedValues.map((v, i) => i === lastIdx ? '#28a745' : 'transparent');
 
-    new Chart(document.getElementById('costValueChart'), {
+    const costValueChart = new Chart(document.getElementById('costValueChart'), {
         type: 'bar',
         data: {
             labels: roiDates,
@@ -380,6 +389,7 @@
             responsive: true,
             maintainAspectRatio: true,
             plugins: {
+                legend: { labels: { color: chartTheme.textColor } },
                 tooltip: {
                     callbacks: {
                         afterTitle: function(context) {
@@ -389,13 +399,22 @@
                 }
             },
             scales: {
-                y: { beginAtZero: true }
+                x: {
+                    ticks: { color: chartTheme.textColor },
+                    grid: { color: chartTheme.gridColor }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: chartTheme.textColor },
+                    grid: { color: chartTheme.gridColor }
+                }
             }
         }
     });
+    if (window.PrizmCharts) window.PrizmCharts.register(costValueChart);
 
     // Value Distribution Chart
-    new Chart(document.getElementById('valueDistributionChart'), {
+    const valueDistributionChart = new Chart(document.getElementById('valueDistributionChart'), {
         type: 'doughnut',
         data: {
             labels: ['Realized Value', 'Remaining Potential'],
@@ -409,12 +428,13 @@
         },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'bottom' }
+                legend: { position: 'bottom', labels: { color: chartTheme.textColor } }
             }
         }
     });
+    if (window.PrizmCharts) window.PrizmCharts.register(valueDistributionChart);
     {% endif %}
 </script>
 {% endblock %}
