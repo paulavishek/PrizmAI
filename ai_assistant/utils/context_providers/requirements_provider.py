@@ -21,6 +21,8 @@ class RequirementsContextProvider(BaseContextProvider):
         'acceptance', 'acceptance criteria', 'coverage', 'traceability',
         'functional', 'non-functional', 'in review', 'approved',
         'implemented', 'verified', 'req-',
+        'linked task', 'linked tasks', 'which task', 'which requirement',
+        'requirement for', 'task satisfies', 'task satisfy',
     ]
 
     def _get_summary_impl(self, board, user, is_demo_mode=False):
@@ -90,6 +92,12 @@ class RequirementsContextProvider(BaseContextProvider):
                     f'  - {r["identifier"]} {r["title"]} '
                     f'[{r["status_label"]}, {r["priority_label"]}, {task_n} linked task(s)]\n'
                 )
+
+        if data['linked_pairs']:
+            ctx += f'\n**Linked Tasks (requirement → task):**\n'
+            for r in data['linked_pairs']:
+                task_titles = ', '.join(f'"{t["title"]}"' for t in r['linked_tasks'])
+                ctx += f'  - {r["identifier"]} "{r["title"]}" [{r["status_label"]}] → {task_titles}\n'
 
         return ctx
 

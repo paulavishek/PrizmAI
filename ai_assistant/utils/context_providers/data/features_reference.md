@@ -141,9 +141,9 @@ named below).
 - **Where to find it:** Board → AI Tools → Plan → Scope.
 
 ### Requirements
-- **What it does:** AI requirement analysis — quality scoring, gap detection, and traceability to tasks.
-- **Use it when:** You're managing formal requirements and want to trace them through to delivery.
-- **Where to find it:** Board → AI Tools → Plan → Requirements.
+- **What it does:** AI requirement analysis — quality scoring, gap detection, and task-level traceability. Each requirement can be linked to one or more tasks (and vice versa, from the task detail page's "Linked Requirements" panel), so Spectra can answer "which task(s) satisfy REQ-X" or "which requirements does this task cover" by name, not just a coverage percentage.
+- **Use it when:** You're managing formal requirements and want to trace them through to delivery, or need to check which requirements a specific task addresses.
+- **Where to find it:** Board → AI Tools → Plan → Requirements (link/unlink tasks there), or on a task's detail page under "Linked Requirements".
 
 ### Gantt
 - **What it does:** Timeline view with task dependencies, milestones, and drag-to-reschedule.

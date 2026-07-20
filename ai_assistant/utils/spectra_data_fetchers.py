@@ -120,6 +120,16 @@ def fetch_task_dict(task):
     except Exception:
         dependency_titles = []
 
+    # Linked requirement identifiers (requires prefetch_related('linked_requirements')).
+    # requirements app is optional — hasattr guards against it being uninstalled.
+    try:
+        linked_requirement_titles = (
+            [f'{r.identifier} {r.title}' for r in task.linked_requirements.all()]
+            if hasattr(task, 'linked_requirements') else []
+        )
+    except Exception:
+        linked_requirement_titles = []
+
     # Subtask count (requires prefetch_related('subtasks'))
     try:
         subtask_count = task.subtasks.count() if hasattr(task, 'subtasks') else 0
@@ -175,6 +185,7 @@ def fetch_task_dict(task):
         'parent_task_id': task.parent_task_id,
         'parent_task_title': parent_task_title,
         'dependency_titles': dependency_titles,
+        'linked_requirement_titles': linked_requirement_titles,
         'subtask_count': subtask_count,
         'risk_level': task.risk_level,
         'ai_risk_score': task.ai_risk_score,
@@ -207,7 +218,7 @@ def fetch_board_tasks(board, filters=None):
         .select_related('column', 'assigned_to', 'parent_task')
         .prefetch_related(
             'dependencies', 'labels', 'subtasks',
-            'checklist_items',
+            'checklist_items', 'linked_requirements',
             # Custom fields — see fetch_task_dict's N+1 warning above.
             'custom_field_values__field',
             'custom_field_values__selected_options',
@@ -476,7 +487,7 @@ def fetch_requirements_summary(board):
     }
 
 
-def fetch_requirements_detail(board, uncovered_limit=15, recent_limit=15):
+def fetch_requirements_detail(board, uncovered_limit=15, recent_limit=15, linked_limit=15):
     """Return per-requirement detail for a board, or None."""
     try:
         from requirements.models import Requirement
@@ -489,7 +500,7 @@ def fetch_requirements_detail(board, uncovered_limit=15, recent_limit=15):
         return {
             'total': 0, 'by_status': {}, 'by_priority': {},
             'covered': 0, 'uncovered': 0, 'covered_pct': 0,
-            'uncovered_items': [], 'recent': [],
+            'uncovered_items': [], 'recent': [], 'linked_pairs': [],
         }
 
     status_labels = dict(Requirement.STATUS_CHOICES)
@@ -527,6 +538,17 @@ def fetch_requirements_detail(board, uncovered_limit=15, recent_limit=15):
             'linked_task_count': r.task_n,
         })
 
+    linked_pairs = []
+    for r in annotated.filter(task_n__gt=0).order_by('identifier')[:linked_limit]:
+        linked_pairs.append({
+            'identifier': r.identifier,
+            'title': r.title,
+            'status_label': status_labels.get(r.status, r.status),
+            'linked_tasks': [
+                {'id': t.id, 'title': t.title} for t in r.linked_tasks.all()
+            ],
+        })
+
     return {
         'total': total,
         'by_status': by_status,
@@ -536,6 +558,7 @@ def fetch_requirements_detail(board, uncovered_limit=15, recent_limit=15):
         'covered_pct': covered_pct,
         'uncovered_items': uncovered_items,
         'recent': recent,
+        'linked_pairs': linked_pairs,
     }
 
 

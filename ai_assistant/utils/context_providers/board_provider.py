@@ -25,6 +25,7 @@ class BoardContextProvider(BaseContextProvider):
         'sprint', 'wip', 'kanban', 'unassigned', 'progress',
         'how many tasks', 'task count', 'who is assigned',
         'assignee', 'to do', 'in progress', 'done', 'backlog',
+        'linked requirement', 'linked requirements', 'requirement for',
     ]
 
     def _get_summary_impl(self, board, user, is_demo_mode=False):
@@ -132,6 +133,8 @@ class BoardContextProvider(BaseContextProvider):
                     ctx += f'  • Risk: {t["risk_level"]} (Score: {score})\n'
                 if t['dependency_titles']:
                     ctx += f'  • Dependencies: {", ".join(t["dependency_titles"][:5])}\n'
+                if t.get('linked_requirement_titles'):
+                    ctx += f'  • Linked Requirements: {", ".join(t["linked_requirement_titles"][:5])}\n'
                 if t['subtask_count']:
                     ctx += f'  • Has {t["subtask_count"]} subtask(s)\n'
                 if t['comment_count']:
