@@ -100,6 +100,7 @@ class Command(BaseCommand):
                 # Build context for AI
                 from kanban.models import Task
                 context = {
+                    'board_id': board.id,
                     'board_name': board.name,
                     'team_size': board.memberships.count(),
                     'active_tasks': Task.objects.filter(

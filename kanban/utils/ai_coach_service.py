@@ -185,6 +185,72 @@ class AICoachService:
                 suggestion_data['expected_impact'] = "Addressing this issue can help improve project outcomes."
             return suggestion_data
     
+    def _build_team_roster_block(self, context: Dict) -> str:
+        """
+        Render a per-member workload/skill roster so the enhancement prompt's
+        suggested reassignments (e.g. "give this to X") are grounded in the
+        same UserPerformanceProfile data AI Resource Optimization uses —
+        instead of the LLM inventing plausible-sounding teammates/actions
+        from suggestion text alone, which can contradict the Resource
+        Optimization panel (e.g. recommending work go TO someone who is
+        already the most overloaded person on the board).
+        """
+        board_id = context.get('board_id')
+        if not board_id:
+            return ''
+
+        try:
+            from kanban.models import Board, BoardMembership
+            from kanban.resource_leveling import ResourceLevelingService
+
+            board = Board.objects.filter(id=board_id).first()
+            if not board:
+                return ''
+
+            members = list(
+                BoardMembership.objects.filter(board=board).select_related('user')[:25]
+            )
+            if not members:
+                return ''
+
+            service = ResourceLevelingService(workspace=getattr(board, 'workspace', None))
+
+            lines = []
+            for m in members:
+                user = m.user
+                try:
+                    profile = service.get_or_create_profile(user, board=board)
+                except Exception:
+                    continue
+
+                display = user.get_full_name() or user.username
+                top_skills = sorted(
+                    (profile.skill_keywords or {}).items(),
+                    key=lambda kv: -kv[1]
+                )[:5]
+                skills_text = ', '.join(k for k, _ in top_skills) if top_skills else 'none recorded'
+
+                lines.append(
+                    f"  - {display} ({user.username}): {profile.current_active_tasks} active tasks, "
+                    f"{profile.utilization_percentage:.0f}% capacity utilized, "
+                    f"skills: {skills_text}"
+                )
+
+            if not lines:
+                return ''
+
+            return (
+                "\n## Team Workload & Skills (live data — use this, not assumptions):\n"
+                + "\n".join(lines)
+                + "\nWhen recommending a specific person to take on work, only name someone "
+                "from this list, and prefer people with LOWER capacity utilization and "
+                "relevant skills. Do NOT recommend giving work to someone already at or "
+                "above 90% capacity utilization unless no one else is qualified.\n"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to build team roster block for AI coach prompt: {e}")
+            return ''
+
     def _build_enhancement_prompt(self, suggestion: Dict, context: Dict) -> str:
         """Build prompt for AI enhancement with full explainability"""
         # Render a compact "Custom Fields" section when the workspace has any.
@@ -208,6 +274,8 @@ class AICoachService:
                 + "user has chosen them as meaningful signals.\n"
             )
 
+        team_roster_block = self._build_team_roster_block(context)
+
         return f"""You are an experienced project management coach helping a PM improve their project.
 Your advice must be transparent, actionable, and concise.
 
@@ -224,6 +292,7 @@ Your advice must be transparent, actionable, and concise.
 - Project Phase: {context.get('project_phase', 'N/A')}
 - Current Velocity: {context.get('velocity', 'N/A')} tasks/week
 {custom_fields_block}
+{team_roster_block}
 
 ## Metrics:
 {json.dumps(suggestion.get('metrics_snapshot', {}), indent=2)}
@@ -238,6 +307,11 @@ Provide comprehensive coaching advice in JSON format.
    - "rationale": Why it helps (1 sentence)
    - "expected_outcome": Measurable result (1 sentence)
    - "implementation_hint": Practical how-to (1 sentence, 30-60 minutes timeframe when applicable)
+   - If an action names a specific team member to take on, receive, or review work,
+     that person MUST come from the "Team Workload & Skills" list above (if present)
+     and must NOT already be at/above 90% capacity utilization — pick the least-loaded,
+     most skill-relevant person instead. If no roster is provided, keep actions
+     role-based ("a teammate with capacity") rather than inventing a name.
 3. "impact": 1-2 sentences with quantifiable improvements if possible
 4. "confidence": Number between 0.70 and 0.95 based on data quality
 

@@ -192,6 +192,14 @@ class CoachingSuggestion(models.Model):
         # Count as "acted on" so coaching engagement metrics reflect the user's response
         if not self.action_taken:
             self.action_taken = 'accepted'
+        # Acknowledging is itself a positive engagement signal — the user judged the
+        # suggestion worth acting on. Default was_helpful to True from it so
+        # "Coaching Effectiveness" (40% weighted on helpful_rate) reflects normal
+        # Acknowledge/Dismiss usage, not just the separate optional "Provide Feedback"
+        # form. Never overwrite an explicit rating: only set when still unset, and
+        # submit_feedback() always writes its own explicit value afterwards anyway.
+        if self.was_helpful is None:
+            self.was_helpful = True
         self.save()
     
     def resolve(self, action_taken=None, was_helpful=None):
