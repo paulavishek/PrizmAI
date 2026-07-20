@@ -510,7 +510,7 @@ Return ONLY valid JSON (no markdown fences):
         orphaned = [t for t in tasks if t.id not in linked_task_ids]
         return [
             {'id': t.id, 'title': t.title, 'column': t.column.name if t.column else 'Unknown'}
-            for t in orphaned[:20]
+            for t in orphaned
         ]
 
     def _find_uncovered_goals(self, reqs, goals) -> List[Dict]:

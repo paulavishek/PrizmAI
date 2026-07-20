@@ -41,21 +41,11 @@ class RequirementForm(forms.ModelForm):
             member_ids = BoardMembership.objects.filter(board=board).values_list('user_id', flat=True)
             from django.contrib.auth.models import User
             self.fields['assigned_reviewer'].queryset = User.objects.filter(id__in=member_ids)
-            from kanban.models import OrganizationGoal
-            workspace = getattr(board, 'workspace', None)
-            # Fall back to the user's active workspace when the board has none (e.g. sandbox copies)
-            if workspace is None and user is not None:
-                try:
-                    from accounts.models import UserProfile
-                    profile = UserProfile.objects.filter(user=user).select_related('active_workspace').first()
-                    workspace = getattr(profile, 'active_workspace', None) if profile else None
-                except Exception:
-                    pass
-            if workspace:
-                self.fields['linked_goals'].queryset = OrganizationGoal.objects.filter(
-                    workspace=workspace
-                ).order_by('name')
+            if user is not None:
+                from kanban.utils.demo_protection import get_user_goals
+                self.fields['linked_goals'].queryset = get_user_goals(user).order_by('name')
             else:
+                from kanban.models import OrganizationGoal
                 self.fields['linked_goals'].queryset = OrganizationGoal.objects.none()
         self.fields['category'].required = False
         self.fields['parent'].required = False

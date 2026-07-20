@@ -1580,6 +1580,63 @@
                         {% endif %}
                     </div>
 
+                    <!-- 📋 Linked Requirements -->
+                    <div class="p-2 bg-light rounded mb-2">
+                        <div class="mb-2">
+                            <small class="text-muted d-block mb-1"><strong><i class="fas fa-clipboard-list me-1"></i>Linked Requirements</strong></small>
+                            <small class="text-muted fst-italic">Requirements this task satisfies, for traceability</small>
+                        </div>
+
+                        {% if linked_requirements %}
+                        <div class="mb-2">
+                            {% for req in linked_requirements %}
+                            <div class="p-2 bg-white rounded border-start border-3 border-info mb-1 d-flex justify-content-between align-items-center">
+                                <a href="{% url 'requirements:requirement_detail' board.id req.id %}" class="text-decoration-none">
+                                    <small class="text-muted">{{ req.identifier }}</small> <strong>{{ req.title }}</strong>
+                                </a>
+                                <form method="post" action="{% url 'requirements:unlink_task' board.id req.id %}" class="ms-2">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="task_id" value="{{ task.id }}">
+                                    <input type="hidden" name="next" value="task">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Unlink"><i class="fas fa-times"></i></button>
+                                </form>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="mb-2">
+                            <small class="text-muted d-block fst-italic">No requirements linked to this task yet.</small>
+                        </div>
+                        {% endif %}
+
+                        {% if available_requirements %}
+                        <form method="post" action="" class="d-flex gap-2" id="linkRequirementForm"
+                              data-url-template="{% url 'requirements:link_task' board.id 999999 %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="task_id" value="{{ task.id }}">
+                            <input type="hidden" name="next" value="task">
+                            <select name="requirement_pk" class="form-select form-select-sm" id="linkRequirementSelect" required>
+                                <option value="">Link a requirement...</option>
+                                {% for req in available_requirements %}
+                                <option value="{{ req.id }}">{{ req.identifier }} — {{ req.title|truncatewords:6 }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="fas fa-link"></i></button>
+                        </form>
+                        <script>
+                        (function() {
+                            var form = document.getElementById('linkRequirementForm');
+                            if (!form) return;
+                            form.addEventListener('submit', function(e) {
+                                var pk = document.getElementById('linkRequirementSelect').value;
+                                if (!pk) { e.preventDefault(); return; }
+                                form.action = form.dataset.urlTemplate.replace('999999', pk);
+                            });
+                        })();
+                        </script>
+                        {% endif %}
+                    </div>
+
                     <!-- ✅ Checklist / Sub-task Items (hidden for Epics — child tasks ARE the Epic's checklist) -->
                     {% if not task.is_epic %}
                     <div class="p-2 bg-light rounded mb-2" id="checklist-section" data-task-id="{{ task.id }}">

@@ -154,17 +154,18 @@ def requirement_detail(request, board_id, pk):
     can_edit = role.lower() in ('owner', 'admin', 'member')
 
     # Available tasks for linking (exclude already linked ones)
-    from kanban.models import Task, OrganizationGoal
+    from kanban.models import Task
     already_linked_ids = requirement.linked_tasks.values_list('id', flat=True)
     available_tasks = Task.objects.filter(
         column__board=board
     ).exclude(id__in=already_linked_ids).order_by('title')[:50]
 
     # Available goals for linking (exclude already linked ones)
+    from kanban.utils.demo_protection import get_user_goals
     already_linked_goal_ids = linked_goals.values_list('id', flat=True)
-    available_goals = OrganizationGoal.objects.filter(
-        workspace=board.workspace
-    ).exclude(id__in=already_linked_goal_ids).order_by('name')
+    available_goals = get_user_goals(request.user).exclude(
+        id__in=already_linked_goal_ids
+    ).order_by('name')
 
     # Load persisted AI analysis results
     ai_cache = {}
@@ -452,6 +453,8 @@ def requirement_link_task(request, board_id, pk):
     requirement.updated_by = request.user
     requirement.save()
     messages.success(request, f'Task "{task.title}" linked to {requirement.identifier}.')
+    if request.POST.get('next') == 'task':
+        return redirect('task_detail', task_id=task.id)
     return redirect('requirements:requirement_detail', board_id=board.id, pk=pk)
 
 
@@ -470,6 +473,8 @@ def requirement_unlink_task(request, board_id, pk):
     requirement.updated_by = request.user
     requirement.save()
     messages.success(request, f'Task "{task.title}" unlinked from {requirement.identifier}.')
+    if request.POST.get('next') == 'task':
+        return redirect('task_detail', task_id=task.id)
     return redirect('requirements:requirement_detail', board_id=board.id, pk=pk)
 
 
@@ -482,9 +487,9 @@ def requirement_link_goal(request, board_id, pk):
         return JsonResponse({'error': 'Permission denied'}, status=403)
 
     requirement = get_object_or_404(Requirement, pk=pk, board=board)
-    from kanban.models import OrganizationGoal
+    from kanban.utils.demo_protection import get_user_goals
     goal_id = request.POST.get('goal_id')
-    goal = get_object_or_404(OrganizationGoal, pk=goal_id, workspace=board.workspace)
+    goal = get_object_or_404(get_user_goals(request.user), pk=goal_id)
     requirement.linked_goals.add(goal)
     requirement.updated_by = request.user
     requirement.save()
@@ -501,9 +506,8 @@ def requirement_unlink_goal(request, board_id, pk):
         return JsonResponse({'error': 'Permission denied'}, status=403)
 
     requirement = get_object_or_404(Requirement, pk=pk, board=board)
-    from kanban.models import OrganizationGoal
     goal_id = request.POST.get('goal_id')
-    goal = get_object_or_404(OrganizationGoal, pk=goal_id, workspace=board.workspace)
+    goal = get_object_or_404(requirement.linked_goals, pk=goal_id)
     requirement.linked_goals.remove(goal)
     requirement.updated_by = request.user
     requirement.save()

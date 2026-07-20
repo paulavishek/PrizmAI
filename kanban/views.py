@@ -3104,6 +3104,14 @@ def task_detail(request, task_id):
             task__in=epic_rollup['children']
         ).aggregate(total=Sum('hours_spent'))['total'] or 0
 
+    # Requirements traceability — which requirements (if any) this task
+    # satisfies, and which board requirements are still available to link.
+    from requirements.models import Requirement
+    linked_requirements = task.linked_requirements.filter(board=board).order_by('identifier')
+    available_requirements = Requirement.objects.filter(board=board).exclude(
+        id__in=linked_requirements.values_list('id', flat=True)
+    ).order_by('identifier')
+
     return render(request, 'kanban/task_detail.html', {
         'task': task,
         'board': board,
@@ -3122,6 +3130,8 @@ def task_detail(request, task_id):
         'is_demo_board': False,
         'board_columns': Column.objects.filter(board=board).order_by('position'),
         'is_favorited': _is_fav(request.user, 'task', task.pk),
+        'linked_requirements': linked_requirements,
+        'available_requirements': available_requirements,
     })
 
 @login_required

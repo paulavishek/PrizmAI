@@ -85,7 +85,7 @@
                             <option value="">— None —</option>
                             {% for val, label in form.fields.category.choices %}
                                 {% if val %}
-                                <option value="{{ val }}" {% if form.category.value|stringformat:"d" == val|stringformat:"d" %}selected{% endif %}>{{ label }}</option>
+                                <option value="{{ val }}" {% if val.value|stringformat:"s" == form.category.value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
                                 {% endif %}
                             {% endfor %}
                         </select>
@@ -96,7 +96,7 @@
                             <option value="" {% if not form.parent.value %}selected{% endif %}>— None —</option>
                             {% for val, label in form.fields.parent.choices %}
                                 {% if val %}
-                                <option value="{{ val }}" {% if form.parent.value|stringformat:"d" == val|stringformat:"d" %}selected{% endif %}>{{ label }}</option>
+                                <option value="{{ val }}" {% if val.value|stringformat:"s" == form.parent.value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
                                 {% endif %}
                             {% endfor %}
                         </select>
@@ -124,7 +124,7 @@
                             <option value="" {% if not form.assigned_reviewer.value %}selected{% endif %}>— None —</option>
                             {% for val, label in form.fields.assigned_reviewer.choices %}
                                 {% if val %}
-                                <option value="{{ val }}" {% if form.assigned_reviewer.value|stringformat:"d" == val|stringformat:"d" %}selected{% endif %}>{{ label }}</option>
+                                <option value="{{ val }}" {% if val.value|stringformat:"s" == form.assigned_reviewer.value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
                                 {% endif %}
                             {% endfor %}
                         </select>
