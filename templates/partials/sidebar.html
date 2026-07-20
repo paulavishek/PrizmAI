@@ -208,6 +208,16 @@
                 </a>
             </li>
             {% endif %}
+            {% if features.show_forms %}
+            <li class="sidebar-nav-item">
+                <a href="{% url 'form_list' %}"
+                   class="sidebar-nav-link {% if '/forms/' in request.path %}active{% endif %}"
+                   title="Forms">
+                    <i class="fas fa-file-alt sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Forms</span>
+                </a>
+            </li>
+            {% endif %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'unified_calendar' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'unified_calendar' %}active{% endif %}"

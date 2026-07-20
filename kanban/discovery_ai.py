@@ -11,7 +11,29 @@ import logging
 import re
 from typing import Dict, List, Optional
 
+from django.utils import timezone
+
 logger = logging.getLogger(__name__)
+
+
+def apply_score_to_idea(idea, result: Dict) -> None:
+    """
+    Persist a DiscoveryAIScorer.score_idea() result onto a DiscoveryIdea.
+
+    Shared by the on-demand scoring view (discovery_views.idea_ai_score) and
+    the async form-submission scoring task (forms.tasks.score_form_idea) so
+    both save paths can't drift apart.
+    """
+    idea.ai_score_impact = result['impact']
+    idea.ai_score_effort = result['effort']
+    idea.ai_score_confidence = result['confidence']
+    idea.ai_score_recommendation = result.get('recommendation', '')
+    idea.ai_score_reasoning = result.get('reasoning', '')
+    idea.ai_scored_at = timezone.now()
+    idea.save(update_fields=[
+        'ai_score_impact', 'ai_score_effort', 'ai_score_confidence',
+        'ai_score_recommendation', 'ai_score_reasoning', 'ai_scored_at', 'updated_at',
+    ])
 
 
 class DiscoveryAIScorer:

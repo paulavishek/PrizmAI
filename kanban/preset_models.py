@@ -155,6 +155,7 @@ def build_feature_flags(preset):
         'spectra_agentic': False,
         'show_requirements': False,
         'show_discovery': False,
+        'show_forms': False,
         # Meta — useful for template logic
         'preset_name': 'lean',
     }
@@ -176,6 +177,7 @@ def build_feature_flags(preset):
         'spectra_agentic': True,
         'show_requirements': True,
         'show_discovery': True,
+        'show_forms': True,
         'preset_name': 'professional',
     }
 

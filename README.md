@@ -30,6 +30,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Unified Cross-Board Calendar** — Consolidated view of tasks, milestones, and events across all boards
 - **Requirements Analysis** — AI-powered requirement lifecycle management with full traceability. Define, categorize, and track requirements from draft through verified status with auto-generated identifiers (REQ-001). Link requirements to project objectives and board tasks for complete traceability. Features include a traceability matrix (objectives × requirements × tasks), CSV export, hierarchical parent-child requirements, coverage statistics, and comment threads with status change history. AI capabilities include: **Quality Scoring** (per-requirement analysis across clarity, completeness, testability, unambiguity, and feasibility dimensions), **Gap Detection** (identify uncovered objectives, orphaned tasks, and missing requirement areas), **Acceptance Criteria Generation** (auto-generate Given/When/Then criteria from requirement descriptions), and **Impact Analysis** (downstream impact assessment for linked tasks, child requirements, and objectives). Spectra AI can answer questions about requirement status, coverage gaps, quality scores, and traceability. Accessible from the AI Tools panel → Manage section on the board page. *(Professional mode and above)*
 - **PrizmDiscovery — Idea Inbox** — A structured idea pipeline for capturing, discussing, and prioritising product ideas before they enter the delivery pipeline. Submit ideas with a title, description, and source label; move them through four stages (New → Under Review → Approved → Rejected); and promote approved ideas directly to a Kanban board as tasks. Spectra AI scores each idea on **Impact** (0–100), **Effort** (0–100), and **Confidence** (0–100), assigns a quadrant (Quick Win / Strategic Bet / Fill-in / Deprioritize), and generates a reasoning paragraph. Scored ideas are visualised on an interactive **Discovery Matrix** scatter chart. Rejected ideas remain on the matrix with a muted, strikethrough style so prioritisation decisions are always explainable. *(Professional mode and above)*
+- **Forms — AI Intake Engine** — A structured alternative to free-typing into Discovery: build a reusable form with typed fields (Short Text, Long Text, Single/Multi Select, or static instructional blocks), each mapped to a target property (Title, Description, Source, or context-only). Point a form at **PrizmDiscovery** — submissions are automatically scored by Spectra in the background the moment they arrive, so the Idea Inbox and Discovery Matrix fill in without anyone clicking "Score" — or at a **Kanban Task**, where submissions land straight into the target board's intake column. The responses dashboard shows every submission alongside its resulting idea or task, live-updating from "Scoring…" to the real Impact/Effort/quadrant as Spectra finishes. v1 is workspace-members-only (no public/anonymous links yet). See [Forms — AI Intake Engine](#forms--ai-intake-engine) below. *(Professional mode and above)*
 
 ### Strategic Alignment
 
@@ -557,6 +558,58 @@ The demo workspace ships with 8 pre-populated ideas spanning all four quadrants 
 ```bash
 python manage.py populate_discovery_demo_data
 ```
+
+---
+
+## Forms — AI Intake Engine
+
+> **In plain English:** In most tools, a form is a dead end — it drops a row into a spreadsheet and waits for a human to notice. In PrizmAI, a form is the front door to an AI pipeline: submit a feature request or bug report through a structured form, and it's automatically scored by Spectra and placed on the Discovery Matrix before anyone even opens the inbox.
+
+### Why it exists
+
+PrizmDiscovery's own "Submit Idea" button is great for a single title-and-description entry, but it doesn't guide the submitter toward the structured detail that makes AI scoring accurate — and it can't route straight onto a Kanban board when that's the more appropriate destination. Forms solves both: a form builder defines exactly what questions to ask, and every submission is automatically converted into a real, AI-processed record — not a static row waiting to be triaged.
+
+### Building a form
+
+From the sidebar, click **Forms** → **New Form**. Give it a title, description, and choose a **Destination**:
+
+- **PrizmDiscovery Idea** — submissions become `DiscoveryIdea` records and are auto-scored by Spectra in the background the moment they're submitted (Impact, Effort, Confidence, quadrant, and reasoning — the exact same scoring engine used by Discovery's own "Score" button, just triggered automatically instead of on demand)
+- **Kanban Task** — submissions become tasks on a board you choose, dropped into an auto-detected intake-style column (To Do / Backlog / Inbox / Ideas — whichever exists on the target board)
+
+Then add fields. Each field has a **type** (Short Text, Long Text, Single Select, Multi Select, or a Static Content block for instructional text between questions) and a **mapped property** — which part of the created idea/task this field's answer fills in:
+
+| Mapped property | What happens to the answer |
+|---|---|
+| **Title** | Becomes the idea/task title |
+| **Description** | Appended into the idea/task description |
+| **Source** *(Discovery only)* | Sets the idea's source label (Customer Feedback, Sales Team, etc.) |
+| **Context only** | Not mapped to any single property — folded into the description as `"Label: answer"`, so Spectra still sees it when scoring, even though it isn't the main description field |
+
+This is what makes Forms more than a plain Notion-style form: structured fields like "Target User & Expected Value" or "Problem & Proposed Solution" feed directly into the same prompt Spectra uses to score the idea, producing more grounded Impact/Effort/Confidence numbers than a single free-text box would.
+
+### Filling out and reviewing submissions
+
+Any non-viewer workspace member can fill out an active form from its detail page (**Fill Out** button). Required fields are enforced before the submission is accepted. Once submitted, the form's detail page becomes a responses dashboard showing:
+
+- **Fields** — a read-only summary of the form's configured questions, so landing here after building a form immediately confirms what was set up
+- **Responses** — every submission, linking to the idea or task it created. Discovery-destination submissions show a live **"Scoring…"** badge that automatically flips to the quadrant label and Impact/Effort numbers the moment Spectra finishes — the page polls in the background, so no manual reload is needed
+
+Form owners can **Edit**, **Deactivate** (stop accepting new submissions without deleting history), or **Delete** a form from the same page.
+
+### v1 scope
+
+Forms is intentionally scoped for its first release:
+
+- **Workspace members only** — there is no public or anonymous submission link yet. Every submission requires being logged in and a non-viewer member of the workspace.
+- **Two destinations** — PrizmDiscovery Idea and Kanban Task. Requirement-destination forms, conditional field logic, file uploads, and a submissions analytics dashboard are deferred to a later phase.
+
+### Getting to Forms
+
+- Click **Forms** in the sidebar (or navigate to `/forms/`)
+- Build a new form at `/forms/create/`
+- Each form's responses dashboard is at `/forms/<form-id>/`
+
+> Forms is available in Professional mode and above.
 
 ---
 

@@ -398,7 +398,7 @@ def idea_ai_score(request, idea_id):
     Saves the result on the DiscoveryIdea model and returns JSON.
     """
     from kanban.discovery_models import DiscoveryIdea
-    from kanban.discovery_ai import DiscoveryAIScorer
+    from kanban.discovery_ai import DiscoveryAIScorer, apply_score_to_idea
 
     org, features, blocked = _require_discovery(request)
     if blocked:
@@ -414,17 +414,7 @@ def idea_ai_score(request, idea_id):
 
     scorer = DiscoveryAIScorer()
     result = scorer.score_idea(idea, org)
-
-    idea.ai_score_impact = result['impact']
-    idea.ai_score_effort = result['effort']
-    idea.ai_score_confidence = result['confidence']
-    idea.ai_score_recommendation = result.get('recommendation', '')
-    idea.ai_score_reasoning = result.get('reasoning', '')
-    idea.ai_scored_at = timezone.now()
-    idea.save(update_fields=[
-        'ai_score_impact', 'ai_score_effort', 'ai_score_confidence',
-        'ai_score_recommendation', 'ai_score_reasoning', 'ai_scored_at', 'updated_at',
-    ])
+    apply_score_to_idea(idea, result)
 
     return JsonResponse({
         'ok': True,
@@ -505,18 +495,10 @@ def idea_promote(request, idea_id):
     task = None
     if board:
         try:
-            from kanban.models import Column, Task
-            import re
-            all_cols = list(Column.objects.filter(board=board).order_by('position'))
-            # Honour an explicitly-chosen target column (must belong to this
-            # board); otherwise fall back to the auto-detected intake column.
-            target_col = None
+            from kanban.models import Task
+            from kanban.discovery_utils import pick_intake_column
             column_id = (request.POST.get('column_id') or '').strip()
-            if column_id:
-                target_col = next((c for c in all_cols if str(c.pk) == column_id), None)
-            if target_col is None:
-                _intake_names = re.compile(r'\b(to.?do|backlog|inbox|todo|open|new|ideas?|ready)\b', re.I)
-                target_col = next((c for c in all_cols if _intake_names.search(c.name)), None) or (all_cols[0] if all_cols else None)
+            target_col = pick_intake_column(board, column_id=column_id)
             if target_col:
                 task = Task.objects.create(
                     title=idea.title,

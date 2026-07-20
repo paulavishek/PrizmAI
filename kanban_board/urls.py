@@ -37,6 +37,7 @@ urlpatterns = [
     path('', include('exit_protocol.urls', namespace='exit_protocol')),  # Exit Protocol — Hospice, Organs, Cemetery
     path('requirements/', include('requirements.urls')),  # Requirement Analysis
     path('api/integrations/', include('integrations.urls', namespace='integrations')),  # Inbound receiver integrations
+    path('forms/', include('forms.urls')),  # AI-assisted intake forms
 ]
 
 if settings.DEBUG:

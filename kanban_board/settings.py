@@ -122,6 +122,7 @@ INSTALLED_APPS = [
     'exit_protocol',  # Exit Protocol — Project Hospice, Organ Transplant, Cemetery
     'requirements',  # Requirement Analysis — lifecycle tracking, traceability, AI gap analysis
     'integrations',  # Inbound receiver integrations (GitHub, and future: GitLab, Salesforce, Figma)
+    'forms',  # AI-assisted intake forms — feeds PrizmDiscovery / Kanban Tasks
 ]
 
 MIDDLEWARE = [
@@ -795,6 +796,9 @@ CELERY_TASK_ROUTES = {
     # off the heavy default queue. NB: this dict (settings.CELERY_TASK_ROUTES) is
     # the *effective* route config — it overrides app.conf.task_routes in celery.py.
     'kanban.migration.*': {'queue': 'interactive'},
+    # Form-submission auto-scoring reuses the Discovery AI scorer — route it
+    # onto the existing AI queue alongside other Gemini/AIRouter-backed tasks.
+    'forms.tasks.*': {'queue': 'ai_tasks'},
 }
 
 # ---------------------------------------------------------------------------
