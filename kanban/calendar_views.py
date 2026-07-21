@@ -664,6 +664,60 @@ def unified_calendar_events_api(request):
 
 
 # ---------------------------------------------------------------------------
+# Time Health metrics feed — consumed by the calendar's Time Health panel
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_GET
+def calendar_time_health_api(request):
+    """Scheduled-hours breakdown + commitment load for the viewer's own time.
+
+    Accepts the same ?start=&end=&boards= params as
+    ``unified_calendar_events_api`` so the panel tracks whatever range and board
+    chips the calendar is currently showing.
+
+    First-person only: this reports the *viewer's* hours. Teammate blocks appear
+    on the grid deliberately sanitized ("Marcus — busy", reason redacted), so
+    they are neither this user's time nor something the visibility model
+    consents to aggregating. See kanban/utils/calendar_analytics.py.
+    """
+    from kanban.utils.calendar_analytics import compute_time_health
+
+    boards = _user_boards(request.user)
+
+    board_filter = request.GET.get('boards', '')
+    if board_filter:
+        try:
+            board_ids = [int(x) for x in board_filter.split(',') if x.strip()]
+            boards = boards.filter(id__in=board_ids)
+        except ValueError:
+            pass
+
+    # Default to the current week (Mon–Sun) when the client sends no range.
+    today = timezone.localdate()
+    range_start = today - timedelta(days=today.weekday())
+    range_end = range_start + timedelta(days=6)
+
+    start_str = request.GET.get('start')
+    end_str = request.GET.get('end')
+    if start_str and end_str:
+        try:
+            range_start = datetime.fromisoformat(start_str.rstrip('Z')).date()
+            # FullCalendar's range end is EXCLUSIVE; compute_time_health takes an
+            # inclusive end, so step back a day.
+            range_end = datetime.fromisoformat(end_str.rstrip('Z')).date() - timedelta(days=1)
+        except (ValueError, AttributeError):
+            pass
+
+    if range_end < range_start:
+        return JsonResponse({'error': 'Invalid range.'}, status=400)
+
+    return JsonResponse(
+        compute_time_health(request.user, range_start, range_end, scope_boards=boards)
+    )
+
+
+# ---------------------------------------------------------------------------
 # Create Task from calendar (AJAX POST)
 # ---------------------------------------------------------------------------
 

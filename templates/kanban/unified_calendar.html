@@ -82,6 +82,69 @@
         text-align: center;
     }
     .stat-card .stat-number { font-size: 2rem; font-weight: 700; }
+
+    /* ---- Time Health panel -------------------------------------------- */
+    /* Plain flex bars rather than a chart library: a 4-segment stacked bar
+       needs no canvas, and sidesteps chart theming entirely. */
+    .th-panel {
+        background: var(--bg-tertiary);
+        border-radius: 8px;
+        padding: 12px 16px;
+    }
+    .th-toggle {
+        display: flex; align-items: center; width: 100%;
+        background: none; border: 0; padding: 4px 0;
+        color: var(--text-primary); text-align: left;
+    }
+    .th-chevron { transition: transform .15s ease; font-size: .75rem; opacity: .7; }
+    .th-toggle[aria-expanded="false"] .th-chevron { transform: rotate(-90deg); }
+    .th-bar {
+        display: flex; height: 22px; border-radius: 5px;
+        overflow: hidden; margin: 12px 0 10px;
+        background: rgba(128,128,128,.18);
+    }
+    .th-seg { height: 100%; }
+    .th-seg-meeting { background: #6f42c1; }   /* matches event-type purple */
+    .th-seg-focus   { background: #64748b; }   /* busy_block slate */
+    .th-seg-ooo     { background: #f59e0b; }   /* OOO amber */
+    .th-seg-free    { background: #10b981; }   /* free = healthy green */
+    /* Actuals overlay — same scale as the scheduled bar so the two rows can be
+       read against each other; deliberately a different hue so nobody mistakes
+       logged hours for another slice of the scheduled stack. */
+    .th-bar-actual { margin-top: 4px; }
+    .th-seg-logged { background: #0ea5e9; }
+    .th-seg-logged-over { background: #ef4444; }  /* logged beyond capacity */
+    .th-row-label {
+        font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+        font-weight: 600; opacity: .75; color: var(--text-primary);
+    }
+    .th-delta { font-size: .8rem; margin-top: 6px; color: var(--text-primary); }
+    .th-legend {
+        display: flex; flex-wrap: wrap; gap: 14px;
+        font-size: .8rem; color: var(--text-primary);
+    }
+    .th-legend .th-dot {
+        display: inline-block; width: 10px; height: 10px;
+        border-radius: 50%; margin-right: 6px;
+    }
+    .th-legend .th-hours { opacity: .75; margin-left: 4px; }
+    .th-commit {
+        margin-top: 12px; padding-top: 10px; font-size: .85rem;
+        border-top: 1px solid rgba(128,128,128,.22);
+        color: var(--text-primary);
+    }
+    .th-flags { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .th-flag { font-size: .8rem; }
+    .th-flag-warning { color: #b45309; }
+    .th-flag-danger  { color: #b91c1c; }
+    /* On dark, flag text must stay bright — the light-mode ambers/reds above go
+       muddy against a dark surface. */
+    [data-bs-theme="dark"] .th-flag-warning { color: #fbbf24; }
+    [data-bs-theme="dark"] .th-flag-danger  { color: #fca5a5; }
+    [data-bs-theme="dark"] .th-panel .text-muted { color: #b0b6bd !important; }
+    .th-links { margin-top: 10px; display: flex; gap: 16px; font-size: .8rem; }
+    .th-links a { text-decoration: none; }
+    .th-links a:hover { text-decoration: underline; }
     /* Tooltip */
     #cal-tooltip {
         position: fixed;
@@ -281,6 +344,54 @@
             <div class="stat-card">
                 <div class="stat-number text-danger">{{ overdue_count }}</div>
                 <div class="text-muted small">Overdue Tasks</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time Health — scheduled-hours breakdown for the viewer's own time.
+         Hours come only from CalendarEvents (real start/end); tasks are shown
+         as a commitment COUNT, never summed as hours (a task bar is a deadline
+         window, not worked time). See kanban/utils/calendar_analytics.py. -->
+    <div class="th-panel mb-4">
+        <button class="th-toggle" type="button" id="th-toggle" aria-expanded="true"
+                aria-controls="th-body">
+            <i class="fas fa-chevron-down th-chevron me-2"></i>
+            <i class="fas fa-heart-pulse me-2 text-primary"></i>
+            <span class="fw-semibold">Time Health</span>
+            <span class="text-muted small ms-2" id="th-range-label"></span>
+        </button>
+        <div id="th-body">
+            <div class="th-loading text-muted small py-2" id="th-loading">
+                <i class="fas fa-circle-notch fa-spin me-1"></i> Calculating&hellip;
+            </div>
+            <div id="th-content" style="display:none;">
+                <div class="th-row-label">Scheduled</div>
+                <div class="th-bar" id="th-bar" role="img" aria-label="Scheduled time breakdown"></div>
+                <div class="th-legend" id="th-legend"></div>
+                <!-- Actuals overlay: logged TimeEntry hours on the SAME scale as
+                     the scheduled bar above, so the two read as planned vs actual.
+                     Never summed with it — an hour can be both. -->
+                <div id="th-actual-wrap" style="display:none;">
+                    <div class="th-row-label mt-3">
+                        Logged <span class="text-muted" id="th-actual-sub"></span>
+                    </div>
+                    <div class="th-bar th-bar-actual" id="th-actual-bar"
+                         role="img" aria-label="Logged time versus scheduled"></div>
+                    <div class="th-delta" id="th-delta"></div>
+                </div>
+                <div class="th-commit" id="th-commit"></div>
+                <div class="th-flags" id="th-flags"></div>
+                <div class="th-links">
+                    <a href="{% url 'decision_center:decision_center' %}">
+                        <i class="fas fa-bolt me-1"></i>Focus Today
+                    </a>
+                    <a href="{% url 'conflict_dashboard' %}">
+                        <i class="fas fa-triangle-exclamation me-1"></i>Conflicts
+                    </a>
+                </div>
+            </div>
+            <div class="th-empty text-muted small py-2" id="th-empty" style="display:none;">
+                No scheduled events in this range — nothing to break down yet.
             </div>
         </div>
     </div>
@@ -607,6 +718,18 @@ document.addEventListener('DOMContentLoaded', function () {
     let listModeActive = false;
     let currentRangeStart = null;
     let currentRangeEnd = null;
+
+    // ---- Time Health state (see the TIME HEALTH PANEL section below) ----
+    // Declared up here on purpose: calendar.render() fires datesSet
+    // synchronously, which calls loadTimeHealth(); if these were declared next
+    // to that code they'd still be in the temporal dead zone and throw.
+    const TH_SEGMENTS = [
+        { key: 'meeting', label: 'Meetings',      cls: 'th-seg-meeting', color: '#6f42c1' },
+        { key: 'focus',   label: 'Focus',         cls: 'th-seg-focus',   color: '#64748b' },
+        { key: 'ooo',     label: 'Out of office', cls: 'th-seg-ooo',     color: '#f59e0b' },
+        { key: 'free',    label: 'Free',          cls: 'th-seg-free',    color: '#10b981' },
+    ];
+    let thRequestSeq = 0;
 
     // ---- Editability: which items can be dragged/resized ----
     // Only the current user's OWN items are editable — teammate tasks and
@@ -976,6 +1099,9 @@ document.addEventListener('DOMContentLoaded', function () {
             if (listModeActive) {
                 renderListView(info.startStr, info.endStr);
             }
+            // Keep Time Health in step with the visible range (also fires on
+            // initial render, which is what performs the panel's first load).
+            loadTimeHealth();
         },
     });
     calendar.render();
@@ -1253,7 +1379,201 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             calendar.refetchEvents();
         }
+        loadTimeHealth();
     }
+
+    // ================================================================
+    //  TIME HEALTH PANEL
+    // ================================================================
+    // NOTE: TH_SEGMENTS / thRequestSeq are declared ABOVE the calendar
+    // construction, not here — calendar.render() fires datesSet synchronously,
+    // which calls loadTimeHealth(), and a `const`/`let` declared here would
+    // still be in the temporal dead zone at that point (ReferenceError on load).
+
+    function fmtHours(h) {
+        const total = Math.round(h * 60);
+        const hrs = Math.floor(total / 60);
+        const mins = total % 60;
+        if (!hrs) return mins + 'm';
+        return mins ? hrs + 'h ' + mins + 'm' : hrs + 'h';
+    }
+
+    function loadTimeHealth() {
+        const loadingEl = document.getElementById('th-loading');
+        const contentEl = document.getElementById('th-content');
+        const emptyEl = document.getElementById('th-empty');
+        if (!loadingEl) return;
+
+        let url = '/calendar/time-health/';
+        const params = [];
+        if (currentRangeStart && currentRangeEnd) {
+            params.push('start=' + encodeURIComponent(currentRangeStart));
+            params.push('end=' + encodeURIComponent(currentRangeEnd));
+        }
+        if (activeBoardIds.length > 0) {
+            params.push('boards=' + activeBoardIds.join(','));
+        }
+        if (params.length) url += '?' + params.join('&');
+
+        // Guard against out-of-order responses when the user navigates quickly.
+        const seq = ++thRequestSeq;
+        loadingEl.style.display = '';
+        contentEl.style.display = 'none';
+        emptyEl.style.display = 'none';
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.ok ? r.json() : Promise.reject(r.status))
+            .then(data => {
+                if (seq !== thRequestSeq) return;   // a newer request superseded us
+                renderTimeHealth(data);
+            })
+            .catch(() => {
+                if (seq !== thRequestSeq) return;
+                loadingEl.style.display = 'none';
+                emptyEl.textContent = 'Could not load Time Health right now.';
+                emptyEl.style.display = '';
+            });
+    }
+
+    function renderTimeHealth(data) {
+        const loadingEl = document.getElementById('th-loading');
+        const contentEl = document.getElementById('th-content');
+        const emptyEl = document.getElementById('th-empty');
+        const totals = data.totals || {};
+
+        loadingEl.style.display = 'none';
+
+        // Only truly empty when there is no schedule, no logged effort AND
+        // nothing due — logged-but-unscheduled time is itself a finding worth
+        // showing, so it must not fall through to the empty state.
+        const booked = (totals.meeting || 0) + (totals.focus || 0) + (totals.ooo || 0);
+        if (booked <= 0 && !data.commitments_due && !data.has_logged_time) {
+            emptyEl.style.display = '';
+            return;
+        }
+
+        const rangeLabel = document.getElementById('th-range-label');
+        if (rangeLabel) {
+            rangeLabel.textContent = data.range_start + ' → ' + data.range_end;
+        }
+
+        // Stacked bar, proportional to capacity across the whole window.
+        // Shared scale for BOTH rows (scheduled + logged) so they can be read
+        // against each other. Includes `logged` so an over-capacity week widens
+        // the scale instead of overflowing the bar past 100%.
+        const denom = Math.max(
+            totals.capacity || 0,
+            booked + (totals.free || 0),
+            totals.logged || 0
+        ) || 1;
+        const barEl = document.getElementById('th-bar');
+        barEl.innerHTML = '';
+        TH_SEGMENTS.forEach(seg => {
+            const val = totals[seg.key] || 0;
+            if (val <= 0) return;
+            const div = document.createElement('div');
+            div.className = 'th-seg ' + seg.cls;
+            div.style.width = (val / denom * 100).toFixed(2) + '%';
+            div.title = seg.label + ': ' + fmtHours(val);
+            barEl.appendChild(div);
+        });
+
+        const legendEl = document.getElementById('th-legend');
+        legendEl.innerHTML = '';
+        TH_SEGMENTS.forEach(seg => {
+            const val = totals[seg.key] || 0;
+            const span = document.createElement('span');
+            const dot = document.createElement('span');
+            dot.className = 'th-dot';
+            dot.style.background = seg.color;
+            span.appendChild(dot);
+            span.appendChild(document.createTextNode(seg.label));
+            const hrs = document.createElement('span');
+            hrs.className = 'th-hours';
+            hrs.textContent = fmtHours(val);
+            span.appendChild(hrs);
+            legendEl.appendChild(span);
+        });
+
+        // ---- Actuals overlay: logged hours vs the schedule above ----------
+        // Drawn on the SAME denominator as the scheduled bar so the two rows
+        // are visually comparable. Logged time is NOT added to the stack — an
+        // hour can be both scheduled and logged, so summing double-counts.
+        const actualWrap = document.getElementById('th-actual-wrap');
+        if (data.has_logged_time) {
+            const logged = totals.logged || 0;
+            const capacity = totals.capacity || 0;
+            const actualBar = document.getElementById('th-actual-bar');
+            actualBar.innerHTML = '';
+
+            const within = Math.min(logged, capacity || logged);
+            const over = Math.max(0, logged - (capacity || logged));
+
+            const mk = (val, cls, label) => {
+                if (val <= 0) return;
+                const d = document.createElement('div');
+                d.className = 'th-seg ' + cls;
+                d.style.width = (val / denom * 100).toFixed(2) + '%';
+                d.title = label + ': ' + fmtHours(val);
+                actualBar.appendChild(d);
+            };
+            mk(within, 'th-seg-logged', 'Logged');
+            mk(over, 'th-seg-logged-over', 'Logged beyond capacity');
+
+            document.getElementById('th-actual-sub').textContent =
+                '· ' + fmtHours(logged) + ' across '
+                + data.days_logged + (data.days_logged === 1 ? ' day' : ' days');
+
+            // Plain-language read of the gap between plan and reality.
+            const scheduled = totals.scheduled || 0;
+            const deltaEl = document.getElementById('th-delta');
+            if (scheduled <= 0) {
+                deltaEl.textContent =
+                    'All of this work happened outside scheduled calendar time.';
+            } else {
+                const diff = logged - scheduled;
+                const absTxt = fmtHours(Math.abs(diff));
+                deltaEl.textContent = Math.abs(diff) < 0.25
+                    ? 'Logged time closely matches what was scheduled.'
+                    : (diff > 0
+                        ? absTxt + ' more logged than scheduled.'
+                        : absTxt + ' less logged than scheduled.');
+            }
+            actualWrap.style.display = '';
+        } else {
+            actualWrap.style.display = 'none';
+        }
+
+        // The differentiating line: commitments due vs. time actually left.
+        const commitEl = document.getElementById('th-commit');
+        const n = data.commitments_due || 0;
+        commitEl.textContent = n
+            ? n + (n === 1 ? ' task' : ' tasks') + ' due in this range vs '
+              + fmtHours(totals.free || 0) + ' unscheduled'
+            : 'No tasks due in this range — ' + fmtHours(totals.free || 0) + ' unscheduled.';
+
+        const flagsEl = document.getElementById('th-flags');
+        flagsEl.innerHTML = '';
+        (data.flags || []).forEach(f => {
+            const div = document.createElement('div');
+            div.className = 'th-flag th-flag-' + (f.level || 'warning');
+            div.textContent = f.text;
+            flagsEl.appendChild(div);
+        });
+
+        contentEl.style.display = '';
+    }
+
+    (function initTimeHealthToggle() {
+        const btn = document.getElementById('th-toggle');
+        const body = document.getElementById('th-body');
+        if (!btn || !body) return;
+        btn.addEventListener('click', function () {
+            const open = btn.getAttribute('aria-expanded') === 'true';
+            btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+            body.style.display = open ? 'none' : '';
+        });
+    })();
 
     // Parse a 'YYYY-MM-DD[...]' string as a LOCAL date (avoids the UTC
     // off-by-one bug documented above in computeDimStyle).

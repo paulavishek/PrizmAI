@@ -127,6 +127,7 @@ urlpatterns = [
     # -----------------------------------------------------------------------
     path('calendar/', calendar_views.unified_calendar, name='unified_calendar'),
     path('calendar/events/', calendar_views.unified_calendar_events_api, name='unified_calendar_events_api'),
+    path('calendar/time-health/', calendar_views.calendar_time_health_api, name='calendar_time_health_api'),
     path('calendar/create-task/', calendar_views.calendar_create_task, name='calendar_create_task'),
     path('calendar/create-event/', calendar_views.calendar_create_event, name='calendar_create_event'),
     path('calendar/boards/<int:board_id>/columns/', calendar_views.calendar_get_board_columns, name='calendar_get_board_columns'),

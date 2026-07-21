@@ -939,9 +939,18 @@ def _refresh_time_entry_dates(base_date):
                 if not entry.work_date:
                     continue
                 # Same spread formula the seeder uses within the task window.
-                entry.work_date = start + timedelta(
-                    days=int((i + 1) * span_days / (n + 1))
-                )
+                offset = int((i + 1) * span_days / (n + 1))
+                # On a SHORT window the formula above collapses: with
+                # span_days=1 and n=3 every ordinal maps to offset 0, stacking
+                # a task's whole logged effort onto one date (seen as 32h/day
+                # in a single-day window). Totals-based views never noticed,
+                # but any per-day-vs-capacity read (Calendar Time Health) shows
+                # it as an impossible day. Give each entry its own day when the
+                # window is too narrow to separate them, still anchored to the
+                # task's start and capped at the window end.
+                if span_days < n:
+                    offset = min(i, span_days)
+                entry.work_date = start + timedelta(days=offset)
                 entries_to_update.append(entry)
 
         if entries_to_update:

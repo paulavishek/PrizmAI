@@ -1549,8 +1549,14 @@ class Command(BaseCommand):
             if total_hours <= 0 or not task.start_date:
                 continue
 
-            # Spread across 3-6 entries within the task window
-            num_entries = rng.choice([3, 4, 5, 6])
+            # Spread across enough entries that no single one reads as an
+            # impossible day. The old fixed 3-6 split charged a 160h task at
+            # ~25h per entry — legal per-row (the 16h field cap is per entry)
+            # but nonsense as a day's work, and visibly wrong anywhere hours are
+            # read per-day rather than as a total (Calendar Time Health).
+            # ~6h per entry keeps entries day-sized; still capped at the number
+            # of days actually available in the task window.
+            num_entries = max(3, min(int(round(total_hours / 6.0)), 40))
             entries = self._distribute_hours(total_hours, num_entries, rng)
 
             start = task.start_date
@@ -1570,7 +1576,14 @@ class Command(BaseCommand):
             ]
 
             for i, hrs in enumerate(entries):
-                work_date = start + timedelta(days=int((i + 1) * span_days / (num_entries + 1)))
+                offset = int((i + 1) * span_days / (num_entries + 1))
+                # Short window: the formula above maps every ordinal to the same
+                # day, stacking a task's whole effort onto one date. Give each
+                # entry its own day instead (mirrors the same guard in
+                # demo_date_refresh._refresh_time_entry_dates).
+                if span_days < num_entries:
+                    offset = min(i, span_days)
+                work_date = start + timedelta(days=offset)
                 TimeEntry.objects.create(
                     task=task,
                     user=task.assigned_to,
