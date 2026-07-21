@@ -81,10 +81,10 @@
     }
 
     /* ─── Conflict badges ─────────────────────────────────────── */
-    .conflict-item { padding: .5rem .75rem; border-left: 3px solid; border-radius: .25rem; margin-bottom: .5rem; background: var(--card-bg); }
-    .conflict-item.critical { border-left-color: #dc3545; background: #fff5f5; }
-    .conflict-item.high     { border-left-color: #fd7e14; background: #fff8f0; }
-    .conflict-item.medium   { border-left-color: #ffc107; background: #fffbea; }
+    .conflict-item { padding: .5rem .75rem; border-left: 3px solid; border-radius: .25rem; margin-bottom: .5rem; background: var(--card-bg); color: var(--text-primary); }
+    .conflict-item.critical { border-left-color: #dc3545; background: rgba(220, 53, 69, 0.1); }
+    .conflict-item.high     { border-left-color: #fd7e14; background: rgba(253, 126, 20, 0.1); }
+    .conflict-item.medium   { border-left-color: #ffc107; background: rgba(255, 193, 7, 0.1); }
 
     /* ─── AI analysis card ────────────────────────────────────── */
     .ai-card { border: 1px solid #d1d5db; border-radius: .5rem; }
@@ -318,7 +318,7 @@
         </div>
     </div>
     <!-- ── What-If → Shadow Board bridge callout ──────────────── -->
-    <div class="alert alert-info border-0 py-2 px-3 mb-3 d-flex align-items-center gap-2" style="background:#eef4ff;">
+    <div class="alert alert-info border-0 py-2 px-3 mb-3 d-flex align-items-center gap-2">
         <i class="fas fa-info-circle text-primary flex-shrink-0"></i>
         <span class="small">
             <strong>What-If is your calculator.</strong>
@@ -469,6 +469,13 @@
                         </div>
                         <span class="fs-4 fw-bold" id="feasibility-label">—</span>
                     </div>
+                    <p class="small text-muted mb-0 mt-2">
+                        <i class="fas fa-circle-info me-1"></i>
+                        Derived from the projected scenario, not just the sliders: how far <strong>delay probability</strong>,
+                        <strong>team utilization</strong>, and <strong>budget overrun</strong> exceed safe limits, minus a
+                        penalty for each detected conflict below. Team utilization is remaining tasks divided across the
+                        (changed) team size, so adding tasks or removing members both push it — and the score — down.
+                    </p>
                 </div>
             </div>
 
@@ -534,6 +541,9 @@
             <p class="text-muted small mb-0 mt-1">
                 Reload a scenario onto the sliders, or <strong>Promote to Shadow Branch</strong>
                 to turn it into a live simulation that tracks progress on a parallel copy of your board.
+                Each score was calculated against the board's state on the date it was saved, so scores
+                across different save dates aren't directly comparable — <strong>Load</strong> a scenario
+                to see how it scores against the board as it stands right now.
             </p>
         </div>
         <div class="collapse {% if saved_scenarios %}show{% endif %}" id="saved-panel">

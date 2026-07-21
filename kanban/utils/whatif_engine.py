@@ -287,9 +287,6 @@ class WhatIfEngine:
             baseline['delay_probability'],
         )
 
-        # --- Risk level ---
-        new_risk = self._risk_from_delay(new_delay_prob)
-
         # --- Budget ---
         additional_cost = tasks_added * baseline['avg_cost_per_task']
         new_budget_spent = baseline['budget_spent'] + max(additional_cost, 0)
@@ -305,6 +302,15 @@ class WhatIfEngine:
         active_per_member = new_remaining / new_team if new_team else new_remaining
         utilization_raw = round(active_per_member / 8 * 100, 1)
         new_utilization = min(utilization_raw, 200)
+
+        # --- Risk level ---
+        # Delay probability sets the baseline band, but a scenario can be
+        # low on delay risk while still being dangerous on resourcing or
+        # spend (e.g. utilization spiking to 187% with delay probability
+        # only at 40%) — escalate risk level to match the worst signal so
+        # it doesn't silently disagree with the conflicts/feasibility panel.
+        new_risk = self._risk_from_delay(new_delay_prob)
+        new_risk = self._escalate_risk(new_risk, utilization_raw, new_budget_util)
 
         return {
             'total_tasks': new_total,
@@ -650,6 +656,26 @@ class WhatIfEngine:
         if delay_prob >= 30:
             return 'medium'
         return 'low'
+
+    _RISK_ORDER = ('low', 'medium', 'high', 'critical')
+
+    @classmethod
+    def _escalate_risk(cls, risk_level: str, utilization_raw: float, budget_util: float) -> str:
+        """Bump risk_level up to match utilization/budget severity if worse.
+
+        Mirrors the thresholds used for resource_overload/budget_overrun
+        conflicts (100% / 130% utilization, 100% / 120% budget) so the Risk
+        card never shows a calmer band than the conflicts it's about to list.
+        """
+        floor = 'low'
+        if utilization_raw > 130 or budget_util > 120:
+            floor = 'high'
+        elif utilization_raw > 100 or budget_util > 100:
+            floor = 'medium'
+
+        if cls._RISK_ORDER.index(floor) > cls._RISK_ORDER.index(risk_level):
+            return floor
+        return risk_level
 
     # ------------------------------------------------------------------
     # AI prompt
