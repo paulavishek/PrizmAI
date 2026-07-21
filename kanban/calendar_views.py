@@ -24,7 +24,7 @@ from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.utils import timezone
-from django.views.decorators.http import require_POST, require_GET
+from django.views.decorators.http import require_POST, require_GET, require_http_methods
 
 from django.db.models import Max
 
@@ -983,6 +983,79 @@ def calendar_create_event(request):
             },
         },
     })
+
+
+# ---------------------------------------------------------------------------
+# Reschedule a CalendarEvent from the calendar via drag/resize (AJAX PATCH)
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(["PATCH"])
+@demo_write_guard
+def calendar_event_reschedule(request, event_id):
+    """
+    Move (and optionally resize) a CalendarEvent via calendar drag/resize.
+
+    Mirrors the datetime-storage convention of calendar_create_event so events
+    don't drift timezones:
+      - all-day  → stored as UTC midnight of the chosen date(s), so
+        .date() is always the chosen calendar date
+      - timed    → naive local strings made timezone-aware in the server tz
+
+    Creator-only (matches calendar_event_edit/delete). Returns JSON.
+    """
+    event = get_object_or_404(CalendarEvent, id=event_id)
+
+    # Permission: creator-only, consistent with edit/delete views.
+    if event.created_by_id != request.user.id:
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
+    try:
+        data = json.loads(request.body)
+    except (ValueError, KeyError):
+        return JsonResponse({'success': False, 'error': 'Invalid request body'}, status=400)
+
+    start_str = data.get('start_datetime', '')
+    end_str = data.get('end_datetime', '')
+    # Default to the event's current all-day flag; a drag never changes it.
+    is_all_day = bool(data.get('is_all_day', event.is_all_day))
+
+    if not start_str or not end_str:
+        return JsonResponse(
+            {'success': False, 'error': 'Start and end datetime are required.'},
+            status=400,
+        )
+
+    try:
+        if is_all_day:
+            # All-day: store as UTC midnight of the chosen date (tz-independent),
+            # matching calendar_create_event.
+            import datetime as _dt_mod
+            start_date = _dt_mod.date.fromisoformat(start_str.split('T')[0])
+            end_date = _dt_mod.date.fromisoformat(end_str.split('T')[0])
+            start_dt = datetime(start_date.year, start_date.month, start_date.day,
+                                tzinfo=_dt_mod.timezone.utc)
+            end_dt = datetime(end_date.year, end_date.month, end_date.day,
+                              tzinfo=_dt_mod.timezone.utc)
+        else:
+            start_dt = datetime.fromisoformat(start_str)
+            end_dt = datetime.fromisoformat(end_str)
+            if timezone.is_naive(start_dt):
+                start_dt = timezone.make_aware(start_dt)
+            if timezone.is_naive(end_dt):
+                end_dt = timezone.make_aware(end_dt)
+    except ValueError as exc:
+        return JsonResponse({'success': False, 'error': f'Invalid datetime: {exc}'}, status=400)
+
+    if end_dt < start_dt:
+        return JsonResponse({'success': False, 'error': 'End must be after start.'}, status=400)
+
+    event.start_datetime = start_dt
+    event.end_datetime = end_dt
+    event.is_all_day = is_all_day
+    event.save(update_fields=['start_datetime', 'end_datetime', 'is_all_day', 'updated_at'])
+
+    return JsonResponse({'success': True, 'event_id': event.id})
 
 
 # ---------------------------------------------------------------------------

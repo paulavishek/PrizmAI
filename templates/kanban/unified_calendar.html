@@ -142,6 +142,102 @@
         border-top-right-radius: 0 !important;
         border-bottom-right-radius: 0 !important;
     }
+
+    /* Draggable affordance: only editable events show the grab cursor. */
+    .fc-event.fc-event-draggable { cursor: grab; }
+    .fc-event.fc-event-draggable:active { cursor: grabbing; }
+
+    /* Dependency cascade banner (ported from the Gantt chart) — fixed at the
+       top so it's visible regardless of scroll after a drag. */
+    .cal-dep-banner {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10001;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        width: 420px;
+        max-width: calc(100vw - 32px);
+        max-height: calc(100vh - 32px);
+        overflow-y: auto;
+        padding: 12px 16px;
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        border: 1px solid #475569;
+        border-radius: 8px;
+        color: #f1f5f9;
+        font-size: 13px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+        animation: calBannerSlideIn 0.3s ease;
+    }
+    .cal-dep-banner > i { color: #fbbf24; margin-top: 2px; }
+    .cal-dep-banner .cal-dep-body { flex: 1; min-width: 0; }
+    .cal-dep-banner .cal-dep-msg { display: block; }
+    .cal-dep-banner .cal-dep-note { font-style: italic; opacity: 0.8; }
+    .cal-dep-banner .cal-dep-list {
+        margin: 6px 0 0;
+        padding-left: 18px;
+        list-style: disc;
+        font-size: 12.5px;
+        color: #e2e8f0;
+    }
+    .cal-dep-banner .cal-dep-list li {
+        margin: 2px 0;
+        word-break: break-word;
+    }
+    .cal-dep-banner .cal-dep-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+    .cal-dep-banner .cal-dep-btn {
+        border: none;
+        padding: 5px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        color: #fff;
+        white-space: nowrap;
+    }
+    .cal-dep-banner .cal-dep-btn-primary { background: #f59e0b; }
+    .cal-dep-banner .cal-dep-btn-primary:hover { background: #d97706; }
+    .cal-dep-banner .cal-dep-close {
+        background: none;
+        border: none;
+        color: #cbd5e1;
+        cursor: pointer;
+        font-size: 16px;
+        padding: 0 4px;
+        line-height: 1;
+    }
+    @keyframes calBannerSlideIn {
+        from { opacity: 0; transform: translate(-50%, -10px); }
+        to   { opacity: 1; transform: translate(-50%, 0); }
+    }
+
+    /* Bottom-right toasts for reschedule errors / cascade confirmations. */
+    .cal-toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 10000;
+        color: #fff;
+        font-size: 13px;
+        padding: 10px 18px;
+        border-radius: 8px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        animation: calToastSlideIn 0.25s ease;
+    }
+    .cal-toast-error { background: #dc2626; }
+    .cal-toast-info  { background: #16a34a; }
+    @keyframes calToastSlideIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
 </style>
 {% endblock %}
 
@@ -254,7 +350,7 @@
     <div class="calendar-container">
         <div class="d-flex align-items-center gap-2 mb-3 text-muted" style="font-size:0.82rem;">
             <i class="fas fa-hand-pointer" style="color:#0d6efd;"></i>
-            <span>Click any date to quickly <strong>create a task</strong> or <strong>schedule an event</strong> on that day.</span>
+            <span>Click any date to quickly <strong>create a task</strong> or <strong>schedule an event</strong> on that day. Drag or resize <strong>your own</strong> items to reschedule them — teammates' items can't be moved.</span>
         </div>
         <div id='calendar'></div>
         <div id='calendar-list-view' style="display:none;"></div>
@@ -512,9 +608,30 @@ document.addEventListener('DOMContentLoaded', function () {
     let currentRangeStart = null;
     let currentRangeEnd = null;
 
+    // ---- Editability: which items can be dragged/resized ----
+    // Only the current user's OWN items are editable — teammate tasks and
+    // sanitized busy/OOO status blocks stay locked (the server also 403s them,
+    // but locking client-side avoids a confusing snap-back). Aggregated 'busy'
+    // blocks (availability mode) are never editable.
+    function applyEditability(e) {
+        const p = e.extendedProps || {};
+        let editable = false;
+        if (p.source === 'task' && p.layer === 'mine') {
+            editable = true;
+        } else if (p.source === 'event' && p.is_mine) {
+            editable = true;
+        }
+        e.editable = editable;
+        e.startEditable = editable;
+        // durationEditable is toggled per-view too (no resize in week view) —
+        // see applyDurationEditability(), called on view change. Seed it here.
+        e.durationEditable = editable;
+        return e;
+    }
+
     // ---- Layer/mode event processing ----
     function processEvents(data) {
-        let filtered = data;
+        let filtered = data.map(applyEditability);
         // Apply teammate visibility filter (covers all task layers + unassigned, sentinel -1)
         if (hiddenTeammateIds.size > 0) {
             filtered = filtered.filter(function(e) {
@@ -581,6 +698,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 title: `${b.name} — busy (${n} task${n !== 1 ? 's' : ''})`,
                 start: b.date,
                 color: b.color,
+                editable: false, startEditable: false, durationEditable: false,
                 extendedProps: { source: 'busy', layer: 'busy',
                                  assignee_name: b.name, count: n },
             });
@@ -785,6 +903,13 @@ document.addEventListener('DOMContentLoaded', function () {
         eventMinHeight: 30,        // short (e.g. 15-min) meetings still get room for their title
         eventMaxStack: 3,          // collapse dense overlaps to a "+N more" popover
         dayMaxEvents: 4,           // month view: cap per-day rows, overflow → "+N more"
+        // Drag-and-drop + resize. Global editing is ON, but each event is stamped
+        // with per-item editability in applyEditability() (only your own items),
+        // and resize is disabled in week view via applyDurationEditability().
+        editable: true,
+        eventResizableFromStart: true,   // month-view task bars stretch from the left edge too
+        eventStartEditable: true,
+        eventDurationEditable: true,
         events: function (fetchInfo, successCallback, failureCallback) {
             let url = `${EVENTS_URL}?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`;
             if (activeBoardIds.length > 0) {
@@ -806,6 +931,15 @@ document.addEventListener('DOMContentLoaded', function () {
             info.jsEvent.preventDefault();
             createPopup.style.display = 'none';
             handleItemClick(info.event.id, info.event.extendedProps, info.event.title);
+        },
+        // Drag a bar to move it (tasks & events).
+        eventDrop: function (info) {
+            handleReschedule(info, 'drop');
+        },
+        // Stretch a task bar from either end (month view only for tasks; events
+        // are guarded against week-view resize inside handleReschedule).
+        eventResize: function (info) {
+            handleReschedule(info, 'resize');
         },
         eventMouseEnter: function (info) {
             tooltip.innerHTML = buildTooltipHtml(info.event.title, info.event.extendedProps);
@@ -838,12 +972,236 @@ document.addEventListener('DOMContentLoaded', function () {
         datesSet: function (info) {
             currentRangeStart = info.startStr;
             currentRangeEnd = info.endStr;
+            applyDurationEditability(info.view.type);
             if (listModeActive) {
                 renderListView(info.startStr, info.endStr);
             }
         },
     });
     calendar.render();
+
+    // Week view = drag-to-move only (no stretch). Toggle FullCalendar's global
+    // durationEditable per view; per-item startEditable already gates ownership.
+    function applyDurationEditability(viewType) {
+        calendar.setOption('eventDurationEditable', viewType !== 'timeGridWeek');
+    }
+
+    // ---- Drag/resize persistence ----------------------------------------
+    // Format a JS Date as a LOCAL 'YYYY-MM-DD' — never toISOString() (that is
+    // UTC and can shift the date across midnight).
+    function fmtLocalDate(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+    // Format a JS Date as a floating local 'YYYY-MM-DDTHH:MM:SS' (no offset) —
+    // matches how the server emits/stores timed events (see calendar_views.py).
+    function fmtLocalDateTime(d) {
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        return `${fmtLocalDate(d)}T${hh}:${mm}:${ss}`;
+    }
+
+    // Central handler for both eventDrop and eventResize. Branches on task vs
+    // event, PATCHes the right endpoint, and reverts on failure.
+    function handleReschedule(info, kind) {
+        const ev = info.event;
+        const p = ev.extendedProps || {};
+
+        // Defensive: only own items are editable; anything else reverts.
+        const isMineTask = p.source === 'task' && p.layer === 'mine';
+        const isMineEvent = p.source === 'event' && p.is_mine;
+        if (!isMineTask && !isMineEvent) { info.revert(); return; }
+
+        if (p.source === 'task') {
+            rescheduleCalendarTask(info, kind);
+        } else if (p.source === 'event') {
+            rescheduleCalendarEvent(info, kind);
+        } else {
+            info.revert();
+        }
+    }
+
+    function rescheduleCalendarTask(info, kind) {
+        const ev = info.event;
+        const taskId = String(ev.id).replace(/^task-/, '');
+
+        // FullCalendar 'end' is EXCLUSIVE for all-day bars; the feed added +1 day,
+        // so subtract it back to get the inclusive due date.
+        const payload = {};
+        if (ev.start) {
+            payload.start_date = fmtLocalDate(ev.start);
+        }
+        if (ev.end) {
+            const inclusiveEnd = new Date(ev.end);
+            inclusiveEnd.setDate(inclusiveEnd.getDate() - 1);
+            payload.due_date = fmtLocalDate(inclusiveEnd);
+        }
+
+        // A left-edge resize changes only start; a right-edge resize only due.
+        // eventResize gives startDelta / endDelta so we can tell which edge moved
+        // and send just that side (matching the Gantt reschedule contract).
+        if (kind === 'resize') {
+            const movedStart = info.startDelta &&
+                (info.startDelta.days || info.startDelta.milliseconds);
+            const movedEnd = info.endDelta &&
+                (info.endDelta.days || info.endDelta.milliseconds);
+            if (movedStart && !movedEnd) { delete payload.due_date; }
+            else if (movedEnd && !movedStart) { delete payload.start_date; }
+        }
+
+        fetch(`/api/tasks/${taskId}/reschedule/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+            body: JSON.stringify(payload),
+        })
+        .then(r => {
+            if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Reschedule failed'); });
+            return r.json();
+        })
+        .then(data => {
+            if (!data.success) { throw new Error(data.error || 'Reschedule failed'); }
+            if (data.affected_dependents && data.affected_dependents.length > 0) {
+                showDependencyBanner(data.affected_dependents, taskId, data.total_dependents, payload);
+            }
+        })
+        .catch(err => {
+            info.revert();
+            showCalErrorToast(err.message || 'Could not update the task. Changes reverted.');
+        });
+    }
+
+    function rescheduleCalendarEvent(info, kind) {
+        const ev = info.event;
+        const eventId = ev.extendedProps.event_id;
+
+        const payload = { is_all_day: ev.allDay };
+        if (ev.allDay) {
+            // All-day: date-only. FullCalendar's exclusive end → inclusive stored end.
+            payload.start_datetime = fmtLocalDate(ev.start);
+            const end = ev.end ? new Date(ev.end) : new Date(ev.start);
+            if (ev.end) { end.setDate(end.getDate() - 1); }
+            payload.end_datetime = fmtLocalDate(end);
+        } else {
+            // Timed (week view): floating local datetime strings.
+            payload.start_datetime = fmtLocalDateTime(ev.start);
+            const end = ev.end || ev.start;
+            payload.end_datetime = fmtLocalDateTime(end);
+        }
+
+        fetch(`/calendar/events/${eventId}/reschedule/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+            body: JSON.stringify(payload),
+        })
+        .then(r => {
+            if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Reschedule failed'); });
+            return r.json();
+        })
+        .then(data => {
+            if (!data.success) { throw new Error(data.error || 'Reschedule failed'); }
+        })
+        .catch(err => {
+            info.revert();
+            showCalErrorToast(err.message || 'Could not update the event. Changes reverted.');
+        });
+    }
+
+    function escapeHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = String(s == null ? '' : s);
+        return d.innerHTML;
+    }
+
+    // ---- Dependency cascade banner (ported from the Gantt chart) ----------
+    // Mirrors the Gantt "warn, then optionally shift" behavior so Calendar and
+    // Gantt feel identical. Lists each affected task by title (like the Gantt's
+    // "Review Dependencies" highlight, adapted to a plain list since the
+    // calendar has no bar SVG to highlight) — just Shift / Dismiss.
+    function showDependencyBanner(dependents, sourceTaskId, totalDependents, srcPayload) {
+        const old = document.getElementById('cal-dep-banner');
+        if (old) old.remove();
+
+        const count = dependents.length;
+        const skipped = (typeof totalDependents === 'number')
+            ? Math.max(0, totalDependents - count) : 0;
+        const skippedNote = skipped > 0
+            ? ' <span class="cal-dep-note">' + skipped + ' other dependent' +
+              (skipped > 1 ? 's' : '') + ' already start' + (skipped > 1 ? '' : 's') +
+              ' after the new date.</span>'
+            : '';
+        const titleList = '<ul class="cal-dep-list">' +
+            dependents.map(function (d) {
+                return '<li>' + escapeHtml(d.title) + '</li>';
+            }).join('') +
+            '</ul>';
+
+        const banner = document.createElement('div');
+        banner.id = 'cal-dep-banner';
+        banner.className = 'cal-dep-banner';
+        banner.innerHTML =
+            '<i class="fas fa-exclamation-triangle"></i>' +
+            '<div class="cal-dep-body">' +
+            '<span class="cal-dep-msg">This change affects <strong>' + count +
+            '</strong> dependent task' + (count > 1 ? 's' : '') + ':' + skippedNote + '</span>' +
+            titleList +
+            '</div>' +
+            '<div class="cal-dep-actions">' +
+            '<button class="cal-dep-btn cal-dep-btn-primary" id="cal-dep-shift">' +
+            'Shift ' + count + ' task' + (count > 1 ? 's' : '') + '</button>' +
+            '<button class="cal-dep-close" id="cal-dep-close">&times;</button>' +
+            '</div>';
+        document.body.appendChild(banner);
+
+        document.getElementById('cal-dep-shift').addEventListener('click', function () {
+            const ok = window.confirm(
+                'Shift ' + count + ' dependent task' + (count > 1 ? 's' : '') +
+                ' so the schedule stays valid?\n\nEach is moved to start after its ' +
+                'predecessor finishes, keeping its original duration. This may move ' +
+                'further downstream tasks too.'
+            );
+            if (!ok) return;
+            banner.remove();
+            cascadeCalendarReschedule(sourceTaskId, srcPayload);
+        });
+        document.getElementById('cal-dep-close').addEventListener('click', function () {
+            banner.remove();
+        });
+    }
+
+    function cascadeCalendarReschedule(sourceTaskId, srcPayload) {
+        fetch(`/api/tasks/${sourceTaskId}/cascade-reschedule/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+            body: JSON.stringify(srcPayload || {}),
+        })
+        .then(r => {
+            if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Cascade failed'); });
+            return r.json();
+        })
+        .then(data => {
+            if (!data.success) { throw new Error(data.error || 'Could not shift dependent tasks.'); }
+            calendar.refetchEvents();
+            const moved = (data.updated || []).length;
+            showCalInfoToast(moved
+                ? moved + ' dependent task' + (moved > 1 ? 's' : '') + ' rescheduled.'
+                : 'No dependent tasks needed shifting.');
+        })
+        .catch(err => { showCalErrorToast(err.message || 'Could not shift dependent tasks.'); });
+    }
+
+    // ---- Lightweight toasts ----------------------------------------------
+    function showCalToast(message, cls) {
+        const toast = document.createElement('div');
+        toast.className = 'cal-toast ' + cls;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 4000);
+    }
+    function showCalErrorToast(msg) { showCalToast(msg, 'cal-toast-error'); }
+    function showCalInfoToast(msg) { showCalToast(msg, 'cal-toast-info'); }
 
     // ---- Custom list view rendering ----
 
