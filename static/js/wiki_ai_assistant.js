@@ -128,6 +128,7 @@ async function processDocumentation() {
         const data = await response.json();
         
         if (data.success) {
+            currentAnalysisId = data.analysis_id;
             currentAnalysisResults = data.analysis_results;
             displayDocumentationAnalysisResults(data.analysis_results);
             
@@ -540,21 +541,23 @@ async function confirmTaskCreation() {
             }
         });
         
-        if (currentAnalysisType === 'meeting' && currentAnalysisId) {
-            // Meeting analysis has its own task creation endpoint
-            endpoint = `/wiki/api/meeting-analysis/${currentAnalysisId}/create-tasks/`;
-            requestBody = {
-                board_id: boardId,
-                column_id: columnId || null,
-                phase: phase,
-                selected_action_items: Array.from(selectedActionItems),
-                assignee_overrides: assigneeOverrides
-            };
-        } else {
-            // Documentation analysis - create tasks directly (we'll need to add this endpoint)
-            // For now, show error
-            throw new Error('Task creation from documentation analysis not yet implemented');
+        if (!currentAnalysisId) {
+            throw new Error('No analysis available. Please re-run the assistant.');
         }
+
+        if (currentAnalysisType === 'documentation') {
+            endpoint = `/wiki/api/documentation-analysis/${currentAnalysisId}/create-tasks/`;
+        } else {
+            // Meeting analysis (default)
+            endpoint = `/wiki/api/meeting-analysis/${currentAnalysisId}/create-tasks/`;
+        }
+        requestBody = {
+            board_id: boardId,
+            column_id: columnId || null,
+            phase: phase,
+            selected_action_items: Array.from(selectedActionItems),
+            assignee_overrides: assigneeOverrides
+        };
         
         const response = await fetch(endpoint, {
             method: 'POST',

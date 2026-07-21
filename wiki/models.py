@@ -640,6 +640,115 @@ class WikiMeetingTask(models.Model):
         return f"Task '{self.task.title}' from {self.meeting_analysis.wiki_page.title}"
 
 
+class WikiDocumentationAnalysis(models.Model):
+    """
+    AI-powered analysis of a general documentation wiki page.
+    Mirrors WikiMeetingAnalysis: stores extracted action items / TODOs and
+    supporting insights, content-hash cached so re-analyzing unchanged content
+    reuses the existing row. Persisting it lets action items be promoted to
+    Kanban tasks (see WikiDocumentationTask) with a traceability trail.
+    """
+    PROCESSING_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+
+    # Link to wiki page (already workspace/sandbox-scoped, so no tenant FK needed here)
+    wiki_page = models.ForeignKey(WikiPage, on_delete=models.CASCADE, related_name='documentation_analyses')
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        related_name='wiki_documentation_analyses',
+        null=True,
+        blank=True,
+        help_text="Organization (optional - MVP mode uses demo org)"
+    )
+
+    # Processing metadata
+    processed_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='processed_documentation_analyses')
+    processed_at = models.DateTimeField(auto_now_add=True)
+    processing_status = models.CharField(max_length=20, choices=PROCESSING_STATUS_CHOICES, default='pending')
+    processing_error = models.TextField(blank=True, null=True, help_text='Error message if processing failed')
+
+    # AI Analysis Results (full documentation analysis JSON — see analyze_wiki_documentation)
+    analysis_results = models.JSONField(default=dict, blank=True, help_text="""
+        Complete AI analysis including:
+        - summary, key_points
+        - action_items: [{title, description, priority, type, source_context, ...}]
+        - suggested_improvements, related_topics, questions_raised, metadata
+    """)
+
+    # Quick access counts (denormalized for performance)
+    action_items_count = models.IntegerField(default=0, help_text='Number of action items extracted')
+    tasks_created_count = models.IntegerField(default=0, help_text='Number of tasks created from this analysis')
+
+    # Analysis metadata
+    content_hash = models.CharField(max_length=64, help_text='Hash of content analyzed (to detect changes)')
+
+    # User actions
+    user_reviewed = models.BooleanField(default=False, help_text='Has user reviewed the analysis?')
+    user_notes = models.TextField(blank=True, null=True, help_text='User notes about the analysis')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-processed_at']
+        indexes = [
+            models.Index(fields=['wiki_page', '-processed_at']),
+            models.Index(fields=['processing_status']),
+        ]
+        verbose_name = 'Wiki Documentation Analysis'
+        verbose_name_plural = 'Wiki Documentation Analyses'
+
+    def __str__(self):
+        return f"Doc analysis of {self.wiki_page.title} - {self.processed_at.strftime('%Y-%m-%d %H:%M')}"
+
+    def get_action_items(self):
+        """Get list of action items from analysis results"""
+        return self.analysis_results.get('action_items', [])
+
+    def update_counts(self):
+        """Update denormalized counts from analysis results"""
+        self.action_items_count = len(self.get_action_items())
+
+
+class WikiDocumentationTask(models.Model):
+    """
+    Tracks tasks created from wiki documentation analysis.
+    Mirrors WikiMeetingTask: links an AI-extracted action item to its created
+    task, with unique_together preventing the same item being promoted twice.
+    """
+    documentation_analysis = models.ForeignKey(WikiDocumentationAnalysis, on_delete=models.CASCADE,
+                                                related_name='created_tasks')
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='wiki_documentation_source')
+
+    # Action item details from AI analysis
+    action_item_index = models.IntegerField(help_text='Index in the action_items array')
+    action_item_data = models.JSONField(default=dict, help_text='Original AI-extracted action item data')
+
+    # Creation metadata
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_documentation_tasks')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # User modifications
+    user_modified = models.BooleanField(default=False, help_text='Did user modify before creating?')
+    modifications_note = models.TextField(blank=True, null=True, help_text='What was changed from AI suggestion')
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['documentation_analysis', 'task']),
+            models.Index(fields=['task']),
+        ]
+        unique_together = ('documentation_analysis', 'action_item_index')
+
+    def __str__(self):
+        return f"Task '{self.task.title}' from {self.documentation_analysis.wiki_page.title}"
+
+
 class WikiTemplate(models.Model):
     """
     Pre-built, read-only wiki page templates for common PM documents.
