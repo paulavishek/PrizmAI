@@ -7,6 +7,7 @@ import json
 import logging
 import re
 from typing import Optional, Dict
+from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import datetime, timedelta
 
@@ -62,40 +63,32 @@ def generate_ai_content(prompt: str, task_type='simple', use_cache: bool = True,
             return cached
     
     try:
-        import google.generativeai as genai
+        from ai_assistant.utils.ai_router import AIRouter
         from django.conf import settings
-        
-        if not hasattr(settings, 'GEMINI_API_KEY'):
-            logger.error("GEMINI_API_KEY not configured")
+
+        if not any([
+            getattr(settings, 'GEMINI_API_KEY', None),
+            getattr(settings, 'OPENAI_API_KEY', None),
+            getattr(settings, 'ANTHROPIC_API_KEY', None),
+        ]):
+            logger.error("No AI API key configured")
             return None
-        
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        
-        # Smart routing: use Gemini 2.5 Flash for all tasks (best performance/price)
-        model_name = 'gemini-2.5-flash'
-        model = genai.GenerativeModel(model_name)
-        
-        # Get optimized temperature for this task type
-        temperature = WIKI_TEMPERATURE_MAP.get(task_type, 0.5)
-        
-        # Set max_output_tokens based on task complexity
-        # Complex tasks like meeting analysis need more tokens to avoid JSON truncation
-        max_tokens = 8192 if task_type in ['complex', 'transcript_analysis'] else 4096
-        
-        # Create generation config with task-specific temperature
-        generation_config = {
-            'temperature': temperature,
-            'top_p': 0.8,
-            'top_k': 40,
-            'max_output_tokens': max_tokens,
-        }
-        
-        logger.debug(f"Using {model_name} for task_type: {task_type}, temperature: {temperature}")
-        
-        response = model.generate_content(prompt, generation_config=generation_config)
-        
-        if response and response.text:
-            result = response.text
+
+        # Map wiki task_type to AIRouter complexity.
+        # Complex tasks (transcript analysis, full analysis) use the full model;
+        # simple tasks (summaries, formatting) use the lite model.
+        complexity = 'complex' if task_type in ['complex', 'transcript_analysis'] else 'simple'
+
+        logger.debug(f"Using AIRouter with complexity={complexity} for task_type: {task_type}")
+
+        router = AIRouter()
+        result = router.complete(
+            prompt=prompt,
+            user=None,
+            complexity=complexity,
+        )['text']
+
+        if result:
             # Cache the result
             if use_cache and ai_cache and result:
                 ai_cache.set(prompt, result, task_type, context_id)
@@ -125,7 +118,7 @@ def extract_tasks_from_transcript(transcript: str, meeting_context: Dict,
         # Build board context if provided
         board_context = ""
         if related_board:
-            board_members = [member.username for member in related_board.members.all()]
+            board_members = list(User.objects.filter(board_memberships__board=related_board).values_list('username', flat=True))
             board_members.append(related_board.created_by.username)
             existing_columns = [col.name for col in related_board.columns.all()]
             

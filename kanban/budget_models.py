@@ -95,12 +95,37 @@ class ProjectBudget(models.Model):
         return f"{self.board.name} - Budget: {self.currency} {self.allocated_budget}"
     
     def get_spent_amount(self):
-        """Calculate total spent amount from task costs"""
-        from django.db.models import Sum
-        total = TaskCost.objects.filter(
-            task__column__board=self.board
-        ).aggregate(total=Sum('actual_cost'))['total'] or Decimal('0.00')
-        return total
+        """Calculate total spent amount from task costs.
+
+        Includes labor (logged time × hourly_rate) and resource cost, not just the
+        direct ``actual_cost`` field — otherwise "Spent / Remaining / Utilization /
+        Status / burn rate" would exclude labor while the cost breakdown, variance
+        and ROI include it (via ``get_total_actual_cost``). This keeps every budget
+        surface consistent.
+
+        Computed with two aggregate queries (direct+resource cost, and labor =
+        logged hours × per-task rate) to avoid an N+1 over TaskCost rows.
+        """
+        from django.db.models import Sum, F, DecimalField
+
+        task_costs = TaskCost.objects.filter(task__column__board=self.board)
+
+        direct = task_costs.aggregate(
+            total=Sum('actual_cost') + Sum('resource_cost')
+        )['total'] or Decimal('0.00')
+
+        # Labor: sum of hours_spent × the task's hourly_rate, in one query.
+        labor = TimeEntry.objects.filter(
+            task__column__board=self.board,
+            task__cost__hourly_rate__isnull=False,
+        ).aggregate(
+            total=Sum(
+                F('hours_spent') * F('task__cost__hourly_rate'),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )
+        )['total'] or Decimal('0.00')
+
+        return direct + labor
     
     def get_spent_hours(self):
         """Calculate total spent hours from time entries"""
@@ -273,7 +298,13 @@ class TimeEntry(models.Model):
         blank=True,
         help_text="Description of work performed"
     )
-    
+
+    # Billable flag
+    is_billable = models.BooleanField(
+        default=True,
+        help_text="Mark whether time is billable to a client"
+    )
+
     # Tracking
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

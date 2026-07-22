@@ -1,7 +1,7 @@
 """
 API Authentication Classes
 """
-from rest_framework import authentication, exceptions
+from rest_framework import authentication, exceptions, permissions
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from api.models import APIToken
@@ -95,15 +95,19 @@ class APITokenAuthentication(authentication.BaseAuthentication):
         return ip
 
 
-class ScopePermission:
+class ScopePermission(permissions.BasePermission):
     """
     Permission class to check API token scopes.
-    
-    Usage in views:
-        permission_classes = [ScopePermission]
-        required_scopes = ['tasks.read', 'tasks.write']
+
+    Subclasses DRF's BasePermission so that the default has_object_permission
+    (returns True) is inherited — without it, any detail route that calls
+    get_object() raises AttributeError → HTTP 500.
+
+    Usage in views: expose the required scopes for the current action via a
+    ``get_required_scopes()`` method (see the viewsets) or a ``required_scopes``
+    attribute.
     """
-    
+
     def has_permission(self, request, view):
         """
         Check if the authenticated token has required scopes.
@@ -111,17 +115,22 @@ class ScopePermission:
         # If no API token, allow (session auth users have full access)
         if not hasattr(request, 'api_token'):
             return True
-        
-        # Get required scopes from view
-        required_scopes = getattr(view, 'required_scopes', [])
-        
+
+        # Resolve required scopes from the view. Viewsets expose them via a
+        # get_required_scopes() method (action-aware); fall back to an attribute.
+        if hasattr(view, 'get_required_scopes'):
+            required_scopes = view.get_required_scopes()
+        else:
+            required_scopes = getattr(view, 'required_scopes', [])
+
         if not required_scopes:
             return True
-        
-        # Check if token has all required scopes
+
+        # A token with no scopes set means unrestricted access, matching the
+        # behaviour of the Zapier endpoints' _has_scope() helper. Scopes are
+        # only enforced once a token declares them.
         token = request.api_token
-        for scope in required_scopes:
-            if not token.has_scope(scope):
-                return False
-        
-        return True
+        if not getattr(token, 'scopes', None):
+            return True
+
+        return all(token.has_scope(scope) for scope in required_scopes)

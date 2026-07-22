@@ -600,8 +600,12 @@ def warmup_user_cache(user_id: int) -> None:
     try:
         user = User.objects.select_related('profile').get(id=user_id)
         
-        # Cache user's boards
-        owned_boards = list(Board.objects.filter(owner_id=user_id).values(
+        # Cache user's boards (exclude sandbox copies and demo boards)
+        owned_boards = list(Board.objects.filter(
+            owner_id=user_id,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
+        ).values(
             'id', 'title', 'created_at'
         )[:20])
         cache_manager.set(

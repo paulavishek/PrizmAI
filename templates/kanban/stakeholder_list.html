@@ -11,7 +11,7 @@
             <p class="text-muted">{{ board.name }}</p>
         </div>
         <div class="col-md-4 text-end">
-            <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-outline-secondary me-2">
+            <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back me-2">
                 <i class="bi bi-arrow-left"></i> Back to Board
             </a>
             <a href="{% url 'stakeholder:stakeholder_create' board.id %}" class="btn btn-primary me-2">
@@ -77,7 +77,7 @@
     <!-- Summary Stats -->
     <div class="row mb-4">
         <div class="col-md-3">
-            <div class="card text-center">
+            <div class="card text-center stakeholder-stat-card" data-filter-quadrant="all" role="button" tabindex="0">
                 <div class="card-body">
                     <h3 class="card-title">{{ stakeholders.count }}</h3>
                     <p class="card-text text-muted">Total Stakeholders</p>
@@ -85,7 +85,7 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-center">
+            <div class="card text-center stakeholder-stat-card" data-filter-quadrant="Manage Closely" role="button" tabindex="0">
                 <div class="card-body">
                     <h3 class="card-title">{{ manage_closely_count }}</h3>
                     <p class="card-text text-danger">Manage Closely</p>
@@ -93,7 +93,7 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-center">
+            <div class="card text-center stakeholder-stat-card" data-filter-quadrant="Keep Satisfied" role="button" tabindex="0">
                 <div class="card-body">
                     <h3 class="card-title">{{ keep_satisfied_count }}</h3>
                     <p class="card-text text-warning">Keep Satisfied</p>
@@ -101,13 +101,17 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-center">
+            <div class="card text-center stakeholder-stat-card" data-filter-quadrant="Keep Informed" role="button" tabindex="0">
                 <div class="card-body">
                     <h3 class="card-title">{{ keep_informed_count }}</h3>
                     <p class="card-text text-info">Keep Informed</p>
                 </div>
             </div>
         </div>
+    </div>
+    <div id="stakeholderFilterNotice" class="alert alert-secondary d-none py-2 px-3 d-flex justify-content-between align-items-center">
+        <span>Showing: <strong id="stakeholderFilterLabel"></strong></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="stakeholderFilterClear">Clear</button>
     </div>
     
     <!-- Stakeholders Table -->
@@ -134,9 +138,9 @@
                                     <th>Actions</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="stakeholderTableBody">
                                 {% for stakeholder in stakeholders %}
-                                <tr>
+                                <tr data-quadrant="{{ stakeholder.get_quadrant }}">
                                     <td><strong>{{ stakeholder.name }}</strong></td>
                                     <td>{{ stakeholder.role }}</td>
                                     <td>{{ stakeholder.organization|default:"—" }}</td>
@@ -198,16 +202,60 @@
     </div>
 </div>
 
-<script>
-// Handle back navigation to previous page
-function goBack() {
-    // Check if there's a previous page in history
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        // Fallback to board detail if no history
-        window.location.href = '{% url "board_detail" board.id %}';
-    }
+<style>
+.stakeholder-stat-card {
+    cursor: pointer;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
+.stakeholder-stat-card:hover {
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+.stakeholder-stat-card.active {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var cards = document.querySelectorAll('.stakeholder-stat-card');
+    var rows = document.querySelectorAll('#stakeholderTableBody tr[data-quadrant]');
+    var notice = document.getElementById('stakeholderFilterNotice');
+    var noticeLabel = document.getElementById('stakeholderFilterLabel');
+    var clearBtn = document.getElementById('stakeholderFilterClear');
+
+    function applyFilter(quadrant) {
+        cards.forEach(function (card) {
+            card.classList.toggle('active', card.dataset.filterQuadrant === quadrant);
+        });
+
+        if (quadrant === 'all') {
+            rows.forEach(function (row) { row.classList.remove('d-none'); });
+            notice.classList.add('d-none');
+            return;
+        }
+
+        rows.forEach(function (row) {
+            row.classList.toggle('d-none', row.dataset.quadrant !== quadrant);
+        });
+        noticeLabel.textContent = quadrant;
+        notice.classList.remove('d-none');
+    }
+
+    cards.forEach(function (card) {
+        var activate = function () { applyFilter(card.dataset.filterQuadrant); };
+        card.addEventListener('click', activate);
+        card.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                activate();
+            }
+        });
+    });
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function () { applyFilter('all'); });
+    }
+});
 </script>
 {% endblock %}

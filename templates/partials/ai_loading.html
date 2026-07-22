@@ -1,0 +1,17 @@
+{% comment %}
+AI Loading Skeleton — include in any AI-powered section.
+
+Usage:
+  {% include "partials/ai_loading.html" with target_id="ai-summary" status_text="Preparing…" %}
+
+The JS library (ai_progressive.js) will populate the status and progress
+elements based on WebSocket messages.
+{% endcomment %}
+<div id="{{ target_id }}-loading" class="ai-loading-wrapper" style="display:none;">
+    <div class="ai-skeleton ai-skeleton--shimmer" style="height:120px;"></div>
+    <div class="ai-progress-bar mt-2">
+        <div id="{{ target_id }}-progress" class="ai-progress-bar__fill" role="progressbar"
+             aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+    </div>
+    <p id="{{ target_id }}-status" class="ai-status-text">{{ status_text|default:"Processing…" }}</p>
+</div>

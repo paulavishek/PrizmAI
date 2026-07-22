@@ -15,12 +15,14 @@ from .settings import *  # noqa: F401, F403
 # =============================================================================
 # AUTHENTICATION BACKENDS FOR TESTING
 # =============================================================================
-# Use only the ModelBackend for testing to avoid Axes requiring request objects
-# This is safe for testing because we're not testing brute force protection here
-
+# Drop only the Axes backend for testing (it requires request objects). The
+# django-rules ObjectPermissionBackend MUST stay — without it, has_perm() for
+# object-level permissions like 'prizmai.edit_board' returns False for everyone,
+# so any rules-guarded view 403s under tests.
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
+    'rules.permissions.ObjectPermissionBackend',
 ]
 
 # =============================================================================
@@ -28,6 +30,20 @@ AUTHENTICATION_BACKENDS = [
 # =============================================================================
 # Disable axes for tests to prevent "request required" errors
 AXES_ENABLED = False
+
+# =============================================================================
+# BYOK ENCRYPTION KEY FOR TESTING
+# =============================================================================
+# A fixed, throwaway Fernet key so BYOK encryption/decryption tests work without
+# depending on the developer's .env. This is NOT a production secret — it exists
+# only to exercise the Fernet round-trip in AIRouter._encrypt_key/_decrypt_key.
+AI_KEY_ENCRYPTION_KEY = '-WiWzmB1OcCFAIrVdDpBd39LbDWQOvQ9-4BoztHTgsU='
+
+# Deterministic platform keys so _resolve_provider tests can assert which key the
+# router selected without relying on whatever is (or isn't) set in the real env.
+GEMINI_API_KEY = 'test-gemini-platform-key'
+OPENAI_API_KEY = 'test-openai-platform-key'
+ANTHROPIC_API_KEY = 'test-anthropic-platform-key'
 
 # =============================================================================
 # CELERY CONFIGURATION FOR TESTING
@@ -70,10 +86,16 @@ EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
 # =============================================================================
 # CACHES FOR TESTING
 # =============================================================================
+# Mirror every cache alias the app uses (settings.py defines default, ai_cache,
+# session_cache, analytics_cache, local — several backed by Redis in prod) as an
+# isolated in-memory cache, so code that does caches['session_cache'] etc. works
+# under tests instead of raising InvalidCacheBackendError.
 CACHES = {
-    'default': {
+    alias: {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': f'test-{alias}',
     }
+    for alias in ('default', 'ai_cache', 'session_cache', 'analytics_cache', 'local')
 }
 
 # =============================================================================

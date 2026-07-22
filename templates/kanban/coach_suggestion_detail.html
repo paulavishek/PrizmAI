@@ -13,7 +13,7 @@
     }
 
     .suggestion-header {
-        background: white;
+        background: var(--card-bg);
         border-radius: 15px;
         padding: 30px;
         margin-bottom: 30px;
@@ -60,17 +60,17 @@
         font-size: 28px;
         font-weight: 700;
         margin-bottom: 10px;
-        color: #2c3e50;
+        color: var(--text-primary);
     }
 
     .suggestion-meta {
-        color: #6c757d;
+        color: var(--text-muted);
         font-size: 14px;
         margin-bottom: 20px;
     }
 
     .suggestion-section {
-        background: white;
+        background: var(--card-bg);
         border-radius: 12px;
         padding: 25px;
         margin-bottom: 20px;
@@ -81,7 +81,7 @@
         font-size: 20px;
         font-weight: 600;
         margin-bottom: 15px;
-        color: #2c3e50;
+        color: var(--text-primary);
         display: flex;
         align-items: center;
         gap: 10px;
@@ -106,7 +106,7 @@
 
     .action-item {
         padding: 12px;
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-left: 4px solid #667eea;
         margin-bottom: 10px;
         border-radius: 6px;
@@ -128,7 +128,7 @@
     }
 
     .metric-card {
-        background: #ffffff;
+        background: var(--card-bg);
         padding: 20px;
         border-radius: 10px;
         text-align: center;
@@ -145,7 +145,7 @@
 
     .metric-label {
         font-size: 13px;
-        color: #475569;
+        color: var(--text-secondary);
         text-transform: uppercase;
         letter-spacing: 0.5px;
         margin-bottom: 10px;
@@ -156,14 +156,14 @@
     .metric-value {
         font-size: 32px;
         font-weight: 700;
-        color: #1e293b;
+        color: var(--text-primary);
         display: block;
         line-height: 1;
     }
 
     .confidence-bar {
         height: 8px;
-        background: #e9ecef;
+        background: var(--bg-tertiary);
         border-radius: 10px;
         overflow: hidden;
         margin-top: 5px;
@@ -177,7 +177,7 @@
     }
 
     .feedback-form {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         padding: 20px;
         border-radius: 10px;
         margin-top: 20px;
@@ -213,7 +213,7 @@
     }
 
     .feedback-entry {
-        background: white;
+        background: var(--card-bg);
         padding: 15px;
         border-radius: 8px;
         border-left: 4px solid #667eea;
@@ -229,11 +229,11 @@
 
     .feedback-author {
         font-weight: 600;
-        color: #2c3e50;
+        color: var(--text-primary);
     }
 
     .feedback-date {
-        color: #6c757d;
+        color: var(--text-muted);
         font-size: 13px;
     }
 
@@ -261,11 +261,17 @@
     <!-- Breadcrumb -->
     <nav aria-label="breadcrumb" class="mb-4">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
             <li class="breadcrumb-item"><a href="{% url 'coach_dashboard' board.id %}">AI Coach</a></li>
             <li class="breadcrumb-item active">Suggestion Detail</li>
         </ol>
     </nav>
+
+    <div class="mb-3">
+        <a href="{% url 'coach_dashboard' board.id %}" class="btn-prizm-back">
+            <i class="fas fa-arrow-left"></i> Back to AI Coach
+        </a>
+    </div>
 
     <!-- Suggestion Header -->
     <div class="suggestion-header">
@@ -279,13 +285,13 @@
         <div class="suggestion-meta">
             <i class="fas fa-calendar-alt me-2"></i>Generated {{ suggestion.created_at|date:"F d, Y" }} at {{ suggestion.created_at|time:"g:i A" }}
             {% if suggestion.task %}
-            <span class="ms-3"><i class="fas fa-link me-2"></i>Related to: <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}">{{ suggestion.task.title }}</a></span>
+            <span class="ms-3"><i class="fas fa-link me-2"></i>Related to: <a href="{% url 'board_detail' board.id %}">{{ suggestion.task.title }}</a></span>
             {% endif %}
         </div>
 
         <div class="d-flex gap-2 mt-3">
-            <button onclick="location.href='{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}'" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-2"></i>Back to Board
+            <button onclick="location.href='{% url 'coach_dashboard' board.id %}'" class="btn-prizm-back">
+                <i class="fas fa-arrow-left me-2"></i>Back to AI Coach
             </button>
             {% if suggestion.status == 'active' %}
             <button onclick="acknowledgeSuggestion()" class="btn btn-primary">
@@ -358,7 +364,7 @@
             {% for key, value in suggestion.metrics_snapshot.items %}
             {% if key != 'task_titles' %}
             <div class="metric-card">
-                <div class="metric-label" style="color: #475569 !important;">
+                <div class="metric-label" style="color: var(--text-secondary) !important;">
                     {% if key == 'week_start' %}Week Starting
                     {% elif key == 'high_risk_task_count' %}High Risk Tasks
                     {% elif key == 'active_tasks' %}Active Tasks
@@ -371,7 +377,7 @@
                     {% elif key == 'username' %}User
                     {% else %}{{ key|title }}{% endif %}
                 </div>
-                <div class="metric-value" style="color: #1e293b !important;">
+                <div class="metric-value" style="color: var(--text-primary) !important;">
                     {% if value is not None %}
                         {% if key == 'week_start' %}
                             {{ value|slice:":10" }}
@@ -391,10 +397,10 @@
         
         {% if suggestion.metrics_snapshot.task_titles %}
         <div class="mt-3">
-            <div class="metric-label" style="color: #475569 !important; font-size: 13px; font-weight: 600; margin-bottom: 10px;">Affected Tasks:</div>
+            <div class="metric-label" style="color: var(--text-secondary) !important; font-size: 13px; font-weight: 600; margin-bottom: 10px;">Affected Tasks:</div>
             <ul style="list-style: none; padding-left: 0; margin: 0;">
                 {% for task_title in suggestion.metrics_snapshot.task_titles %}
-                <li style="padding: 8px 12px; background: #f8f9fa; border-left: 3px solid #667eea; margin-bottom: 6px; border-radius: 4px; color: #1e293b;">
+                <li style="padding: 8px 12px; background: var(--bg-tertiary); border-left: 3px solid #667eea; margin-bottom: 6px; border-radius: 4px; color: var(--text-primary);">
                     <i class="fas fa-exclamation-triangle text-warning me-2"></i>{{ task_title }}
                 </li>
                 {% endfor %}

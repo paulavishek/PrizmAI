@@ -27,6 +27,8 @@ urlpatterns = [
          name='api_meeting_analysis_details'),
     path('api/meeting-analysis/<int:analysis_id>/create-tasks/', api_views.create_tasks_from_meeting_analysis,
          name='api_create_tasks_from_analysis'),
+    path('api/documentation-analysis/<int:analysis_id>/create-tasks/', api_views.create_tasks_from_documentation_analysis,
+         name='api_create_tasks_from_documentation_analysis'),
     path('api/meeting-analysis/<int:analysis_id>/mark-reviewed/', api_views.mark_analysis_reviewed,
          name='api_mark_analysis_reviewed'),
     path('api/extract-text-from-file/', api_views.extract_text_from_uploaded_file,
@@ -41,8 +43,10 @@ urlpatterns = [
     path('categories/<int:pk>/delete/', views.WikiCategoryDeleteView.as_view(), name='category_delete'),
     
     # Page Management
-    path('', views.WikiPageListView.as_view(), name='page_list'),
-    path('category/<int:category_id>/', views.WikiPageListView.as_view(), name='page_list_by_category'),
+    # The old sidebar-style list page was retired in favour of the single
+    # Knowledge Hub; these URLs now redirect there (keeps bookmarks working).
+    path('', views.wiki_page_list_redirect, name='page_list'),
+    path('category/<int:category_id>/', views.wiki_page_list_redirect, name='page_list_by_category'),
     path('templates/', views.template_gallery, name='template_gallery'),
     path('create/', views.WikiPageCreateView.as_view(), name='page_create'),
     path('page/<slug:slug>/', views.WikiPageDetailView.as_view(), name='page_detail'),

@@ -18,25 +18,22 @@ def calculate_baseline(board):
     """
     Determine the original scope baseline for a board.
 
-    Priority:
-    1. Use board.baseline_task_count / board.baseline_set_date if set
-    2. Fall back to task count 24 hours after board creation
+    Always uses the historical approach: tasks that existed within 24 hours
+    of board creation.  We deliberately ignore board.baseline_task_count
+    (set by the Scope Dashboard feature) because that is a monitoring
+    checkpoint that can be updated at any time to reflect the *current*
+    task count — not the project's original scope.  Using it here would
+    make Re-run produce 0 % growth whenever the Scope Dashboard baseline
+    equals the current task count, rendering the forensic analysis useless.
 
     Returns dict: {'task_count': int, 'baseline_date': datetime}
     """
     from kanban.models import Task
 
-    # If an explicit baseline exists on the board, use it
-    if board.baseline_task_count and board.baseline_set_date:
-        return {
-            'task_count': board.baseline_task_count,
-            'baseline_date': board.baseline_set_date,
-        }
-
-    # Fall back: count tasks that existed 24h after board creation
     cutoff = board.created_at + timedelta(hours=24)
     count = Task.objects.filter(
         column__board=board,
+        item_type='task',
         created_at__lte=cutoff,
     ).count()
 
@@ -63,11 +60,14 @@ def collect_scope_history(board):
 
     baseline = calculate_baseline(board)
     baseline_date = baseline['baseline_date']
+    now = timezone.now()
     events = []
 
     # ── SOURCE 1: Scope Creep Alerts ────────────────────────────────────
     try:
-        alerts = ScopeCreepAlert.objects.filter(board=board).order_by('detected_at')
+        alerts = ScopeCreepAlert.objects.filter(
+            board=board, detected_at__lte=now
+        ).order_by('detected_at')
         for alert in alerts:
             events.append({
                 'date': alert.detected_at,
@@ -87,7 +87,12 @@ def collect_scope_history(board):
     # ── SOURCE 2: Task creation after baseline ──────────────────────────
     try:
         post_baseline_tasks = (
-            Task.objects.filter(column__board=board, created_at__gt=baseline_date)
+            Task.objects.filter(
+                column__board=board,
+                item_type='task',
+                created_at__gt=baseline_date,
+                created_at__lte=now,
+            )
             .select_related('created_by')
             .order_by('created_at')
         )
@@ -131,8 +136,7 @@ def collect_scope_history(board):
     try:
         conflicts = ConflictDetection.objects.filter(
             board=board,
-            status__in=['resolved', 'auto_resolved'],
-        ).order_by('resolved_at')
+            status__in=['resolved', 'auto_resolved'],            resolved_at__lte=now,        ).order_by('resolved_at')
 
         for conflict in conflicts:
             task_count = conflict.tasks.count()
@@ -158,8 +162,7 @@ def collect_scope_history(board):
         transcripts = MeetingTranscript.objects.filter(
             board=board,
             processing_status='completed',
-            tasks_created_count__gt=0,
-        ).order_by('created_at')
+            tasks_created_count__gt=0,            created_at__lte=now,        ).order_by('created_at')
 
         for transcript in transcripts:
             events.append({
@@ -182,6 +185,58 @@ def collect_scope_history(board):
     except Exception:
         logger.warning("Error collecting meeting transcripts for board %s", board.pk, exc_info=True)
 
+    # ── SOURCE 5: Custom-field value changes ────────────────────────────
+    # The custom_field_signals module creates TaskActivity rows with
+    # activity_type='custom_field' whenever a real user changes a typed
+    # custom-field value. Bulk/system writes have updated_by=None and are
+    # silently skipped at the signal layer, so the events below are
+    # guaranteed to be user-initiated and meaningful.
+    try:
+        from kanban.models import TaskActivity
+        cf_activities = (
+            TaskActivity.objects
+            .filter(
+                task__column__board=board,
+                activity_type='custom_field',
+                created_at__gt=baseline_date,
+                created_at__lte=now,
+            )
+            .select_related('user', 'task')
+            .order_by('created_at')
+        )
+        # Group by (date, user) so a sprint with 6 small edits surfaces as
+        # one rolled-up event rather than six noisy lines.
+        cf_daily = defaultdict(list)
+        for activity in cf_activities:
+            key = (activity.created_at.date(), getattr(activity.user, 'pk', None))
+            cf_daily[key].append(activity)
+
+        for (day, user_id), activities in cf_daily.items():
+            actor = activities[0].user
+            actor_name = (actor.get_full_name() or actor.username) if actor else ''
+            sample = '; '.join(a.description[:80] for a in activities[:3])
+            if len(activities) > 3:
+                sample += f" (+{len(activities) - 3} more)"
+            events.append({
+                'date': activities[0].created_at,
+                'title': (
+                    f"{len(activities)} custom-field change"
+                    f"{'s' if len(activities) != 1 else ''} by {actor_name or 'Unknown'}"
+                ),
+                'description': sample,
+                'source_type': 'custom_field_change',
+                'source_object_type': 'TaskActivity',
+                'source_object_id': activities[0].pk,
+                # Custom-field edits don't add tasks — but they're still scope signals
+                # (a field changing across many tasks during a sprint is a flag).
+                'tasks_added': 0,
+                'tasks_removed': 0,
+                'added_by_id': user_id,
+                'added_by_name': actor_name,
+            })
+    except Exception:
+        logger.warning("Error collecting custom-field changes for board %s", board.pk, exc_info=True)
+
     # ── De-duplicate and sort ───────────────────────────────────────────
     # Remove alert-sourced events whose task counts overlap with task_added events
     # on the same day (alerts are derivative of task additions).
@@ -193,7 +248,20 @@ def collect_scope_history(board):
         a for a in alert_events
         if a['date'].date() not in task_event_dates
     ]
-    events = non_alert_events + filtered_alerts
+
+    # Also remove conflict/meeting events on dates already covered by task_added,
+    # since those tasks are already counted in SOURCE 2's daily task additions.
+    primary_events = [e for e in non_alert_events if e['source_type'] == 'task_added']
+    secondary_events = [
+        e for e in non_alert_events
+        if e['source_type'] in ('conflict', 'meeting')
+        and e['date'].date() not in task_event_dates
+    ]
+    other_events = [
+        e for e in non_alert_events
+        if e['source_type'] not in ('task_added', 'conflict', 'meeting')
+    ]
+    events = primary_events + secondary_events + other_events + filtered_alerts
 
     # Mark major events
     for event in events:
@@ -212,7 +280,7 @@ def estimate_cost_impact(events, board):
     """
     from kanban.models import Task
 
-    total_tasks = Task.objects.filter(column__board=board).count() or 1
+    total_tasks = Task.objects.filter(column__board=board, item_type='task').count() or 1
 
     # Try to get average task duration from completed tasks
     completed = Task.objects.filter(
@@ -259,6 +327,7 @@ def has_scope_change_history(board):
     baseline = calculate_baseline(board)
     post_baseline = Task.objects.filter(
         column__board=board,
+        item_type='task',
         created_at__gt=baseline['baseline_date'],
     ).exists()
 

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static feature_guide_tags %}
 
 {% block title %}Shadow Board — {{ board.name }}{% endblock %}
 
@@ -45,9 +45,24 @@
         color: #dc3545;
     }
     
+
     .sparkline {
-        height: 40px;
+        display: block;
+        width: 100%;
+        height: 100px !important;
         margin-top: 1rem;
+    }
+
+    /* Archived cards: dim text/badges/buttons but NOT the sparkline canvas.
+       Bootstrap's opacity-50 on the whole card creates a CSS compositing group
+       that composites the canvas at 0.5 opacity, making the already-faint
+       sparkline fill essentially invisible. We dim only direct non-canvas
+       children instead. */
+    .branch-card-archived {
+        border-style: dashed !important;
+    }
+    .branch-card-archived .card-body > *:not(canvas) {
+        opacity: 0.6;
     }
     
     .branch-grid {
@@ -70,7 +85,7 @@
     }
     
     .diff-row-match {
-        background-color: #f8f9fa;
+        background-color: var(--bg-tertiary);
     }
     
     .diff-row-diff {
@@ -81,49 +96,242 @@
         background-color: #f8d7da;
     }
 
+    .branch-color-picker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 6px 2px;
+    }
+
     .branch-color-picker label {
-        display: inline-block;
-        width: 40px;
-        height: 40px;
-        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
         cursor: pointer;
-        margin: 5px;
-        border: 2px solid transparent;
-        transition: all 0.2s;
+        margin: 0;
+        border: 3px solid transparent;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+        transition: transform 0.15s, box-shadow 0.15s;
+        position: relative;
+        flex-shrink: 0;
     }
-    
+
     .branch-color-picker label:hover {
-        transform: scale(1.1);
+        transform: scale(1.12);
+        box-shadow: 0 3px 10px rgba(0,0,0,0.3);
     }
-    
+
     .branch-color-picker input[type="radio"] {
-        display: none;
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;
     }
-    
-    .branch-color-picker input[type="radio"]:checked + span {
-        border: 2px solid #000;
+
+    .branch-color-picker label.color-selected {
+        transform: none;
+        box-shadow: 0 0 0 3px #fff, 0 0 0 5px rgba(0,0,0,0.5);
+    }
+
+    .branch-color-picker label.color-selected::after {
+        content: '';
+        position: absolute;
+        width: 10px;
+        height: 6px;
+        border-left: 2.5px solid #fff;
+        border-bottom: 2.5px solid #fff;
+        transform: rotate(-45deg) translateY(-1px);
+        filter: drop-shadow(0 0 2px rgba(0,0,0,0.6));
+        pointer-events: none;
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid my-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">Shadow Board</li>
+        </ol>
+    </nav>
+
+    <div class="mb-3">
+        <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back">
+            <i class="fas fa-arrow-left"></i> Back to Board
+        </a>
+    </div>
+
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-2">
         <div>
             <h1><i class="fas fa-atom me-2" style="color: #0d6efd;"></i>Shadow Board</h1>
-            <p class="text-muted mb-0">{{ board.name }} — Living parallel project simulations</p>
+            <p class="text-muted mb-1">{{ board.name }} — Living parallel project simulations</p>
+            <button class="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold"
+                    style="color: #0d6efd;"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#shadowBoardGuide"
+                    aria-expanded="false"
+                    aria-controls="shadowBoardGuide">
+                <i class="fas fa-question-circle me-1"></i>
+                <span id="shadow-board-guide-label">How does this work?</span>
+                <i class="fas fa-chevron-down ms-1 shadow-board-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+            </button>
         </div>
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createBranchModal">
             <i class="fas fa-plus me-2"></i>Create Branch
         </button>
     </div>
 
+    <!-- ── How It Works — Collapsible Guide ── -->
+    <div class="collapse mb-4" id="shadowBoardGuide">
+        <div class="card border shadow-sm">
+            <div class="card-body p-4">
+                <div class="row g-4">
+
+                    <!-- What is this? -->
+                    <div class="col-12">
+                        <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-atom text-primary me-2"></i>What is the Shadow Board?</h6>
+                        <p class="mb-0 small text-secondary">Shadow Board lets you run multiple “what-if” scenarios as <em>living, parallel branches</em> of your project. Unlike the What-If Analyzer (which gives you a one-time snapshot), Shadow Board branches update <strong>automatically</strong> as real work progresses — so you’re always comparing live feasibility scores, not stale calculations. When one branch clearly wins, commit it to reality and archive the rest.</p>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Two columns: What-If vs Shadow Board -->
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-camera fa-2x text-secondary"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">What-If Analyzer <span class="badge bg-secondary ms-1" style="font-size:0.65rem;">Static snapshot</span></h6>
+                                <p class="small mb-2 text-secondary">A calculator. You adjust sliders, get a feasibility score, and save the result. It doesn’t know what happened on your board yesterday.</p>
+                                <div class="p-2 rounded bg-secondary bg-opacity-10 border-start border-secondary border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-pause-circle text-secondary me-1"></i><em>Snapshot in time. Doesn’t update. Good for quick exploration and saving interesting numbers.</em></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-atom fa-2x text-primary"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Shadow Branch <span class="badge bg-primary ms-1" style="font-size:0.65rem;">Living simulation</span></h6>
+                                <p class="small mb-2 text-secondary">A living clone of your project running a different set of assumptions. Every time someone completes a task or a deadline moves on the real board, all branches recalculate instantly.</p>
+                                <div class="p-2 rounded bg-primary bg-opacity-10 border-start border-primary border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-sync-alt text-primary me-1"></i><em>Live branch. Recalculates every time real work changes. Shows current feasibility, always up to date.</em></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Comparison table + Branch states -->
+                    <div class="col-md-7">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-table me-1 text-info"></i>Side-by-side comparison</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-muted"></th>
+                                        <th class="text-secondary"><i class="fas fa-camera me-1"></i>What-If Analyzer</th>
+                                        <th class="text-primary"><i class="fas fa-atom me-1"></i>Shadow Branch</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Updates automatically</td>
+                                        <td class="text-dark"><i class="fas fa-times text-danger"></i> No</td>
+                                        <td class="text-dark"><i class="fas fa-check text-success"></i> Yes, in real-time</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Tracks real progress</td>
+                                        <td class="text-dark"><i class="fas fa-times text-danger"></i> No</td>
+                                        <td class="text-dark"><i class="fas fa-check text-success"></i> Yes</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Can be committed</td>
+                                        <td class="text-dark"><i class="fas fa-times text-danger"></i> No</td>
+                                        <td class="text-dark"><i class="fas fa-check text-success"></i> Yes, replaces reality</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Multiple at once</td>
+                                        <td class="text-dark">Yes (saved scenarios)</td>
+                                        <td class="text-dark fw-semibold text-primary">Yes (live branches)</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Quantum Standup</td>
+                                        <td class="text-dark"><i class="fas fa-times text-danger"></i> Not available</td>
+                                        <td class="text-dark"><i class="fas fa-check text-success"></i> Shows daily impact</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="col-md-5">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-shield-alt me-1 text-info"></i>Branch states</h6>
+                        <div class="d-flex flex-column gap-1 mb-3">
+                            <div class="d-flex align-items-center gap-2 small">
+                                <span class="badge" style="background:#0d6efd; min-width:90px;">ACTIVE</span>
+                                <span class="text-dark">Branch is live, recalculating, available for comparison</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 small">
+                                <span class="badge" style="background:#059669; min-width:90px;">COMMITTED</span>
+                                <span class="text-dark">This branch won — its assumptions are now the reality</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 small">
+                                <span class="badge" style="background:#6c757d; min-width:90px;">ARCHIVED</span>
+                                <span class="text-dark">Branch closed, full audit trail preserved for reference</span>
+                            </div>
+                        </div>
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-list-ol me-1 text-info"></i>Recommended workflow</h6>
+                        <ol class="small ps-3 mb-0 text-secondary">
+                            <li class="mb-1">Run a What-If scenario with the sliders</li>
+                            <li class="mb-1">Click <strong>Promote to Shadow Branch</strong></li>
+                            <li class="mb-1">Repeat for each option you want to compare live</li>
+                            <li class="mb-1">Watch the Quantum Standup — it shows how today’s real work changed each branch</li>
+                            <li>Click <strong>Commit</strong> when one branch clearly wins</li>
+                        </ol>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- How scores behave / how committing works -->
+                    <div class="col-md-6">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-wave-square me-1 text-info"></i>How these scores behave</h6>
+                        <p class="small mb-0 text-secondary">Shadow Board is a <strong>live simulation</strong> — scores recalculate automatically as your real board changes (tasks completed, deadline or team changes), so they can differ between visits. Each score is a <strong>deterministic</strong> function of the current board state: refreshing with no real change always returns the same number. <strong>AI analysis</strong> is generated in the background and may take a few seconds to appear after a branch is created or restored. Two branches can show similar scores when both are well past the point of being feasible — open a branch to see its specific risks. Click <strong>Refresh Scores</strong> to force an immediate recalculation.</p>
+                    </div>
+
+                    <div class="col-md-6">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-check-double me-1 text-info"></i>How committing works</h6>
+                        <p class="small mb-0 text-secondary">When you commit a branch it becomes your chosen project direction and all other active branches are automatically archived. Archived branches are preserved — use the <i class="fas fa-undo"></i> button on any card to bring one back to active, or click <strong>Restore All Archived</strong> to unarchive everything at once.</p>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Quantum Standup Section -->
     <div class="card quantum-standup mb-4">
         <div class="card-header bg-transparent border-0 py-3 d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#quantumStandupBody">
-            <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Quantum Standup — Today's Impact</h5>
-            <i class="fas fa-chevron-down"></i>
+            <div>
+                <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Quantum Standup — Today's Impact</h5>
+                <small class="text-muted">See how today's real work shifted each branch's outlook — check back after your team completes tasks.</small>
+            </div>
+            <i class="fas fa-chevron-down flex-shrink-0 ms-3"></i>
         </div>
         <div class="collapse show" id="quantumStandupBody">
             <div class="card-body">
@@ -144,8 +352,8 @@
                                 {% for task in tasks_completed_today %}
                                 <tr>
                                     <td><small><i class="fas fa-check-circle text-success me-1"></i>{{ task.title|truncatewords:5 }}</small></td>
-                                    <td><small>{{ task.assigned_to.first_name|default:"Unassigned" }}</small></td>
-                                    <td class="text-end"><small>{{ task.updated_at|time }}</small></td>
+                                    <td><small>{% if task.completer %}{{ task.completer.get_full_name|default:task.completer.username|default:"Unassigned" }}{% else %}Unassigned{% endif %}</small></td>
+                                    <td class="text-end"><small>{{ task.activity_time|time }}</small></td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -176,15 +384,15 @@
                                 {% for log in branch_impacts_today %}
                                 <tr class="{% if log.score_delta > 0 %}table-success{% elif log.score_delta < 0 %}table-warning{% endif %}">
                                     <td><small><strong>{{ log.branch.name }}</strong></small></td>
-                                    <td class="text-center"><small><span class="badge bg-secondary">{{ log.old_score }}</span></small></td>
-                                    <td class="text-center"><small><span class="badge {% if log.new_score >= 70 %}bg-success{% elif log.new_score >= 50 %}bg-warning{% else %}bg-danger{% endif %}">{{ log.new_score }}</span></small></td>
+                                    <td class="text-center"><small><span class="badge bg-secondary">{{ log.old_score|floatformat:0 }}</span></small></td>
+                                    <td class="text-center"><small><span class="badge {% if log.new_score >= 70 %}bg-success{% elif log.new_score >= 50 %}bg-warning{% else %}bg-danger{% endif %}">{{ log.new_score|floatformat:0 }}</span></small></td>
                                     <td class="text-center"><small>
                                         {% if log.score_delta > 0 %}
-                                            <span class="text-success"><i class="fas fa-arrow-up me-1"></i>+{{ log.score_delta }}</span>
+                                            <span class="text-success"><i class="fas fa-arrow-up me-1"></i>+{{ log.score_delta|floatformat:1 }}</span>
                                         {% elif log.score_delta < 0 %}
-                                            <span class="text-danger"><i class="fas fa-arrow-down me-1"></i>{{ log.score_delta }}</span>
+                                            <span class="text-danger"><i class="fas fa-arrow-down me-1"></i>{{ log.score_delta|floatformat:1 }}</span>
                                         {% else %}
-                                            <span class="text-muted">—</span>
+                                            <span class="text-muted" title="Recalculated, no change">±0</span>
                                         {% endif %}
                                     </small></td>
                                 </tr>
@@ -193,30 +401,49 @@
                         </table>
                     </div>
                     {% else %}
-                    <p class="text-muted mb-0">No branch recalculations today yet.</p>
+                    <p class="text-muted mb-0">No real board activity has affected your branches today yet. Complete a task, or change the team or deadline, to see the impact here.</p>
                     {% endif %}
                 </div>
             </div>
         </div>
     </div>
 
+    {% if has_active_branches %}
+    <div class="alert alert-info alert-dismissible py-2 px-3 mb-4" id="shadowBoardTipBanner" role="alert" style="display: none;">
+        <i class="fas fa-lightbulb me-2 text-info"></i>
+        <strong>Tip:</strong> Shadow Board works best when you check in regularly. After your team completes tasks, return here to see how each branch's feasibility score has shifted. Feasibility measures <strong>deliverability, not value</strong>, so a smaller-scope branch usually scores higher — read the top score as the <em>safest</em> plan, then commit the branch that delivers the scope you actually need at a feasibility you're comfortable with.
+        <button type="button" class="btn-close" id="shadowBoardTipDismiss" aria-label="Close"></button>
+    </div>
+    {% endif %}
+
     <!-- Branch Cards Grid -->
     <div class="mb-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0"><i class="fas fa-object-group me-2"></i>Active Branches</h5>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="compareToggle">
-                <label class="form-check-label" for="compareToggle">
-                    <small>Compare Mode</small>
-                </label>
+            <div>
+                <h5 class="mb-0"><i class="fas fa-object-group me-2"></i>Active Branches</h5>
+            </div>
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <button class="btn btn-sm btn-primary" id="refreshScoresBtn" title="Recalculate all branches against the current board state">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh Scores
+                </button>
+                {% if has_archived_branches %}
+                <button class="btn btn-sm btn-outline-secondary" id="restoreAllArchivedBtn" title="Restore all archived branches to active">
+                    <i class="fas fa-history me-1"></i>Restore All Archived
+                </button>
+                {% endif %}
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="compareToggle">
+                    <label class="form-check-label" for="compareToggle">
+                        <small>Compare Mode</small>
+                    </label>
+                </div>
             </div>
         </div>
 
         <div class="branch-grid" id="branchGrid">
             {% for branch in branches %}
-                {% if branch.status == 'active' or branch.status == 'committed' %}
-                <div class="card branch-card" data-branch-id="{{ branch.id }}" {% if branch.snapshots.all|length == 0 %}data-pending="true"{% endif %} style="--branch-color: {{ branch.branch_color }};">
-                    <div class="card-body">
+                <div class="card branch-card{% if branch.status == 'archived' %} branch-card-archived{% endif %}" data-branch-id="{{ branch.id }}" {% if branch.snapshots.all|length == 0 %}data-pending="true"{% endif %} style="--branch-color: {{ branch.branch_color }};">
+                    <div class="card-body d-flex flex-column">
                         <!-- Checkbox for compare mode -->
                         <input type="checkbox" class="branch-checkbox" style="display: none;" data-branch-id="{{ branch.id }}">
                         
@@ -231,20 +458,24 @@
                                 </h6>
                                 <small class="text-muted">Created {{ branch.created_at|date:"M d, Y" }}</small>
                             </div>
-                            <span class="badge {% if branch.status == 'committed' %}bg-success{% else %}bg-secondary{% endif %}">
+                            <span class="badge {% if branch.status == 'committed' %}bg-success{% elif branch.status == 'archived' %}bg-secondary{% else %}bg-primary{% endif %}">
                                 {{ branch.get_status_display }}
                             </span>
                         </div>
 
                         <!-- Latest snapshot data -->
-                        {% if branch.snapshots.all|length > 0 %}
-                            {% with latest=branch.get_latest_snapshot %}
+                        {% if branch.cached_latest_snapshot %}
+                            {% with latest=branch.cached_latest_snapshot %}
                             <!-- Feasibility Score -->
                             <div class="mb-3">
                                 <small class="text-muted d-block">Feasibility Score</small>
-                                <div class="feasibility-badge {% if latest.feasibility_score >= 70 %}score-high{% elif latest.feasibility_score >= 50 %}score-medium{% else %}score-low{% endif %}">
-                                    {{ latest.feasibility_score }}%
+                                <div class="feasibility-badge {% if latest.feasibility_score >= 70 %}score-high{% elif latest.feasibility_score >= 50 %}score-medium{% else %}score-low{% endif %}"
+                                     data-score-badge="{{ branch.id }}">
+                                    {{ latest.feasibility_score|floatformat:0 }}%
                                 </div>
+                                <small class="text-muted d-block mt-1" title="Scores update live as the real board changes">
+                                    <i class="fas fa-clock me-1"></i>Updated {{ latest.captured_at|timesince }} ago
+                                </small>
                             </div>
 
                             <!-- Projected Completion -->
@@ -255,33 +486,56 @@
                             </div>
                             {% endif %}
 
-                            <!-- Sparkline -->
-                            <canvas id="sparkline-{{ branch.id }}" class="sparkline" data-branch-scores="{{ branch_scores|safe }}"></canvas>
+                            <!-- Mini sparkline removed: a brand-new branch has a
+                                 single data point that previously stretched as
+                                 a flat horizontal line across the card, falsely
+                                 implying "score has been stable for a long
+                                 time" when reality was just one snapshot.  Open
+                                 the branch detail page for the full trend
+                                 chart, which renders single-point branches as
+                                 a labelled dot.  Spacer keeps card heights
+                                 visually consistent. -->
+                            <div style="height: 24px;"></div>
 
                             <!-- Actions -->
-                            <div class="btn-group btn-group-sm w-100 mt-3" role="group">
-                                <a href="{% url 'shadow_branch_detail' board.id branch.id %}" class="btn btn-outline-primary" title="View details">
+                            <div class="btn-group btn-group-sm w-100 mt-auto" role="group">
+                                <a href="{% url 'shadow_branch_detail' board.id branch.id %}" class="btn btn-outline-primary" title="View details" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-eye"></i>
                                 </a>
-                                <button class="btn btn-outline-secondary btn-star" data-branch-id="{{ branch.id }}" title="Star/unstar">
-                                    <i class="fas fa-star{% if not branch.is_starred %} far{% endif %}"></i>
+                                <button class="btn btn-outline-secondary btn-star{% if branch.is_starred %} text-warning{% endif %}" data-branch-id="{{ branch.id }}" title="Star/unstar" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="{% if branch.is_starred %}fas{% else %}far{% endif %} fa-star"></i>
                                 </button>
                                 {% if branch.status == 'active' %}
-                                <button class="btn btn-outline-success btn-commit" data-branch-id="{{ branch.id }}" title="Commit this branch">
+                                <button class="btn btn-outline-success btn-commit" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Commit this branch as chosen direction" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-check"></i>
                                 </button>
                                 {% endif %}
-                                <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch">
+                                {% if branch.status == 'archived' %}
+                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore this branch to active" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch permanently" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
                             {% endwith %}
                         {% else %}
-                            <p class="text-muted text-center my-4"><small>Calculating first snapshot...</small></p>
+                            <!-- Branch still calculating — show restore/delete even without snapshots -->
+                            <p class="text-muted text-center my-3"><small>Calculating first snapshot...</small></p>
+                            <div class="btn-group btn-group-sm w-100 mt-auto" role="group">
+                                {% if branch.status == 'archived' %}
+                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore this branch to active" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="fas fa-undo me-1"></i>Restore
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch permanently" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
                         {% endif %}
                     </div>
                 </div>
-                {% endif %}
             {% empty %}
             <div class="col-12">
                 <div class="alert alert-info text-center">
@@ -295,24 +549,58 @@
         </div>
     </div>
 
-    <!-- Compare Mode Diff Table (hidden by default) -->
+    <!-- Compare Mode Diff Table (hidden by default).
+         The <thead> is rebuilt by renderComparisonTable() so the number of
+         branch columns matches the user's selection (2–8). -->
     <div id="compareTable" class="diff-table" style="display: none;">
         <div class="card">
             <div class="card-header">
                 <h6 class="mb-0">Comparison: <span id="compareTitle"></span></h6>
             </div>
             <div class="card-body table-responsive">
-                <table class="table table-sm" id="diffTable">
-                    <thead>
-                        <tr>
-                            <th style="width: 25%;">Field</th>
-                            <th style="width: 37.5%;" id="branchAHeader"></th>
-                            <th style="width: 37.5%;" id="branchBHeader"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="diffTableBody">
-                    </tbody>
+                <table class="table table-sm align-middle" id="diffTable">
+                    <thead></thead>
+                    <tbody id="diffTableBody"></tbody>
                 </table>
+                <p class="small text-muted mb-0">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Tick up to 8 branches to compare them side-by-side. Yellow rows
+                    flag values that vary; red rows flag direct conflicts (e.g. one
+                    branch adds scope while another removes it).
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Commit Confirmation Modal -->
+<div class="modal fade" id="commitConfirmModal" tabindex="-1" aria-labelledby="commitConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title" id="commitConfirmModalLabel">
+                    <i class="fas fa-check-circle me-2 text-success"></i>Commit Branch
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <p class="mb-3">You are about to commit <strong id="commitBranchName"></strong> as your chosen project direction.</p>
+                <div class="alert alert-warning mb-0 py-2">
+                    <i class="fas fa-archive me-2"></i>
+                    <strong>All other active branches will be archived.</strong>
+                    <hr class="my-2">
+                    <small class="text-muted">
+                        This is intentional — committing a branch means you've decided on one path forward. 
+                        The other branches aren't lost: each archived branch gets an 
+                        <i class="fas fa-undo"></i> <strong>Restore</strong> button so you can bring any of them back to active at any time.
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="confirmCommitBtn">
+                    <i class="fas fa-check me-2"></i>Yes, Commit This Branch
+                </button>
             </div>
         </div>
     </div>
@@ -374,6 +662,46 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-<script src="{% static 'js/shadow_board.js' %}"></script>
+<script src="{% static 'js/chart.umd.min.js' %}?v={{ STATIC_VERSION }}"></script>
+<script src="{% static 'js/shadow_board.js' %}?v={{ STATIC_VERSION }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Tip banner: show unless dismissed this browser session
+    var tipBanner = document.getElementById('shadowBoardTipBanner');
+    if (tipBanner) {
+        var DISMISS_KEY = 'shadowBoardTipDismissed';
+        if (!sessionStorage.getItem(DISMISS_KEY)) {
+            tipBanner.style.display = '';
+        }
+        document.getElementById('shadowBoardTipDismiss').addEventListener('click', function() {
+            sessionStorage.setItem(DISMISS_KEY, '1');
+            tipBanner.style.display = 'none';
+        });
+    }
+
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el, { boundary: 'window' });
+    });
+
+    // Guide toggle label + chevron sync. Collapsed by default on every visit
+    // (including the first) — the guide is one click away via the toggle, and
+    // starting it open pushed the rest of the page down before the user asked
+    // for it.
+    var sbGuide = document.getElementById('shadowBoardGuide');
+    if (sbGuide) {
+        sbGuide.addEventListener('shown.bs.collapse', function() {
+            var label = document.getElementById('shadow-board-guide-label');
+            if (label) label.textContent = 'Hide guide';
+            var chevron = document.querySelector('.shadow-board-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+        });
+        sbGuide.addEventListener('hidden.bs.collapse', function() {
+            var label = document.getElementById('shadow-board-guide-label');
+            if (label) label.textContent = 'How does this work?';
+            var chevron = document.querySelector('.shadow-board-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+        });
+    }
+});
+</script>
 {% endblock %}

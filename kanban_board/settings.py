@@ -52,8 +52,21 @@ DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost,testserver').split(',')
 
+# CSRF trusted origins — required by Django 4+ for HTTPS POSTs from the
+# production domain(s). Set CSRF_TRUSTED_ORIGINS env to a comma-separated list
+# of full origins, e.g. "https://app.example.com,https://www.example.com".
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
+]
+
 # Security settings for production
 if not DEBUG:
+    # Behind a TLS-terminating proxy/load balancer (GCP Cloud Run / App Engine /
+    # GKE ingress all set X-Forwarded-Proto). Without this, request.is_secure()
+    # is False behind the LB, so SECURE_SSL_REDIRECT loops infinitely and secure
+    # cookies are never set. Safe here because the managed LB overwrites the
+    # header (clients cannot spoof it).
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
@@ -87,6 +100,7 @@ INSTALLED_APPS = [
     'axes',  # django-axes for brute force protection
     'csp',  # django-csp for Content Security Policy
     'django_celery_beat',  # Database-backed periodic task scheduler
+    'rules',  # django-rules for predicate-based RBAC permissions
     
     # Django Allauth
     'allauth',
@@ -106,6 +120,9 @@ INSTALLED_APPS = [
     'knowledge_graph',  # Knowledge Graph Project Memory system
     'decision_center',  # Decision Batch Dashboard — unified decision queue
     'exit_protocol',  # Exit Protocol — Project Hospice, Organ Transplant, Cemetery
+    'requirements',  # Requirement Analysis — lifecycle tracking, traceability, AI gap analysis
+    'integrations',  # Inbound receiver integrations (GitHub, and future: GitLab, Salesforce, Figma)
+    'forms',  # AI-assisted intake forms — feeds PrizmDiscovery / Kanban Tasks
 ]
 
 MIDDLEWARE = [
@@ -117,6 +134,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'accounts.middleware.TimezoneMiddleware',  # Per-user timezone activation
+    'accounts.middleware.WorkspaceMiddleware',  # Resolve request.workspace from active_workspace
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'csp.middleware.CSPMiddleware',  # Content Security Policy
@@ -124,12 +142,17 @@ MIDDLEWARE = [
     # Demo session management - Must be after SessionMiddleware
     'kanban.middleware.demo_session.DemoSessionMiddleware',
     'kanban.middleware.demo_session.DemoAnalyticsMiddleware',
+    # Tenant isolation backstop — enforce view_board on every board/task/column
+    # scoped view. Must come AFTER WorkspaceMiddleware + demo session so
+    # is_demo_context() can read request.workspace / demo flags.
+    'kanban.middleware.board_access.BoardAccessEnforcementMiddleware',
     # Security and audit logging middleware
     'kanban.audit_middleware.AuditLoggingMiddleware',
     'kanban.audit_middleware.APIRequestLoggingMiddleware',
-    # Analytics tracking middleware - SessionTrackingMiddleware must come before SessionTimeoutMiddleware
-    'analytics.middleware.SessionTrackingMiddleware',
+    # Analytics tracking middleware - SessionTimeoutMiddleware MUST come before SessionTrackingMiddleware
+    # so it can check last_activity BEFORE the tracking middleware refreshes it to now().
     'analytics.middleware.SessionTimeoutMiddleware',  # Auto-end inactive sessions
+    'analytics.middleware.SessionTrackingMiddleware',
     'kanban.audit_middleware.SecurityMonitoringMiddleware',
     'axes.middleware.AxesMiddleware',  # Brute force protection
 ]
@@ -151,8 +174,10 @@ TEMPLATES = [
                 'kanban_board.context_processors.user_preferences',
                 'kanban_board.context_processors.user_timezone',
                 'kanban.context_processors.conflict_count',
+                'kanban.context_processors.discovery_count',  # Sidebar Discovery badge
                 'kanban.context_processors.demo_context',  # Demo mode context
                 'kanban.context_processors.user_favorites',  # My Favorites sidebar
+                'kanban.context_processors.preset_features',  # Workspace preset feature flags
             ],
         },
     },
@@ -169,11 +194,23 @@ DATABASES = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
         'OPTIONS': {
-            # Allow SQLite to wait up to 20 seconds for a write lock to
+            # Allow SQLite to wait up to 30 seconds for a write lock to
             # be released before raising "database is locked".  The
             # default is 5 s, which is too short when Spectra holds an
-            # atomic transaction open while waiting for the Gemini API.
-            'timeout': 20,
+            # atomic transaction open while waiting for the Gemini API,
+            # or when Celery Beat's DatabaseScheduler writes concurrently.
+            'timeout': 30,
+            # Begin every atomic() with BEGIN IMMEDIATE so the write lock is
+            # acquired up front (and therefore honours the 30 s `timeout`
+            # above) instead of lazily upgrading a read transaction to a
+            # write one.  Without this, a transaction that SELECTs first and
+            # writes later raises "database is locked" IMMEDIATELY on the
+            # read->write upgrade when another connection holds the write
+            # lock — busy_timeout does NOT cover that case.  This was making
+            # the demo-date refresh during "Reset Demo" intermittently abort
+            # mid-way (poisoning its transaction), so each Reset showed
+            # different Time Tracking data.  Requires Django >= 5.1.
+            'transaction_mode': 'IMMEDIATE',
         },
     }
 }
@@ -209,12 +246,18 @@ USE_I18N = True
 
 USE_TZ = True
 
+# Note: Django 5.x always uses USE_L10N=True and ignores custom DATE_INPUT_FORMATS
+# in settings.py (formats.get_format() is hardcoded to use locale-based formats).
+# To apply custom formats in Django 5.x, use FORMAT_MODULE_PATH or set input_formats
+# explicitly on form fields.
+
 # Indian date/time format (DD-MM-YYYY)
 DATE_FORMAT = 'd-m-Y'
 SHORT_DATE_FORMAT = 'd/m/Y'
 DATETIME_FORMAT = 'd-m-Y H:i'
 SHORT_DATETIME_FORMAT = 'd/m/Y H:i'
-DATE_INPUT_FORMATS = ['%d-%m-%Y', '%d/%m/%Y', '%Y-%m-%d']
+DATE_INPUT_FORMATS = ['%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y']
+DATETIME_INPUT_FORMATS = ['%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M']
 
 
 # Static files (CSS, JavaScript, Images)
@@ -230,7 +273,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Static files cache busting
-STATIC_VERSION = "11"  # Increment this when updating JS/CSS files
+STATIC_VERSION = "12"  # Increment this when updating JS/CSS files
 
 # Media files
 MEDIA_URL = '/media/'
@@ -262,8 +305,10 @@ if _email_host_user:
     EMAIL_HOST_USER = _email_host_user
     EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 else:
-    # No credentials configured — print to terminal (console backend)
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    # No credentials configured — save emails to files for easy review.
+    # Each email becomes a timestamped file in <project>/sent_emails/.
+    EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
+    EMAIL_FILE_PATH = os.path.join(BASE_DIR, 'sent_emails')
 
 # Default from email for system emails
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@prizmAI.com')
@@ -276,6 +321,7 @@ SITE_ID = 1
 AUTHENTICATION_BACKENDS = (
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
+    'rules.permissions.ObjectPermissionBackend',  # django-rules object-level permissions
 )
 
 # Allauth settings (updated for django-allauth 65.9.0+)
@@ -307,6 +353,7 @@ SOCIALACCOUNT_PROVIDERS = {
         ],
         'AUTH_PARAMS': {
             'access_type': 'online',
+            'prompt': 'select_account',
         },
         'OAUTH_PKCE_ENABLED': True,
         'FETCH_USERINFO': True,
@@ -316,6 +363,18 @@ SOCIALACCOUNT_PROVIDERS = {
 # Google OAuth2 credentials (to be set in .env file)
 GOOGLE_OAUTH2_CLIENT_ID = os.getenv('GOOGLE_OAUTH2_CLIENT_ID', '')
 GOOGLE_OAUTH2_CLIENT_SECRET = os.getenv('GOOGLE_OAUTH2_CLIENT_SECRET', '')
+
+# Google Calendar OAuth — reuses the same client credentials as Google login.
+# The redirect URI must be added to the Authorized Redirect URIs list in
+# Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID.
+GOOGLE_CALENDAR_REDIRECT_URI = os.getenv(
+    'GOOGLE_CALENDAR_REDIRECT_URI',
+    'http://localhost:8000/accounts/google-calendar/callback/',
+)
+# OAuth 2.0 scopes requested for Calendar access (read + write)
+GOOGLE_CALENDAR_SCOPES = [
+    'https://www.googleapis.com/auth/calendar.events',
+]
 
 # Custom adapters for handling organization assignment
 ACCOUNT_ADAPTER = 'accounts.adapters.CustomAccountAdapter'
@@ -333,11 +392,74 @@ SOCIALACCOUNT_FORMS = {
 # AI Model API Keys
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
+
+# AI Provider Model Configuration
+# Legacy single-model vars — kept only as backward-compatible fallback defaults for the
+# tiered constants below (existing production .env files may still set these).  These
+# represent the "full" model, so they feed the COMPLEX tier's fallback chain.
+OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-5.6-sol')
+ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-opus-4-8')
+# Maximum tokens Anthropic will generate per response. Anthropic requires this to be explicit.
+# This is the SIMPLE-tier / BYOK-override default; complex/premium get a larger budget in
+# _call_anthropic (see ai_router.py) so large structured-JSON payloads don't truncate.
+ANTHROPIC_MAX_TOKENS = int(os.getenv('ANTHROPIC_MAX_TOKENS', '2048'))
+
+# Tiered model selection — AIRouter maps a task's `complexity` ('simple' | 'complex' |
+# 'premium') to a concrete model per provider.  Every value is os.getenv-overridable so any
+# tier can be rolled back to a different model instantly, without a code change.
+#
+# Gemini cost strategy:
+#   simple/complex both default to the economical gemini-3.1-flash-lite (matches/beats
+#   2.5-flash on reasoning at ~40% lower output cost). The expensive gemini-2.5-flash is
+#   reserved as the PREMIUM "escape hatch" — used only for genuinely large-document
+#   requests (long-context retrieval / factual grounding), wired at two size-triggered
+#   call sites.
+#
+# Anthropic (Claude) ladder: Sonnet 5 for the light tier, Opus 4.8 for heavy + premium.
+#   (Haiku deliberately not used.)
+# OpenAI (GPT) ladder: GPT-5.6 generation — gpt-5.6-terra light, gpt-5.6-sol heavy + premium.
+#   NOTE: confirm the exact GPT-5.6 API id strings against OpenAI's current model list
+#   before relying on these in production; override via env if OpenAI renames them.
+GEMINI_MODEL_SIMPLE = os.getenv('GEMINI_MODEL_SIMPLE', 'gemini-3.1-flash-lite')
+GEMINI_MODEL_COMPLEX = os.getenv('GEMINI_MODEL_COMPLEX', 'gemini-3.1-flash-lite')
+GEMINI_MODEL_PREMIUM = os.getenv('GEMINI_MODEL_PREMIUM', 'gemini-2.5-flash')
+# Function-calling (Spectra chat action extraction) has its own knob so it can be reverted
+# to gemini-2.5-flash independently of the general complex tier if any action flow regresses.
+GEMINI_MODEL_FUNCTION_CALLING = os.getenv('GEMINI_MODEL_FUNCTION_CALLING', 'gemini-3.1-flash-lite')
+OPENAI_MODEL_SIMPLE = os.getenv('OPENAI_MODEL_SIMPLE', 'gpt-5.6-terra')
+OPENAI_MODEL_COMPLEX = os.getenv('OPENAI_MODEL_COMPLEX', os.getenv('OPENAI_MODEL', 'gpt-5.6-sol'))
+OPENAI_MODEL_PREMIUM = os.getenv('OPENAI_MODEL_PREMIUM', os.getenv('OPENAI_MODEL_COMPLEX', 'gpt-5.6-sol'))
+ANTHROPIC_MODEL_SIMPLE = os.getenv('ANTHROPIC_MODEL_SIMPLE', 'claude-sonnet-5')
+ANTHROPIC_MODEL_COMPLEX = os.getenv('ANTHROPIC_MODEL_COMPLEX', os.getenv('ANTHROPIC_MODEL', 'claude-opus-4-8'))
+ANTHROPIC_MODEL_PREMIUM = os.getenv('ANTHROPIC_MODEL_PREMIUM', os.getenv('ANTHROPIC_MODEL_COMPLEX', 'claude-opus-4-8'))
+
+# AI Router kill-switch — set AI_ROUTER_ENABLED=false in production to instantly bypass
+# the router and call Gemini directly.  Use this only during production incidents.
+AI_ROUTER_ENABLED = os.getenv('AI_ROUTER_ENABLED', 'true').lower() == 'true'
+
+# BYOK Encryption Key — used by AIRouter to encrypt/decrypt user and org BYOK API keys.
+# Must be a valid Fernet key. Generate one with:
+#   from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())
+# Store the generated value in your .env file only — NEVER commit the actual key.
+_raw_encryption_key = os.getenv('AI_KEY_ENCRYPTION_KEY', '')
+if not _raw_encryption_key:
+    import warnings
+    warnings.warn(
+        "AI_KEY_ENCRYPTION_KEY is not set. BYOK features will not work. "
+        "Generate a key with: from cryptography.fernet import Fernet; "
+        "print(Fernet.generate_key().decode()) and add it to your .env file.",
+        stacklevel=2,
+    )
+AI_KEY_ENCRYPTION_KEY = _raw_encryption_key
 
 # Google Custom Search API (for RAG - Retrieval Augmented Generation)
 GOOGLE_SEARCH_API_KEY = os.getenv('GOOGLE_SEARCH_API_KEY', '')
 GOOGLE_SEARCH_ENGINE_ID = os.getenv('GOOGLE_SEARCH_ENGINE_ID', '')
-ENABLE_WEB_SEARCH = os.getenv('ENABLE_WEB_SEARCH', 'True').lower() == 'true'
+# Web search is disabled product-wide: Spectra answers from project data + built-in
+# knowledge only (see system-prompt rule 13). Defaults off; the toggle is hidden in
+# the preferences UI. Set ENABLE_WEB_SEARCH=True in the env only to re-enable it.
+ENABLE_WEB_SEARCH = os.getenv('ENABLE_WEB_SEARCH', 'False').lower() == 'true'
 
 # AI Assistant Settings
 AI_ASSISTANT_CONFIG = {
@@ -371,6 +493,14 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
+        'spectra_prompts_file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'spectra_prompts.log'),
+            'maxBytes': 25 * 1024 * 1024,  # 25 MB per file
+            'backupCount': 3,
+            'formatter': 'verbose',
+        },
     },
     'root': {
         'handlers': ['console'],
@@ -384,6 +514,11 @@ LOGGING = {
         },
         'analytics': {
             'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'spectra_prompts': {
+            'handlers': ['spectra_prompts_file'],
             'level': 'INFO',
             'propagate': False,
         },
@@ -655,6 +790,15 @@ CELERY_RESULT_EXPIRES = 3600  # Results expire after 1 hour
 # Start the worker with: celery -A kanban_board worker -Q celery,summaries
 CELERY_TASK_ROUTES = {
     'kanban.ai_summary.*': {'queue': 'summaries'},
+    'kanban.ai_streaming.*': {'queue': 'ai_tasks'},
+    # Live project migration is user-triggered + progress-watched, so keep it on
+    # the dedicated 'interactive' worker (same queue as sandbox provisioning),
+    # off the heavy default queue. NB: this dict (settings.CELERY_TASK_ROUTES) is
+    # the *effective* route config — it overrides app.conf.task_routes in celery.py.
+    'kanban.migration.*': {'queue': 'interactive'},
+    # Form-submission auto-scoring reuses the Discovery AI scorer — route it
+    # onto the existing AI queue alongside other Gemini/AIRouter-backed tasks.
+    'forms.tasks.*': {'queue': 'ai_tasks'},
 }
 
 # ---------------------------------------------------------------------------
@@ -668,6 +812,16 @@ AI_SUMMARY_DEBOUNCE_SECONDS = 600          # 10 minutes
 # Summaries older than this many minutes are flagged as "stale" in the
 # dashboard UI and in the /api/summary-status/ polling endpoint.
 AI_SUMMARY_STALE_THRESHOLD_MINUTES = 120   # 2 hours
+
+# Map Django message levels to Bootstrap CSS classes
+from django.contrib.messages import constants as message_constants
+MESSAGE_TAGS = {
+    message_constants.DEBUG:   'debug',
+    message_constants.INFO:    'info',
+    message_constants.SUCCESS: 'success',
+    message_constants.WARNING: 'warning',
+    message_constants.ERROR:   'danger',
+}
 
 # ============================================
 # REST FRAMEWORK CONFIGURATION
@@ -815,18 +969,19 @@ AUTHENTICATION_BACKENDS = (
     'axes.backends.AxesStandaloneBackend',  # AxesStandaloneBackend should be first
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
+    'rules.permissions.ObjectPermissionBackend',  # django-rules object-level permissions
 )
 
 # Axes Configuration
-AXES_FAILURE_LIMIT = 5  # Number of failed login attempts before lockout
-AXES_COOLOFF_TIME = 1  # Hours to wait before allowing login again after lockout
+AXES_FAILURE_LIMIT = 7  # Number of failed login attempts before lockout
+AXES_COOLOFF_TIME = 0.5  # Hours (30 min) to wait before allowing login again after lockout
 AXES_LOCK_OUT_AT_FAILURE = True  # Lock out after failure limit
-AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]  # Lock by username and IP (replaces deprecated AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP)
+AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]  # Lock by username+IP combination (prevents cross-IP DoS)
 AXES_RESET_ON_SUCCESS = True  # Reset failed attempts on successful login
 AXES_ENABLE_ADMIN = True  # Enable axes in admin
 AXES_VERBOSE = True  # Verbose logging
-AXES_LOCKOUT_TEMPLATE = None  # Use default lockout handling
-AXES_LOCKOUT_URL = None  # Redirect URL after lockout (None = stay on same page)
+AXES_LOCKOUT_TEMPLATE = 'accounts/lockout.html'  # Styled lockout page with recovery options
+AXES_LOCKOUT_URL = None  # Redirect URL after lockout (None = use template)
 
 # Use cache for tracking attempts (faster than database)
 AXES_CACHE = 'default'

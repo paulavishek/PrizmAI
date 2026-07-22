@@ -66,9 +66,9 @@
             <p class="text-muted mb-0">{{ board.name }}</p>
         </div>
         <div class="btn-group">
-            <button onclick="goBack()" class="btn btn-outline-secondary">
+            <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back">
                 <i class="fas fa-arrow-left me-1"></i>Back
-            </button>
+            </a>
             <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary">
                 <i class="fas fa-chart-pie me-1"></i>Analytics
             </a>
@@ -150,11 +150,16 @@
                     <small class="text-muted">tasks added per week</small>
                     <div class="mt-2">
                         <span class="badge 
-                            {% if velocity.trend == 'rapidly_increasing' %}bg-danger
+                            {% if velocity.trend == 'insufficient_data' or velocity.avg_tasks_added_per_week == 0 %}bg-secondary
+                            {% elif velocity.trend == 'rapidly_increasing' %}bg-danger
                             {% elif velocity.trend == 'increasing' %}bg-warning
                             {% elif velocity.trend == 'stable' %}bg-success
                             {% else %}bg-secondary{% endif %}">
-                            {{ velocity.trend|title|replace:"_,' '" }}
+                            {% if velocity.trend == 'insufficient_data' or velocity.avg_tasks_added_per_week == 0 %}
+                                No data yet
+                            {% else %}
+                                {{ velocity.trend|title|replace:"_,' '" }}
+                            {% endif %}
                         </span>
                     </div>
                 </div>

@@ -63,7 +63,7 @@
         <div class="qv-field">
             <label class="qv-label">Priority</label>
             <select class="form-select form-select-sm qv-priority-select" data-task-id="{{ task.id }}"
-                    style="{% if task.priority == 'high' or task.priority == 'urgent' %}border-color:#dc3545;color:#dc3545;font-weight:600;{% elif task.priority == 'medium' %}border-color:#f59e0b;color:#92600a;font-weight:600;{% else %}border-color:#6c757d;color:#6c757d;{% endif %}">
+                    style="{% if task.priority == 'high' or task.priority == 'urgent' %}border-color:#dc3545;color:#dc3545;font-weight:600;{% elif task.priority == 'medium' %}border-color:#f59e0b;color:#92600a;font-weight:600;{% else %}border-color:#6c757d;color:var(--text-muted);{% endif %}">
                 <option value="low"    {% if task.priority == 'low'    %}selected{% endif %}>Low</option>
                 <option value="medium" {% if task.priority == 'medium' %}selected{% endif %}>Medium</option>
                 <option value="high"   {% if task.priority == 'high'   %}selected{% endif %}>High</option>
@@ -92,58 +92,6 @@
             </div>
         </div>
 
-        {% if prediction_data %}
-        {# AI Predicted Completion #}
-        <div class="qv-section">
-            <div class="qv-section-header"><i class="fas fa-robot me-1 text-info"></i> AI predicted completion</div>
-            <div class="qv-prediction-box">
-                <div class="d-flex align-items-center gap-2 mb-1">
-                    <strong style="font-size:.9rem;">{{ prediction_data.predicted_date|date:"M d, Y" }}</strong>
-                    <span class="badge bg-info text-dark" style="font-size:.7rem;">{{ prediction_data.confidence_percentage }}% conf.</span>
-                </div>
-                <div class="text-muted" style="font-size:.72rem;">
-                    Based on {{ prediction_data.based_on_tasks }} similar task{{ prediction_data.based_on_tasks|pluralize }} · org-wide data
-                </div>
-                {% if is_at_risk %}
-                <div class="mt-1" style="font-size:.72rem;color:#f59e0b;">
-                    <i class="fas fa-exclamation-triangle"></i> Predicted before due date — currently on track
-                </div>
-                {% elif is_overdue %}
-                <div class="mt-1" style="font-size:.72rem;color:#dc3545;">
-                    <i class="fas fa-exclamation-triangle"></i> Task is overdue
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
-
-        {# Dependencies #}
-        {% if blocked_by or blocking %}
-        <div class="qv-section">
-            <div class="qv-section-header"><i class="fas fa-project-diagram me-1"></i> Dependencies</div>
-            {% if blocked_by %}
-            <div class="mb-2">
-                <small class="text-muted fw-bold">Blocked by (must finish first)</small>
-                {% for dep in blocked_by %}
-                <div class="qv-dep-item">
-                    <a href="{% url 'task_detail' dep.id %}">{{ dep.title }}</a>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% if blocking %}
-            <div>
-                <small class="text-muted fw-bold">Blocking</small>
-                {% for dep in blocking %}
-                <div class="qv-dep-item">
-                    <a href="{% url 'task_detail' dep.id %}">{{ dep.title }}</a>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-        </div>
-        {% endif %}
-
         {# Stakeholders #}
         {% if stakeholders %}
         <div class="qv-section">
@@ -157,10 +105,32 @@
         </div>
         {% endif %}
     </div>
+
+    {# ── Save footer ── #}
+    {% comment %}Edits in this drawer are STAGED locally and only written when Save is
+       clicked — nothing hits the DB per keystroke/click. A single Save posts
+       all changed fields at once (one task.save → the automation engine fires
+       every applicable trigger from the combined diff).{% endcomment %}
+    <div class="qv-footer" data-task-id="{{ task.id }}">
+        <span class="qv-dirty-flag" style="display:none;">
+            <i class="fas fa-circle"></i> Unsaved changes
+        </span>
+        <button type="button" class="btn btn-sm btn-primary qv-save-btn" disabled>
+            <i class="fas fa-check me-1"></i> Save
+        </button>
+    </div>
 </div>
 
 <style>
 .qv-drawer { display:flex; flex-direction:column; height:100%; }
+.qv-footer {
+    display:flex; align-items:center; justify-content:flex-end; gap:12px;
+    padding:12px 20px; border-top:1px solid var(--border-color,#dee2e6);
+    position:sticky; bottom:0; background:var(--card-bg,#fff); z-index:2;
+}
+.qv-dirty-flag { font-size:.74rem; font-weight:600; color:#f59e0b; }
+.qv-dirty-flag i { font-size:.5rem; vertical-align:middle; margin-right:3px; }
+.qv-save-btn:disabled { opacity:.5; cursor:default; }
 .qv-header {
     display:flex; align-items:center; justify-content:space-between; gap:10px;
     padding:16px 20px; border-bottom:1px solid var(--border-color,#dee2e6);
@@ -174,7 +144,6 @@
 .qv-value { font-size:.85rem; }
 .qv-section { margin-top:18px; padding-top:14px; border-top:1px solid var(--border-color,#eee); }
 .qv-section-header { font-size:.78rem; font-weight:700; margin-bottom:8px; color:var(--text-primary); }
-.qv-prediction-box { background:var(--bg-tertiary,#f8f9fa); border-radius:8px; padding:10px 14px; border-left:3px solid #0ea5e9; }
 .qv-dep-item { font-size:.82rem; padding:3px 0; }
 .qv-dep-item a { color:var(--link-color,#0d6efd); text-decoration:none; }
 .qv-dep-item a:hover { text-decoration:underline; }

@@ -15,13 +15,14 @@ from django.db.models import Q, Count, Avg, Sum
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_http_methods
 
-from kanban.models import Board
+from kanban.models import Board, Task
 from kanban.favorite_views import is_user_favorite as _is_fav
 from kanban.retrospective_models import (
     ProjectRetrospective, LessonLearned, ImprovementMetric,
     RetrospectiveActionItem, RetrospectiveTrend
 )
 from kanban.utils.retrospective_generator import RetrospectiveGenerator
+from kanban.simple_access import check_access_or_403, check_modify_or_403
 from api.ai_usage_utils import track_ai_request, check_ai_quota
 
 logger = logging.getLogger(__name__)
@@ -36,8 +37,9 @@ def _add_manual_lessons(retrospective, board, lessons_list):
                 board=board,
                 title=lesson_text[:100],
                 description=lesson_text,
-                category='team_process',
+                category='other',
                 priority='medium',
+                recommended_action='Review and implement this lesson in the next sprint.',
                 ai_suggested=False,
                 status='identified'
             )
@@ -55,7 +57,7 @@ def _add_manual_actions(retrospective, board, actions_list):
                 board=board,
                 title=action_text[:100],
                 description=action_text,
-                action_type='process_improvement',
+                action_type='process_change',
                 priority='medium',
                 target_completion_date=target_date,
                 ai_suggested=False,
@@ -69,7 +71,8 @@ def _add_manual_actions(retrospective, board, actions_list):
 def retrospective_list(request, board_id):
     """List all retrospectives for a board"""
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     retrospectives = ProjectRetrospective.objects.filter(board=board).select_related(
         'created_by', 'finalized_by'
     ).prefetch_related('lessons', 'action_items', 'metrics')
@@ -89,10 +92,11 @@ def retrospective_list(request, board_id):
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     
-    # Summary statistics
+    # Summary statistics — counts are always board-wide, unaffected by filters
+    all_retrospectives = ProjectRetrospective.objects.filter(board=board)
     stats = {
-        'total_retrospectives': retrospectives.count(),
-        'finalized_count': retrospectives.filter(status='finalized').count(),
+        'total_retrospectives': all_retrospectives.count(),
+        'finalized_count': all_retrospectives.filter(status='finalized').count(),
         'total_lessons': LessonLearned.objects.filter(board=board).count(),
         'implemented_lessons': LessonLearned.objects.filter(
             board=board, status__in=['implemented', 'validated']
@@ -121,6 +125,7 @@ def retrospective_list(request, board_id):
 def retrospective_detail(request, board_id, retro_id):
     """View detailed retrospective"""
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     retrospective = get_object_or_404(
         ProjectRetrospective.objects.select_related('created_by', 'finalized_by'),
         id=retro_id,
@@ -133,6 +138,18 @@ def retrospective_detail(request, board_id, retro_id):
     metrics = retrospective.metrics.all().order_by('metric_type')
     
     # Calculate statistics
+    snapshot = retrospective.metrics_snapshot or {}
+    total_tasks = snapshot.get('total_tasks', 0)
+    completion_rate = snapshot.get('completion_rate', 0)
+    
+    # Recalculate from live board data if snapshot has zero tasks
+    if total_tasks == 0:
+        live_tasks = Task.objects.filter(column__board=board)
+        total_tasks = live_tasks.count()
+        if total_tasks > 0:
+            done_count = live_tasks.filter(progress=100).count()
+            completion_rate = round(done_count / total_tasks * 100, 1)
+    
     stats = {
         'lessons_count': lessons.count(),
         'lessons_implemented': lessons.filter(status__in=['implemented', 'validated']).count(),
@@ -142,6 +159,8 @@ def retrospective_detail(request, board_id, retro_id):
             target_completion_date__lt=timezone.now().date(),
             status__in=['pending', 'in_progress']
         ).count(),
+        'total_tasks': total_tasks,
+        'completion_rate': completion_rate,
     }
     
     context = {
@@ -164,7 +183,8 @@ def retrospective_detail(request, board_id, retro_id):
 def retrospective_create(request, board_id):
     """Create a new retrospective"""
     board = get_object_or_404(Board, id=board_id)
-    
+    check_modify_or_403(request.user, board)
+
     if request.method == 'GET':
         # Show form for date selection
         # Suggest default period (last 14 days for sprint, last 30 for project)
@@ -212,7 +232,7 @@ def retrospective_create(request, board_id):
             manual_actions = [action.strip() for action in manual_actions if action.strip()]
             
             # Generate retrospective
-            generator = RetrospectiveGenerator(board, period_start, period_end)
+            generator = RetrospectiveGenerator(board, period_start, period_end, user=request.user)
             
             retrospective = generator.create_retrospective(
                 created_by=request.user,
@@ -264,8 +284,9 @@ def retrospective_create(request, board_id):
 def retrospective_finalize(request, board_id, retro_id):
     """Finalize a retrospective"""
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     retrospective = get_object_or_404(ProjectRetrospective, id=retro_id, board=board)
-    
+
     # Add team notes if provided
     team_notes = request.POST.get('team_notes', '')
     if team_notes:
@@ -281,6 +302,7 @@ def retrospective_finalize(request, board_id, retro_id):
 def retrospective_dashboard(request, board_id):
     """Dashboard showing improvement trends over time"""
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     
     # Get recent retrospectives
     retrospectives = ProjectRetrospective.objects.filter(
@@ -292,6 +314,8 @@ def retrospective_dashboard(request, board_id):
     all_lessons = LessonLearned.objects.filter(board=board)
     all_actions = RetrospectiveActionItem.objects.filter(board=board)
     
+    recurring_lessons = all_lessons.filter(is_recurring_issue=True).order_by('-recurrence_count', '-priority')
+
     stats = {
         'total_retrospectives': ProjectRetrospective.objects.filter(board=board).count(),
         'total_lessons': all_lessons.count(),
@@ -300,7 +324,7 @@ def retrospective_dashboard(request, board_id):
         'total_actions': all_actions.count(),
         'actions_completed': all_actions.filter(status='completed').count(),
         'completion_rate': 0,
-        'recurring_issues': all_lessons.filter(is_recurring_issue=True).count(),
+        'recurring_issues': recurring_lessons.count(),
     }
     
     if stats['total_lessons'] > 0:
@@ -348,6 +372,7 @@ def retrospective_dashboard(request, board_id):
         'lessons_by_category': lessons_by_category,
         'urgent_actions': urgent_actions,
         'trend': trend,
+        'recurring_lessons': recurring_lessons,
         'is_demo_mode': False,
         'is_demo_board': False,
     }
@@ -360,6 +385,7 @@ def retrospective_dashboard(request, board_id):
 def lesson_update_status(request, board_id, lesson_id):
     """Update lesson learned status"""
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     lesson = get_object_or_404(LessonLearned, id=lesson_id, board=board)
     
     new_status = request.POST.get('status')
@@ -387,6 +413,7 @@ def lesson_update_status(request, board_id, lesson_id):
 def action_update_status(request, board_id, action_id):
     """Update action item status"""
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     action = get_object_or_404(RetrospectiveActionItem, id=action_id, board=board)
     
     new_status = request.POST.get('status')
@@ -419,7 +446,8 @@ def action_update_status(request, board_id, action_id):
 def lessons_learned_list(request, board_id):
     """View all lessons learned across retrospectives"""
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     lessons = LessonLearned.objects.filter(board=board).select_related(
         'retrospective', 'action_owner'
     )
@@ -457,6 +485,60 @@ def lessons_learned_list(request, board_id):
     }
     
     return render(request, 'kanban/lessons_learned_list.html', context)
+
+
+@login_required
+def retrospective_actions_list(request, board_id):
+    """View all action items across all retrospectives for a board"""
+    board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
+
+    all_board_actions = RetrospectiveActionItem.objects.filter(board=board)
+
+    # Summary stats (before filtering)
+    completed_count = all_board_actions.filter(status='completed').count()
+    pending_count = all_board_actions.filter(status__in=['pending', 'in_progress']).count()
+    overdue_count = all_board_actions.filter(
+        status__in=['pending', 'in_progress'],
+        target_completion_date__lt=timezone.now().date()
+    ).count()
+
+    actions = all_board_actions.select_related(
+        'retrospective', 'assigned_to'
+    ).order_by('status', 'target_completion_date')
+
+    status_filter = request.GET.get('status')
+    if status_filter:
+        actions = actions.filter(status=status_filter)
+
+    priority_filter = request.GET.get('priority')
+    if priority_filter:
+        actions = actions.filter(priority=priority_filter)
+
+    paginator = Paginator(actions, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    priority_choices = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ]
+
+    context = {
+        'board': board,
+        'page_obj': page_obj,
+        'actions': page_obj,
+        'status_filter': status_filter,
+        'priority_filter': priority_filter,
+        'status_choices': RetrospectiveActionItem.STATUS_CHOICES,
+        'priority_choices': priority_choices,
+        'completed_count': completed_count,
+        'pending_count': pending_count,
+        'overdue_count': overdue_count,
+    }
+    return render(request, 'kanban/retrospective_actions_list.html', context)
 
 
 def _generate_trend_analysis(board):
@@ -554,8 +636,9 @@ def retrospective_export(request, board_id, retro_id):
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
     from io import BytesIO
     from django.http import HttpResponse
-    
+
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     retrospective = get_object_or_404(ProjectRetrospective, id=retro_id, board=board)
     
     # Get related data
@@ -613,12 +696,13 @@ def retrospective_export(request, board_id, retro_id):
     elements.append(Spacer(1, 0.2 * inch))
     
     # Header information
+    generated_at_local = timezone.localtime(retrospective.ai_generated_at) if retrospective.ai_generated_at else None
     info_data = [
         ['Board:', board.name],
         ['Type:', retrospective.get_retrospective_type_display()],
         ['Period:', f"{retrospective.period_start.strftime('%B %d, %Y')} - {retrospective.period_end.strftime('%B %d, %Y')}"],
         ['Status:', retrospective.get_status_display()],
-        ['Generated:', retrospective.ai_generated_at.strftime('%B %d, %Y at %I:%M %p') if retrospective.ai_generated_at else 'N/A'],
+        ['Generated:', generated_at_local.strftime('%B %d, %Y at %I:%M %p') if generated_at_local else 'N/A'],
     ]
     
     if retrospective.team_morale_indicator:
@@ -719,7 +803,8 @@ def retrospective_export(request, board_id, retro_id):
             if action.description and action.description != action.title:
                 action_text += f"{action.description}<br/>"
             action_text += f"<i>Priority: {action.get_priority_display()} | "
-            action_text += f"Target: {action.target_completion_date.strftime('%B %d, %Y')} | "
+            if action.target_completion_date:
+                action_text += f"Target: {action.target_completion_date.strftime('%B %d, %Y')} | "
             action_text += f"Status: {action.get_status_display()}"
             if action.assigned_to:
                 action_text += f" | Assigned to: {action.assigned_to.get_full_name() or action.assigned_to.username}"
@@ -740,7 +825,7 @@ def retrospective_export(request, board_id, retro_id):
         alignment=TA_CENTER
     )
     elements.append(Paragraph(
-        f"Generated on {timezone.now().strftime('%B %d, %Y at %I:%M %p')} | PrizMAI Project Management",
+        f"Generated on {timezone.localtime(timezone.now()).strftime('%B %d, %Y at %I:%M %p')} | PrizMAI Project Management",
         footer_style
     ))
     

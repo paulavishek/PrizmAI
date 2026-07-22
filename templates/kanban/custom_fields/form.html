@@ -1,0 +1,254 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}
+    {% if field %}Edit {{ field.name }}{% else %}New custom field{% endif %} — {{ workspace.name }}
+{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 900px;">
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'custom_field_list' workspace.id %}">Custom fields</a></li>
+            <li class="breadcrumb-item active">
+                {% if field %}{{ field.name }}{% else %}New{% endif %}
+            </li>
+        </ol>
+    </nav>
+
+    <h1 class="h3 mb-3">
+        {% if field %}Edit custom field{% else %}New custom field{% endif %}
+    </h1>
+
+    {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <form method="post" id="custom-field-form">
+        {% csrf_token %}
+
+        <div class="row mb-3">
+            <label class="col-sm-3 col-form-label">Name <span class="text-danger">*</span></label>
+            <div class="col-sm-9">
+                {{ form.name }}
+                {% if form.name.errors %}
+                    <div class="text-danger small">{{ form.name.errors|join:', ' }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <label class="col-sm-3 col-form-label">Format <span class="text-danger">*</span></label>
+            <div class="col-sm-9">
+                {{ form.field_type }}
+                <div class="form-text">
+                    Choosing <em>List</em> reveals a panel for entering the allowed values.
+                </div>
+                {% if form.field_type.errors %}
+                    <div class="text-danger small">{{ form.field_type.errors|join:', ' }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Type-specific default panels. Shown/hidden by JS based on field_type. #}
+        <div class="row mb-3 cf-default-row" data-cf-type="text long_text">
+            <label class="col-sm-3 col-form-label">Default value</label>
+            <div class="col-sm-9">{{ form.default_text }}</div>
+        </div>
+        <div class="row mb-3 cf-default-row" data-cf-type="number integer" id="cf-default-number-row">
+            <label class="col-sm-3 col-form-label" id="cf-default-number-label">Default number</label>
+            <div class="col-sm-9">
+                {{ form.default_number }}
+                <div class="form-text d-none" id="cf-integer-hint">Whole numbers only — no decimal places.</div>
+            </div>
+        </div>
+        <div class="row mb-3 cf-default-row" data-cf-type="date">
+            <label class="col-sm-3 col-form-label">Default date</label>
+            <div class="col-sm-9">{{ form.default_date }}</div>
+        </div>
+        <div class="row mb-3 cf-default-row" data-cf-type="boolean">
+            <label class="col-sm-3 col-form-label">Default</label>
+            <div class="col-sm-9">
+                <div class="form-check form-check-inline">
+                    {{ form.default_boolean }} <label class="form-check-label" for="{{ form.default_boolean.id_for_label }}">Checked by default</label>
+                </div>
+            </div>
+        </div>
+
+        {# List options panel. #}
+        <div class="card mb-3 cf-default-row" data-cf-type="list">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>Possible values</strong>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="id_is_multi_select"
+                           name="is_multi_select" {% if form.instance.is_multi_select %}checked{% endif %}>
+                    <label class="form-check-label small" for="id_is_multi_select">Allow multi-select</label>
+                </div>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm align-middle" id="cf-options-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 60%;">Value</th>
+                            <th class="text-center">Default</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for opt in options %}
+                            <tr class="cf-option-row" data-row-index="{{ forloop.counter0 }}">
+                                <td>
+                                    <input type="hidden" name="option_ids[]" value="{{ opt.id }}">
+                                    <input type="hidden" name="option_positions[]" value="{{ opt.position }}">
+                                    <input type="text" class="form-control form-control-sm"
+                                           name="option_values[]" value="{{ opt.value }}">
+                                </td>
+                                <td class="text-center">
+                                    <input type="checkbox" name="option_is_default_{{ forloop.counter0 }}"
+                                           value="1" {% if opt.is_default %}checked{% endif %}>
+                                </td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-sm btn-outline-danger cf-remove-row">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="cf-add-option">
+                    <i class="bi bi-plus-lg"></i> Add value
+                </button>
+                <div class="form-text mt-2">
+                    Mark one or more options as default. Rows with empty values are skipped on save.
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-sm-9 offset-sm-3">
+                <div class="form-check cf-option-check">
+                    {{ form.is_required }}
+                    <label class="form-check-label" for="{{ form.is_required.id_for_label }}">
+                        Required (users must set a value when creating a task)
+                    </label>
+                </div>
+                <div class="form-check cf-option-check">
+                    {{ form.exclude_from_ai }}
+                    <label class="form-check-label" for="{{ form.exclude_from_ai.id_for_label }}">
+                        <strong>Exclude from AI</strong> — Spectra and other AI features will not see
+                        this field's values. Use for sensitive data like client budgets or PII.
+                    </label>
+                </div>
+                <div class="form-check cf-option-check">
+                    {{ form.applies_to_epics }}
+                    <label class="form-check-label" for="{{ form.applies_to_epics.id_for_label }}">
+                        <strong>Show on Epics</strong> — uncheck to hide this field on Epic detail pages.
+                        Useful for task-level metadata like Story Points or Sprint that doesn't apply to an Epic container.
+                    </label>
+                </div>
+            </div>
+        </div>
+        <style>
+            .cf-option-check .form-check-input {
+                border: 2px solid #6c757d;
+                width: 1.1em;
+                height: 1.1em;
+            }
+            .cf-option-check .form-check-input:checked {
+                border-color: #0d6efd;
+                background-color: #0d6efd;
+            }
+            .cf-option-check .form-check-input:focus {
+                border-color: #0d6efd;
+                box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+            }
+        </style>
+
+        <div class="row">
+            <div class="col-sm-9 offset-sm-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check2"></i> Save
+                </button>
+                <a href="{% url 'custom_field_list' workspace.id %}" class="btn btn-outline-secondary">
+                    Cancel
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+(function () {
+    const typeSelect = document.querySelector('#id_field_type');
+    const defaultRows = document.querySelectorAll('.cf-default-row');
+
+    const defaultNumberInput = document.querySelector('#id_default_number');
+    const defaultNumberLabel = document.querySelector('#cf-default-number-label');
+    const integerHint = document.querySelector('#cf-integer-hint');
+
+    function refreshTypeVisibility() {
+        const current = typeSelect ? typeSelect.value : '';
+        defaultRows.forEach(row => {
+            const supported = (row.dataset.cfType || '').split(' ');
+            row.style.display = supported.includes(current) ? '' : 'none';
+        });
+        // Adjust number input behaviour for integer vs decimal.
+        if (defaultNumberInput) {
+            if (current === 'integer') {
+                defaultNumberInput.setAttribute('step', '1');
+                if (defaultNumberLabel) defaultNumberLabel.textContent = 'Default integer';
+                if (integerHint) integerHint.classList.remove('d-none');
+            } else {
+                defaultNumberInput.setAttribute('step', 'any');
+                if (defaultNumberLabel) defaultNumberLabel.textContent = 'Default number';
+                if (integerHint) integerHint.classList.add('d-none');
+            }
+        }
+    }
+    if (typeSelect) {
+        typeSelect.addEventListener('change', refreshTypeVisibility);
+        refreshTypeVisibility();
+    }
+
+    // List option rows: add / remove.
+    const tbody = document.querySelector('#cf-options-table tbody');
+    const addBtn = document.querySelector('#cf-add-option');
+    let nextIndex = tbody ? tbody.querySelectorAll('.cf-option-row').length : 0;
+
+    if (addBtn) {
+        addBtn.addEventListener('click', () => {
+            const tr = document.createElement('tr');
+            tr.className = 'cf-option-row';
+            tr.dataset.rowIndex = nextIndex;
+            tr.innerHTML = `
+                <td>
+                    <input type="hidden" name="option_ids[]" value="">
+                    <input type="hidden" name="option_positions[]" value="${nextIndex}">
+                    <input type="text" class="form-control form-control-sm" name="option_values[]" placeholder="e.g. Berlin">
+                </td>
+                <td class="text-center">
+                    <input type="checkbox" name="option_is_default_${nextIndex}" value="1">
+                </td>
+                <td class="text-end">
+                    <button type="button" class="btn btn-sm btn-outline-danger cf-remove-row">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+            nextIndex += 1;
+        });
+    }
+
+    if (tbody) {
+        tbody.addEventListener('click', (event) => {
+            const remove = event.target.closest('.cf-remove-row');
+            if (!remove) return;
+            const row = remove.closest('tr');
+            if (row) row.remove();
+        });
+    }
+})();
+</script>
+{% endblock %}

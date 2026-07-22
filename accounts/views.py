@@ -1,17 +1,95 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import login, authenticate, logout
+from django.contrib.auth import login, authenticate, logout, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.models import User
+from django.contrib.auth.views import PasswordResetView
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from .forms import LoginForm, RegistrationForm, UserProfileForm
-from .models import Organization, UserProfile, COMMON_TIMEZONES
-from kanban.permission_audit import log_permission_change
+from .models import Organization, UserProfile, OrganizationInvitation, COMMON_TIMEZONES
 import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class CustomPasswordResetView(PasswordResetView):
+    """Override PasswordResetView to handle OAuth-only accounts gracefully.
+
+    Django's default silently skips users with no usable password, showing the
+    success page anyway. This gives a clear, actionable message instead.
+    """
+    template_name = 'accounts/password_reset.html'
+    email_template_name = 'accounts/password_reset_email.html'
+    subject_template_name = 'accounts/password_reset_subject.txt'
+    success_url = '/accounts/password-reset/done/'
+
+    def form_valid(self, form):
+        email = form.cleaned_data.get('email')
+        UserModel = get_user_model()
+        users = UserModel.objects.filter(email__iexact=email, is_active=True)
+        if users.exists() and all(not u.has_usable_password() for u in users):
+            form.add_error(
+                'email',
+                'This account was created with Google sign-in and does not have a password. '
+                'Please use the "Continue with Google" button on the login page.'
+            )
+            return self.form_invalid(form)
+        return super().form_valid(form)
+
+
+def _resolve_post_login_redirect(user):
+    """Determine where to send a user after login based on workspace state.
+
+    Returns a URL string:
+      - '/workspace-selection/' if user has 2+ real workspaces
+      - '/dashboard/' otherwise (0 or 1 real workspaces)
+
+    Side-effect: when there are 0 real workspaces we ensure the active
+    workspace is set to the demo workspace. When there is exactly 1 real
+    workspace we ensure it's selected as active.
+    """
+    try:
+        profile = user.profile
+    except UserProfile.DoesNotExist:
+        return '/dashboard/'
+
+    org = profile.organization
+    if not org:
+        return '/dashboard/'
+
+    from kanban.models import Workspace
+
+    real_ws = list(
+        Workspace.objects.filter(
+            organization=org, is_active=True, is_demo=False,
+        ).order_by('-updated_at')
+    )
+    demo_ws = Workspace.objects.filter(
+        organization=org, is_active=True, is_demo=True,
+    ).first()
+
+    if len(real_ws) == 0:
+        # No personal workspaces — land on demo
+        if demo_ws and profile.active_workspace_id != demo_ws.pk:
+            profile.active_workspace = demo_ws
+            profile.is_viewing_demo = True
+            profile.save(update_fields=['active_workspace', 'is_viewing_demo'])
+        return '/dashboard/'
+
+    if len(real_ws) == 1:
+        # Exactly one — go straight there
+        ws = real_ws[0]
+        if profile.active_workspace_id != ws.pk or profile.is_viewing_demo:
+            profile.active_workspace = ws
+            profile.is_viewing_demo = False
+            profile.save(update_fields=['active_workspace', 'is_viewing_demo'])
+        return '/dashboard/'
+
+    # 2+ real workspaces — show the selection page
+    return '/workspace-selection/'
+
 
 def quick_demo_login(request, username):
     """
@@ -19,21 +97,45 @@ def quick_demo_login(request, username):
     Allows one-click login from the dashboard.
     Saves the real user's username in session so they can switch back.
     """
-    # Only allow login for demo users
-    demo_users = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
-    
-    if username not in demo_users:
+    # Only allow login for demo users (single source of truth)
+    from accounts.demo_personas import DEMO_USERNAMES, DEMO_PASSWORD
+
+    if username not in DEMO_USERNAMES:
         messages.error(request, 'Invalid demo user.')
         return redirect('login')
-    
+
     # Remember the real user before switching to demo
     real_username = None
-    if request.user.is_authenticated and request.user.username not in demo_users:
-        real_username = request.user.username
+    if request.user.is_authenticated:
+        if request.user.username not in DEMO_USERNAMES:
+            real_username = request.user.username
+        else:
+            # Already viewing as another demo persona (e.g. hopping straight
+            # from Elena to Marcus via the "Sign in as any of these demo
+            # users" dropdown) — carry the original real user forward.
+            # login() below flushes the session on this pk change, which
+            # would otherwise silently drop 'real_user_username', permanently
+            # losing the way back to the real account for this session.
+            real_username = request.session.get('real_user_username')
+
+    # Before switching identity, cap the shared demo personas' board
+    # membership to THIS real user's sandbox — otherwise the persona we're
+    # about to become still points at whichever real user's sandbox was
+    # capped last (e.g. from an earlier provisioning elsewhere), and this
+    # session lands in the wrong person's chat rooms/boards instead of the
+    # one the real user just came from. See sync_persona_memberships_to_owner()
+    # / [[project_persona_membership_bleed]].
+    if real_username:
+        try:
+            real_user_obj = User.objects.get(username=real_username)
+            from kanban.sandbox_views import sync_persona_memberships_to_owner
+            sync_persona_memberships_to_owner(real_user_obj)
+        except User.DoesNotExist:
+            pass
 
     # Authenticate with the known demo password
-    user = authenticate(request=request, username=username, password='demo123')
-    
+    user = authenticate(request=request, username=username, password=DEMO_PASSWORD)
+
     if user is not None:
         login(request, user)
         # Restore the real username into the new session so we can switch back
@@ -62,7 +164,7 @@ def return_to_real_account(request):
     Switch back from a demo account to the real user account that initiated the demo session.
     """
     real_username = request.session.get('real_user_username')
-    demo_users = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+    demo_users = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
 
     if not real_username:
         messages.warning(request, 'No previous account found. Please log in.')
@@ -94,7 +196,7 @@ def return_to_real_account(request):
 
 def login_view(request):
     if request.user.is_authenticated:
-        return redirect('dashboard')
+        return redirect(_resolve_post_login_redirect(request.user))
     
     next_url = request.GET.get('next', '')
 
@@ -110,7 +212,7 @@ def login_view(request):
                 # Honour the ?next= redirect (e.g. invitation accept link)
                 if next_url and next_url.startswith('/'):
                     return redirect(next_url)
-                return redirect('dashboard')
+                return redirect(_resolve_post_login_redirect(user))
     else:
         form = LoginForm()
     
@@ -131,6 +233,11 @@ def register_view(request, org_id=None):
     Organization field is now optional.
     """
     if request.user.is_authenticated:
+        messages.info(
+            request,
+            f'You are already signed in as <strong>{request.user.username}</strong>. '
+            'Please <a href="/accounts/logout/">log out</a> first if you want to create a new account.'
+        )
         return redirect('dashboard')
 
     # org_id parameter is kept for backward compatibility but ignored
@@ -215,6 +322,13 @@ def create_organization(request):
 
 @login_required
 def profile_view(request):
+    from accounts.forms import UserAISettingsForm
+    from ai_assistant.models import UserAISettings, PROVIDER_CHOICES, OrganizationAISettings
+    from ai_assistant.utils.ai_router import AIRouter
+    from django.core.exceptions import ImproperlyConfigured
+    from django.utils import timezone as tz
+    from django.http import HttpResponseForbidden
+
     try:
         profile = request.user.profile
     except UserProfile.DoesNotExist:
@@ -228,25 +342,213 @@ def profile_view(request):
             onboarding_version=2,
             onboarding_status='pending',
         )
-    
+
+    # Recompute workload live rather than trusting the Task-post_save-signal
+    # cache: tasks assigned via bulk operations (seeders, imports, sandbox
+    # clones) never trigger that signal, so current_workload_hours can sit
+    # stale (often at its 0 default) indefinitely. Recalculating here — using
+    # the same logic the signal uses — guarantees the number on this page is
+    # always accurate regardless of how the underlying tasks were assigned.
+    # This also mutates `profile` in place (same cached instance), so
+    # profile.utilization_percentage below reflects the fresh value.
+    from kanban.signals import _recalc_user_workload
+    _recalc_user_workload(request.user)
+
+    # ------------------------------------------------------------------
+    # AI context variables — computed once, used for GET and all re-renders
+    # ------------------------------------------------------------------
+    # AI provider settings are scoped to the active WORKSPACE (the tenant
+    # boundary) — not the shared organisation.
+    workspace = profile.active_workspace
+    allow_override = False
+    org_provider = 'gemini'
+    if workspace:
+        try:
+            ws_ai = workspace.ai_settings
+            allow_override = ws_ai.allow_user_provider_override
+            org_provider = ws_ai.provider
+        except OrganizationAISettings.DoesNotExist:
+            pass
+
+    show_provider_override = profile.is_admin or allow_override
+    org_provider_display = dict(PROVIDER_CHOICES).get(org_provider, 'Google Gemini')
+
+    user_ai = None
+    try:
+        user_ai = request.user.ai_settings
+    except UserAISettings.DoesNotExist:
+        pass
+
+    # Always initialise both forms up front so they're always defined.
+    # POST handlers may replace them with bound versions.
+    profile_form = UserProfileForm(instance=profile)
+    ai_settings_form = None  # built lazily below
+
+    # ------------------------------------------------------------------
+    # POST handler
+    # ------------------------------------------------------------------
     if request.method == 'POST':
-        form = UserProfileForm(request.POST, request.FILES, instance=profile)
-        if form.is_valid():
-            form.save()
-            # Sync timezone session cache so middleware picks it up immediately
-            request.session['user_timezone'] = profile.timezone
-            messages.success(request, 'Profile updated successfully!')
-            return redirect('profile')
+        form_type = request.POST.get('form_type', 'profile')
+
+        if form_type == 'user_ai_settings':
+            ai_settings_form = UserAISettingsForm(request.POST)
+            if ai_settings_form.is_valid():
+                cd = ai_settings_form.cleaned_data
+                raw_key = cd.get('raw_api_key', '').strip()
+                byok_prov = cd.get('byok_provider', '')
+                remove_key = cd.get('remove_byok_key', False)
+                provider_override_val = cd.get('provider_override', 'inherit')
+                byok_model_val = (cd.get('byok_model') or '').strip() or None
+
+                # RBAC: prevent API-level bypass of the org policy
+                if (
+                    provider_override_val != 'inherit'
+                    and not profile.is_admin
+                    and not allow_override
+                ):
+                    return HttpResponseForbidden()
+
+                user_ai_obj, _ = UserAISettings.objects.get_or_create(user=request.user)
+                user_ai_obj.provider_override = provider_override_val
+
+                save_ok = True
+
+                if remove_key:
+                    user_ai_obj.encrypted_api_key = None
+                    user_ai_obj.byok_provider = None
+                    user_ai_obj.key_last_four = None
+                    user_ai_obj.key_validated_at = None
+                    user_ai_obj.byok_model = None
+
+                elif raw_key:
+                    router = AIRouter()
+                    # If user entered a custom model name, validate it against
+                    # the provider before encrypting and storing the key.
+                    if byok_model_val and save_ok:
+                        is_model_valid = router.validate_api_key(byok_prov, raw_key, model=byok_model_val)
+                        if not is_model_valid:
+                            ai_settings_form.add_error(
+                                None,
+                                'The custom model name was not recognised by the provider. '
+                                'Please check the model name and try again.'
+                            )
+                            save_ok = False
+
+                    if save_ok:
+                        try:
+                            is_valid = router.validate_api_key(byok_prov, raw_key)
+                        except ImproperlyConfigured:
+                            ai_settings_form.add_error(
+                                None,
+                                'API key encryption is not configured on this server. '
+                                'Contact your administrator.'
+                            )
+                            save_ok = False
+                            is_valid = False
+
+                        if save_ok and not is_valid:
+                            ai_settings_form.add_error(
+                                None,
+                                'The API key could not be validated. '
+                                'Please check the key and try again.'
+                            )
+                            save_ok = False
+
+                    if save_ok:
+                        try:
+                            user_ai_obj.encrypted_api_key = router._encrypt_key(raw_key)
+                        except ImproperlyConfigured:
+                            ai_settings_form.add_error(
+                                None,
+                                'API key encryption is not configured on this server. '
+                                'Contact your administrator.'
+                            )
+                            save_ok = False
+
+                    if save_ok:
+                        user_ai_obj.key_last_four = '••••' + raw_key[-4:]
+                        user_ai_obj.byok_provider = byok_prov
+                        user_ai_obj.key_validated_at = tz.now()
+                        user_ai_obj.byok_model = byok_model_val
+
+                elif byok_model_val is not None:
+                    # No new key submitted but model preference changed — update model only
+                    user_ai_obj.byok_model = byok_model_val
+
+                if save_ok:
+                    user_ai_obj.save()
+                    messages.success(request, 'AI preferences saved.')
+                    return redirect('profile')
+                # Validation failed — fall through to re-render with errors in ai_settings_form
+
+        else:
+            # Profile form
+            profile_form = UserProfileForm(request.POST, request.FILES, instance=profile)
+            if profile_form.is_valid():
+                profile_form.save()
+                # Sync timezone session cache so middleware picks it up immediately
+                request.session['user_timezone'] = profile.timezone
+                messages.success(request, 'Profile updated successfully!')
+                return redirect('profile')
+            # Invalid — fall through to re-render with errors in profile_form
+
+    # ------------------------------------------------------------------
+    # Build AI form if not already bound (GET or failed AI settings POST)
+    # ------------------------------------------------------------------
+    if ai_settings_form is None:
+        if user_ai:
+            ai_settings_form = UserAISettingsForm(initial={
+                'provider_override': user_ai.provider_override,
+                'byok_provider': user_ai.byok_provider or '',
+                'byok_model': user_ai.byok_model or '',
+            })
+        else:
+            ai_settings_form = UserAISettingsForm(initial={'provider_override': 'inherit'})
+
+    user_has_byok_key = bool(user_ai and user_ai.encrypted_api_key)
+
+    # effective_provider: only use the saved personal override when the user
+    # is actually allowed to override (show_provider_override is True).
+    # When the org flag is off, even a stale saved override must be ignored.
+    if show_provider_override and user_ai and user_ai.provider_override != 'inherit':
+        effective_provider = dict(PROVIDER_CHOICES).get(
+            user_ai.provider_override, user_ai.provider_override
+        )
     else:
-        form = UserProfileForm(instance=profile)
-    
-    return render(request, 'accounts/profile.html', {'form': form, 'profile': profile})
+        effective_provider = org_provider_display
+
+    # effective_model: the model non-BYOK users are actually using (for the read-only note)
+    from ai_assistant.utils.ai_router import AIRouter as _AIRouter
+    try:
+        _eff_prov_key = (
+            user_ai.provider_override
+            if (show_provider_override and user_ai and user_ai.provider_override != 'inherit')
+            else org_provider
+        )
+        effective_model = _AIRouter.get_model_name(_eff_prov_key, complexity='simple')
+    except Exception:
+        effective_model = 'gemini-2.5-flash-lite'
+
+    context = {
+        'form': profile_form,
+        'profile': profile,
+        'user_ai_settings_form': ai_settings_form,
+        'user_has_byok_key': user_has_byok_key,
+        'show_provider_override': show_provider_override,
+        'effective_provider': effective_provider,
+        'effective_model': effective_model,
+        'org_provider_display': org_provider_display,
+        'user_ai': user_ai,
+    }
+    return render(request, 'accounts/profile.html', context)
 
 @login_required
 def organization_members(request):
     """
-    MVP Mode: Show all users since everyone shares the same space.
+    Organization members page — lists members, pending invitations, and invite form.
     """
+    import re
+
     try:
         profile = request.user.profile
     except UserProfile.DoesNotExist:
@@ -259,36 +561,222 @@ def organization_members(request):
             onboarding_version=2,
             onboarding_status='pending',
         )
-    
-    # MVP Mode: Show all users (including demo users)
-    members = UserProfile.objects.all()
-    
+
+    org = profile.organization
+
+    # If user has no org, show a prompt to set up their workspace
+    if not org:
+        return render(request, 'accounts/organization_members.html', {
+            'organization': None,
+            'members': [],
+            'pending_invitations': [],
+            'can_manage': False,
+        })
+
+    # Permission: org creator, UI-promoted admin, or OrgAdmin group member.
+    from kanban.permissions import is_user_org_admin
+    can_manage = is_user_org_admin(request.user)
+
+    # Handle invitation POST
+    if request.method == 'POST' and can_manage:
+        # Handle workspace rename
+        new_name = request.POST.get('workspace_name', '').strip()
+        if new_name and new_name != org.name:
+            org.name = new_name[:100]
+            org.save(update_fields=['name'])
+            messages.success(request, 'Workspace name updated.')
+
+        # Handle email invitations
+        raw = request.POST.get('invite_emails', '').strip()
+        if raw:
+            raw_emails = re.split(r'[,;\n]+', raw)
+            emails = list(dict.fromkeys(
+                e.strip().lower() for e in raw_emails if e.strip()
+            ))
+
+            sent_list, skipped_list = [], []
+            for email in emails:
+                if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+                    skipped_list.append(f"{email} (invalid format)")
+                    continue
+
+                if UserProfile.objects.filter(
+                    organization=org, user__email__iexact=email
+                ).exists():
+                    skipped_list.append(f"{email} (already a member)")
+                    continue
+
+                OrganizationInvitation.objects.filter(
+                    organization=org, email=email,
+                    status=OrganizationInvitation.STATUS_PENDING,
+                ).update(status=OrganizationInvitation.STATUS_REVOKED)
+
+                invitation = OrganizationInvitation.objects.create(
+                    organization=org,
+                    invited_by=request.user,
+                    email=email,
+                )
+
+                # Send invitation email
+                from django.core.mail import send_mail
+                from django.template.loader import render_to_string
+                from django.urls import reverse as url_reverse
+                accept_url = request.build_absolute_uri(
+                    url_reverse('accept_org_invitation', args=[invitation.token])
+                )
+                context = {
+                    'invitation': invitation,
+                    'organization': org,
+                    'invited_by': request.user,
+                    'accept_url': accept_url,
+                    'expires_hours': 48,
+                }
+                try:
+                    send_mail(
+                        subject=f"You're invited to join '{org.name}' on PrizmAI",
+                        message=render_to_string('kanban/email/org_invitation.txt', context),
+                        from_email=None,
+                        recipient_list=[email],
+                        html_message=render_to_string('kanban/email/org_invitation.html', context),
+                        fail_silently=False,
+                    )
+                    sent_list.append(email)
+                except Exception:
+                    sent_list.append(email)  # Invitation created even if email fails
+
+            if sent_list:
+                count = len(sent_list)
+                if count == 1:
+                    messages.success(request, f"Invitation sent to {sent_list[0]}.")
+                else:
+                    messages.success(request, f"Invitations sent to {count} addresses.")
+            for note in skipped_list:
+                messages.info(request, f"Skipped: {note}")
+
+        return redirect('organization_members')
+
+    # GET: show members + pending invitations
+    members = UserProfile.objects.filter(organization=org).select_related('user')
+    pending_invitations = OrganizationInvitation.objects.filter(
+        organization=org, status=OrganizationInvitation.STATUS_PENDING,
+    ).order_by('-created_at')
+
     return render(request, 'accounts/organization_members.html', {
-        'organization': None,  # No organization in MVP mode
-        'members': members
+        'organization': org,
+        'members': members,
+        'pending_invitations': pending_invitations,
+        'can_manage': can_manage,
     })
 
 @login_required
 def organization_settings(request):
-    """
-    MVP Mode: Organization settings are not available.
-    """
-    messages.info(request, 'Organization settings are not available in MVP mode.')
-    return redirect('dashboard')
+    """Organization settings — rename workspace."""
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        return redirect('dashboard')
+
+    org = profile.organization
+    if not org:
+        messages.info(request, 'No workspace found. Set up your workspace first.')
+        return redirect('onboarding_welcome')
+
+    if request.method == 'POST':
+        can_manage = (org.created_by == request.user or profile.is_admin)
+        if can_manage:
+            new_name = request.POST.get('workspace_name', '').strip()
+            if new_name:
+                org.name = new_name[:100]
+                org.save(update_fields=['name'])
+                messages.success(request, 'Workspace name updated.')
+        return redirect('organization_settings')
+
+    return render(request, 'accounts/organization_settings.html', {
+        'organization': org,
+        'can_manage': (org.created_by == request.user or profile.is_admin),
+    })
 
 # Add this method to toggle admin status for a member
 @login_required
 def toggle_admin(request, profile_id):
-    """MVP Mode: Admin toggle is not available."""
-    messages.info(request, 'Admin management is not available in MVP mode.')
-    return redirect('dashboard')
+    """Toggle admin status for a member."""
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        return redirect('dashboard')
+
+    org = profile.organization
+    if not org:
+        return redirect('dashboard')
+
+    # Only org creator can toggle admin
+    if org.created_by != request.user:
+        messages.error(request, "Only the workspace creator can manage admin roles.")
+        return redirect('organization_members')
+
+    target_profile = get_object_or_404(UserProfile, id=profile_id)
+
+    if target_profile.user == org.created_by:
+        messages.error(request, "Cannot change the workspace creator's role.")
+        return redirect('organization_members')
+
+    if target_profile.organization != org:
+        messages.error(request, "This user is not in your workspace.")
+        return redirect('organization_members')
+
+    target_profile.is_admin = not target_profile.is_admin
+    target_profile.save(update_fields=['is_admin'])
+
+    # Keep OrgAdmin Django Group in sync with profile.is_admin
+    from django.contrib.auth.models import Group
+    org_admin_group, _ = Group.objects.get_or_create(name='OrgAdmin')
+    if target_profile.is_admin:
+        target_profile.user.groups.add(org_admin_group)
+    else:
+        target_profile.user.groups.remove(org_admin_group)
+
+    action = "promoted to Admin" if target_profile.is_admin else "demoted to Member"
+    messages.success(request, f"{target_profile.user.get_full_name() or target_profile.user.username} has been {action}."  )
+    return redirect('organization_members')
 
 # Add this method to remove a member from the organization
 @login_required
 def remove_member(request, profile_id):
-    """MVP Mode: Member removal is not available."""
-    messages.info(request, 'Member management is not available in MVP mode.')
-    return redirect('dashboard')
+    """Remove a member from the organization."""
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        return redirect('dashboard')
+
+    org = profile.organization
+    if not org:
+        return redirect('dashboard')
+
+    from kanban.permissions import is_user_org_admin
+    can_manage = is_user_org_admin(request.user)
+    if not can_manage:
+        messages.error(request, "You don't have permission to remove members.")
+        return redirect('organization_members')
+
+    target_profile = get_object_or_404(UserProfile, id=profile_id)
+
+    # Cannot remove the org creator
+    if target_profile.user == org.created_by:
+        messages.error(request, "Cannot remove the workspace creator.")
+        return redirect('organization_members')
+
+    # Cannot remove yourself
+    if target_profile.user == request.user:
+        messages.error(request, "You cannot remove yourself.")
+        return redirect('organization_members')
+
+    # Unlink from org
+    if target_profile.organization == org:
+        target_profile.organization = None
+        target_profile.save(update_fields=['organization'])
+        messages.success(request, f"{target_profile.user.get_full_name() or target_profile.user.username} has been removed from the workspace.")
+
+    return redirect('organization_members')
 
 @login_required
 def delete_organization(request):
@@ -322,6 +810,81 @@ def social_signup_complete(request):
         )
         messages.success(request, 'Welcome! Your account is ready to use.')
         return redirect('onboarding_welcome')
+
+
+SESSION_ORG_INVITE_KEY = 'pending_org_invite_token'
+
+
+def accept_org_invitation(request, token):
+    """
+    Accept an organization invitation via token link.
+    - If logged in: join the organization immediately.
+    - If not logged in: save token in session, redirect to login.
+    """
+    invitation = get_object_or_404(OrganizationInvitation, token=token)
+
+    if not invitation.is_valid():
+        return render(request, 'accounts/org_invitation_invalid.html', {
+            'reason': invitation.get_status_display(),
+            'organization': invitation.organization,
+        })
+
+    if not request.user.is_authenticated:
+        request.session[SESSION_ORG_INVITE_KEY] = str(token)
+        messages.info(request, f"Please sign in to join '{invitation.organization.name}'.")
+        from django.urls import reverse
+        return redirect(f"{reverse('login')}?next={reverse('accept_org_invitation', args=[token])}")
+
+    user = request.user
+
+    # Ensure profile exists
+    try:
+        profile = user.profile
+    except UserProfile.DoesNotExist:
+        profile = UserProfile.objects.create(
+            user=user, organization=None, is_admin=False,
+            completed_wizard=True, has_seen_welcome=True,
+            onboarding_version=2, onboarding_status='pending',
+        )
+
+    # Link user to the organization
+    if not profile.organization or profile.organization != invitation.organization:
+        profile.organization = invitation.organization
+        profile.save(update_fields=['organization'])
+
+    # Grant viewer membership on all boards belonging to this organization
+    from kanban.models import Board, BoardMembership
+    org_boards = Board.objects.filter(
+        strategy__mission__organization_goal__organization=invitation.organization
+    ).distinct()
+    for board in org_boards:
+        BoardMembership.objects.get_or_create(
+            board=board, user=user,
+            defaults={'role': 'viewer', 'added_by': invitation.invited_by},
+        )
+
+    # Also process any pending WorkspaceInvitation for this email + org
+    from kanban.models import WorkspaceInvitation
+    from kanban.workspace_member_utils import add_workspace_member
+    ws_invitations = WorkspaceInvitation.objects.filter(
+        workspace__organization=invitation.organization,
+        email__iexact=user.email,
+        status=WorkspaceInvitation.STATUS_PENDING,
+    )
+    for ws_inv in ws_invitations:
+        if ws_inv.is_valid():
+            add_workspace_member(ws_inv.workspace, user, ws_inv.role, added_by=ws_inv.invited_by)
+            ws_inv.mark_accepted(user)
+            # Set active workspace if user doesn't have one
+            if not profile.active_workspace:
+                profile.active_workspace = ws_inv.workspace
+                profile.save(update_fields=['active_workspace'])
+
+    invitation.mark_accepted(user)
+    request.session.pop(SESSION_ORG_INVITE_KEY, None)
+
+    messages.success(request, f"Welcome! You've joined '{invitation.organization.name}'.")
+    return redirect('dashboard')
 
 
 @login_required
@@ -374,3 +937,200 @@ def update_display_mode(request):
     profile.save(update_fields=['display_mode'])
 
     return JsonResponse({'status': 'ok', 'display_mode': mode})
+
+
+@login_required
+@require_POST
+def update_presence_preference(request):
+    """Toggle whether other users can see this user's last-seen timestamp.
+
+    Option B semantics: the setting only affects visibility of the current
+    user's own timestamp. The user can always see others' last-seen times
+    regardless of their own setting.
+    """
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+
+    show = data.get('show_last_seen')
+    if not isinstance(show, bool):
+        return JsonResponse({'status': 'error', 'message': 'show_last_seen must be a boolean'}, status=400)
+
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Profile not found'}, status=404)
+
+    profile.show_last_seen = show
+    profile.save(update_fields=['show_last_seen'])
+
+    return JsonResponse({'status': 'ok', 'show_last_seen': show})
+
+
+# ---------------------------------------------------------------------------
+# Google Calendar OAuth 2.0 — Connect / Callback / Disconnect
+# ---------------------------------------------------------------------------
+
+@login_required
+def google_calendar_connect(request):
+    """
+    Step 1 of the OAuth 2.0 flow: redirect the user to Google's consent screen.
+    Requests calendar.events scope so PrizmAI can create/update/delete events.
+    """
+    try:
+        from google_auth_oauthlib.flow import Flow
+        from django.conf import settings
+        from django.urls import reverse
+
+        # Build the redirect URI from the current request so the OAuth
+        # round-trip always returns to the same origin (host + scheme) the
+        # user is browsing on.  Hard-coding a setting (e.g. localhost) while
+        # the user visits 127.0.0.1 causes a cookie-domain mismatch that
+        # silently drops the session before the callback is reached.
+        redirect_uri = request.build_absolute_uri(reverse("google_calendar_callback"))
+
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": settings.GOOGLE_OAUTH2_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_OAUTH2_CLIENT_SECRET,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=settings.GOOGLE_CALENDAR_SCOPES,
+        )
+        flow.redirect_uri = redirect_uri
+
+        authorization_url, state = flow.authorization_url(
+            access_type="offline",
+            include_granted_scopes="false",
+            prompt="consent",  # force consent to always get a refresh_token
+        )
+        request.session["google_calendar_oauth_state"] = state
+        # Store the PKCE code_verifier so the callback can send it during
+        # token exchange (google-auth-oauthlib auto-generates one by default).
+        request.session["google_calendar_code_verifier"] = flow.code_verifier
+        # Persist the redirect_uri so the callback uses exactly the same value.
+        request.session["google_calendar_redirect_uri"] = redirect_uri
+        return redirect(authorization_url)
+
+    except Exception:
+        messages.error(request, "Could not initiate Google Calendar connection. Check that GOOGLE_OAUTH2_CLIENT_ID and GOOGLE_OAUTH2_CLIENT_SECRET are configured.")
+        return redirect("profile")
+
+
+@login_required
+def google_calendar_callback(request):
+    """
+    Step 2: Google redirects back here with an authorization code.
+    Exchange for tokens and store in GoogleCalendarToken.
+    """
+    try:
+        from google_auth_oauthlib.flow import Flow
+        from django.conf import settings
+        from django.urls import reverse
+        from accounts.models import GoogleCalendarToken
+
+        state = request.session.pop("google_calendar_oauth_state", None)
+        code_verifier = request.session.pop("google_calendar_code_verifier", None)
+        # Reuse the exact redirect_uri that was registered with Google during
+        # the connect step; it must be identical for the token exchange.
+        redirect_uri = request.session.pop(
+            "google_calendar_redirect_uri",
+            request.build_absolute_uri(reverse("google_calendar_callback")),
+        )
+        if not state:
+            messages.error(request, "Invalid OAuth state. Please try connecting again.")
+            return redirect("profile")
+
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": settings.GOOGLE_OAUTH2_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_OAUTH2_CLIENT_SECRET,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=settings.GOOGLE_CALENDAR_SCOPES,
+            state=state,
+        )
+        flow.redirect_uri = redirect_uri
+        # Restore the PKCE code_verifier so fetch_token sends it to Google.
+        flow.code_verifier = code_verifier
+
+        # Allow HTTP for local dev. Production must use HTTPS.
+        import os
+        if settings.DEBUG:
+            os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
+        # Google may return additional scopes (e.g. openid) that were previously
+        # granted by the user.  Suppress the oauthlib scope-mismatch check so
+        # the token exchange succeeds as long as the calendar scope is included.
+        os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+
+        flow.fetch_token(authorization_response=request.build_absolute_uri())
+        creds = flow.credentials
+
+        token_obj, _ = GoogleCalendarToken.objects.update_or_create(
+            user=request.user,
+            defaults={
+                "access_token": creds.token,
+                "refresh_token": creds.refresh_token or "",
+                "token_expiry": creds.expiry,
+                "sync_enabled": True,
+            },
+        )
+        messages.success(request, "Google Calendar connected. Tasks with due dates will now sync automatically.")
+
+    except Exception as exc:
+        messages.error(request, f"Google Calendar connection failed: {exc}")
+
+    return redirect("profile")
+
+
+@login_required
+@require_POST
+def google_calendar_disconnect(request):
+    """
+    Remove the user's GoogleCalendarToken.
+    Future task saves will no longer trigger calendar sync.
+    """
+    from accounts.models import GoogleCalendarToken
+
+    # Remove the events we created from the user's calendar *before* deleting
+    # the token — once the token is gone we lose the credentials needed to
+    # reach the Google Calendar API, which would orphan every synced event.
+    try:
+        from accounts.tasks import purge_calendar_events_for_user
+        purge_calendar_events_for_user(request.user.id)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            "google_calendar_disconnect: could not purge calendar events for "
+            "user %s; deleting token anyway.", request.user.id, exc_info=True,
+        )
+
+    GoogleCalendarToken.objects.filter(user=request.user).delete()
+    messages.success(request, "Google Calendar disconnected and synced events removed.")
+    return redirect("profile")
+
+
+@login_required
+@require_POST
+def google_calendar_toggle_sync(request):
+    """
+    Toggle the master sync_enabled flag without fully disconnecting.
+    """
+    from accounts.models import GoogleCalendarToken
+    try:
+        token_obj = GoogleCalendarToken.objects.get(user=request.user)
+        token_obj.sync_enabled = not token_obj.sync_enabled
+        token_obj.save(update_fields=["sync_enabled", "updated_at"])
+        state = "enabled" if token_obj.sync_enabled else "paused"
+        messages.success(request, f"Google Calendar sync {state}.")
+    except GoogleCalendarToken.DoesNotExist:
+        messages.error(request, "Google Calendar is not connected.")
+    return redirect("profile")
+

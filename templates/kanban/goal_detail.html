@@ -2,29 +2,39 @@
 {% extends 'kanban/partials/strategic_detail_base.html' %}
 
 {% block breadcrumb_items %}
-<li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Organization Goals</a></li>
+<li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Workspace Goals</a></li>
 <li class="breadcrumb-item active">{{ goal.name|truncatechars:40 }}</li>
+{% endblock %}
+
+{% block back_button %}
+<a href="{% url 'goal_list' %}" class="btn-prizm-back">
+    <i class="fas fa-arrow-left"></i> Back to Goals
+</a>
 {% endblock %}
 
 {% block header_icon %}<i class="fas fa-trophy text-warning me-2"></i>{% endblock %}
 
 {% block header_subtitle %}
-{% if goal.target_metric %}
-<div class="mb-1">
-    <span class="badge bg-warning text-dark px-2 py-1">
-        <i class="fas fa-bullseye me-1"></i>Target: {{ goal.target_metric }}
-    </span>
-</div>
-{% endif %}
+<p class="text-muted small mb-0">Goal · Organisational{% if goal.target_metric %} — {{ goal.target_metric }}{% endif %}</p>
+<p class="text-muted small mb-0">v{{ record.version }} · edited {{ record.updated_at|timesince }} ago</p>
 {% endblock %}
 
 {% block header_actions %}
+{% if can_edit %}
 <a href="{% url 'edit_goal' goal.id %}" class="btn btn-sm btn-outline-warning">
     <i class="fas fa-edit me-1"></i>Edit
 </a>
+{% endif %}
+{% if can_create_child %}
+<a href="{% url 'create_mission' %}" class="btn btn-sm btn-primary">
+    <i class="fas fa-plus me-1"></i>New Mission
+</a>
+{% endif %}
+{% if can_delete %}
 <a href="{% url 'delete_goal' goal.id %}" class="btn btn-sm btn-outline-danger">
     <i class="fas fa-trash me-1"></i>Delete
 </a>
+{% endif %}
 {% endblock %}
 
 {% block header_meta %}
@@ -57,9 +67,11 @@
         <i class="fas fa-bullseye text-primary me-2"></i>Linked Missions
         <span class="badge bg-primary ms-1">{{ linked_missions|length }}</span>
     </h5>
+    {% if can_create_child %}
     <a href="{% url 'create_mission' %}" class="btn btn-sm btn-outline-primary">
         <i class="fas fa-plus me-1"></i>New Mission
     </a>
+    {% endif %}
 </div>
 
 {% if linked_missions %}
@@ -104,6 +116,7 @@
             </div>
             <div class="card-footer bg-transparent border-top-0 d-flex justify-content-between align-items-center">
                 <a href="{% url 'mission_detail' mission.id %}" class="btn btn-sm btn-primary">Open Mission</a>
+                {% if can_edit %}
                 <form method="post" action="{% url 'unlink_mission_from_goal' goal.id mission.id %}" class="d-inline">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-sm btn-outline-danger"
@@ -111,6 +124,7 @@
                         <i class="fas fa-unlink"></i>
                     </button>
                 </form>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -126,32 +140,269 @@
 </div>
 {% endif %}
 
-{# Link existing mission #}
-{% if all_missions %}
+{# Move an existing mission under this goal #}
+{% if can_edit and all_missions %}
 <div class="card shadow-sm mb-3">
     <div class="card-header py-2">
-        <h6 class="mb-0"><i class="fas fa-link me-2"></i>Link Existing Mission</h6>
+        <h6 class="mb-0"><i class="fas fa-arrow-right-to-bracket me-2"></i>Move a Mission Under This Goal</h6>
     </div>
     <div class="card-body">
-        <form method="post" action="{% url 'link_mission_to_goal' goal.id %}" class="row g-2 align-items-end">
+        <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-start" role="alert">
+            <i class="fas fa-info-circle me-2 mt-1"></i>
+            <span>Each Mission belongs to <strong>exactly one</strong> Goal. Choosing a mission
+            that's already under another Goal will <strong>move</strong> it here, not share it.</span>
+        </div>
+        <form method="post" action="{% url 'link_mission_to_goal' goal.id %}"
+              class="row g-2 align-items-end" onsubmit="return confirmMissionMove(this);">
             {% csrf_token %}
             <div class="col-md-8">
-                <select name="mission_id" class="form-select form-select-sm" required>
+                <select name="mission_id" id="missionMoveSelect" class="form-select form-select-sm" required>
                     <option value="">— Choose a mission —</option>
                     {% for m in all_missions %}
-                    <option value="{{ m.id }}">{{ m.name }}{% if m.organization_goal %} (linked to: {{ m.organization_goal.name }}){% endif %}</option>
+                    <option value="{{ m.id }}"
+                            data-mission-name="{{ m.name }}"
+                            data-current-goal="{% if m.organization_goal and m.organization_goal_id != goal.id %}{{ m.organization_goal.name }}{% endif %}">
+                        {{ m.name }}{% if m.organization_goal %} (currently under: {{ m.organization_goal.name }}){% endif %}
+                    </option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col-md-4">
                 <button type="submit" class="btn btn-sm btn-primary w-100">
-                    <i class="fas fa-link me-1"></i>Link
+                    <i class="fas fa-arrow-right-to-bracket me-1"></i>Move Here
                 </button>
             </div>
         </form>
     </div>
 </div>
+<script>
+function confirmMissionMove(form) {
+    var sel = form.querySelector('#missionMoveSelect');
+    var opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) { return false; }
+    var current = opt.getAttribute('data-current-goal');
+    var name = opt.getAttribute('data-mission-name') || 'this mission';
+    if (current) {
+        return confirm('"' + name + '" is currently under "' + current + '".\n\n' +
+            'A Mission can belong to only one Goal, so linking it here will MOVE it ' +
+            'off "' + current + '". Continue?');
+    }
+    return true;
+}
+</script>
 {% endif %}
+
+{% if linked_requirements %}
+<hr class="my-3">
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="mb-0"><i class="fas fa-clipboard-list text-info me-2"></i>Linked Requirements<span class="badge bg-info ms-1">{{ linked_requirements|length }}</span></h5>
+</div>
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead class="table-light"><tr><th>REQ ID</th><th>Board</th><th>Title</th><th>Status</th></tr></thead>
+        <tbody>
+            {% for req in linked_requirements %}
+            <tr>
+                <td><code>{{ req.identifier }}</code></td>
+                <td class="text-muted small">{{ req.board.name }}</td>
+                <td><a href="{% url 'requirements:requirement_detail' req.board.id req.pk %}">{{ req.title|truncatechars:60 }}</a></td>
+                <td><span class="badge {% if req.status == 'verified' %}bg-success{% elif req.status == 'implemented' %}bg-primary{% elif req.status == 'approved' %}bg-info text-dark{% elif req.status == 'in_review' %}bg-warning text-dark{% elif req.status == 'rejected' %}bg-danger{% else %}bg-secondary{% endif %}">{{ req.get_status_display }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}
+
+{# ================================================================ #}
+{# AI INSIGHTS TAB (extends base with portfolio + proxy metrics)    #}
+{# ================================================================ #}
+{% block tab_ai %}
+{{ block.super }}
+
+{# ── Outcome Indicators (Proxy Metrics) ── #}
+<div id="outcome-indicators-wrap">
+{% if proxy_metrics %}
+<div class="card border-0 shadow-sm mb-3 mt-3">
+    <div class="card-header d-flex align-items-center justify-content-between py-2 bg-transparent">
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-tachometer-alt text-success"></i>
+            <span class="fw-semibold small">Outcome Indicators</span>
+        </div>
+        <button class="btn btn-sm btn-outline-success" onclick="regenerateProxyMetrics()" title="Re-generate metrics">
+            <i class="fas fa-sync-alt"></i>
+        </button>
+    </div>
+    <div class="card-body py-2">
+        <p class="text-muted mb-2" style="font-size:0.7rem;">
+            <i class="fas fa-info-circle me-1"></i>AI-suggested, real-world KPIs for this goal — tracked manually below, not derived from tasks. Each <i class="fas fa-sync-alt mx-1"></i>Re-generate asks the AI to brainstorm a fresh set, so names and count may change.
+        </p>
+        <div class="row gx-2">
+            {% for pm in proxy_metrics %}
+            <div class="col-md-4 mb-2" data-metric-id="{{ pm.id }}">
+                <div class="border rounded p-2 bg-light">
+                    <div class="d-flex justify-content-between align-items-start mb-1">
+                        <span class="fw-bold small">{{ pm.name }}</span>
+                        {% if pm.current_value is not None %}
+                        <span class="badge bg-success">{{ pm.current_value }}</span>
+                        {% else %}
+                        <span class="badge bg-secondary">—</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-muted mb-1" style="font-size:0.75rem;">{{ pm.why_it_matters }}</p>
+                    <p class="mb-1" style="font-size:0.7rem;"><strong>How to measure:</strong> {{ pm.how_to_measure }}</p>
+                    {% if pm.current_value is None %}
+                    <div class="input-group input-group-sm mt-1">
+                        <input type="text" class="form-control" placeholder="Enter value" id="pm-val-{{ pm.id }}">
+                        <button class="btn btn-outline-success btn-sm" onclick="updateProxyMetric({{ pm.id }})">
+                            <i class="fas fa-check"></i>
+                        </button>
+                    </div>
+                    {% else %}
+                    <div class="input-group input-group-sm mt-1">
+                        <input type="text" class="form-control" placeholder="New value" id="pm-val-{{ pm.id }}">
+                        <button class="btn btn-outline-primary btn-sm" onclick="updateProxyMetric({{ pm.id }})" title="Update value">
+                            <i class="fas fa-arrow-up"></i>
+                        </button>
+                    </div>
+                    {% if pm.previous_value is not None %}
+                    <small class="text-muted" style="font-size:0.65rem;">Previous: {{ pm.previous_value }}</small>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% elif not proxy_metrics.exists %}
+<div class="card border-0 shadow-sm mb-3 mt-3">
+    <div class="card-body py-2">
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-tachometer-alt text-muted"></i>
+            <span class="text-muted small">No outcome indicators yet.</span>
+            <button class="btn btn-sm btn-outline-success ms-auto" onclick="regenerateProxyMetrics()">
+                <i class="fas fa-magic me-1"></i>Generate
+            </button>
+        </div>
+        <p class="text-muted mb-0 mt-2" style="font-size:0.7rem;">
+            <i class="fas fa-info-circle me-1"></i>Outcome Indicators are AI-suggested, real-world KPIs for this goal — tracked manually, not derived from tasks. Generating asks the AI to brainstorm a set from scratch.
+        </p>
+    </div>
+</div>
+{% endif %}
+</div>
+
+{# ── Portfolio Analytics ── #}
+{% include 'kanban/partials/portfolio_analytics.html' %}
+
+<script>
+function escapeHtmlPm(s) {
+    var d = document.createElement('div');
+    d.textContent = (s === null || s === undefined) ? '' : String(s);
+    return d.innerHTML;
+}
+function metricCardHtml(pm) {
+    var hasValue = pm.current_value !== null && pm.current_value !== undefined && pm.current_value !== '';
+    var badge = hasValue
+        ? '<span class="badge bg-success">' + escapeHtmlPm(pm.current_value) + '</span>'
+        : '<span class="badge bg-secondary">—</span>';
+    var controls;
+    if (!hasValue) {
+        controls = '<div class="input-group input-group-sm mt-1">' +
+            '<input type="text" class="form-control" placeholder="Enter value" id="pm-val-' + pm.id + '">' +
+            '<button class="btn btn-outline-success btn-sm" onclick="updateProxyMetric(' + pm.id + ')"><i class="fas fa-check"></i></button>' +
+            '</div>';
+    } else {
+        controls = '<div class="input-group input-group-sm mt-1">' +
+            '<input type="text" class="form-control" placeholder="New value" id="pm-val-' + pm.id + '">' +
+            '<button class="btn btn-outline-primary btn-sm" onclick="updateProxyMetric(' + pm.id + ')" title="Update value"><i class="fas fa-arrow-up"></i></button>' +
+            '</div>';
+        if (pm.previous_value !== null && pm.previous_value !== undefined && pm.previous_value !== '') {
+            controls += '<small class="text-muted" style="font-size:0.65rem;">Previous: ' + escapeHtmlPm(pm.previous_value) + '</small>';
+        }
+    }
+    return '<div class="col-md-4 mb-2" data-metric-id="' + pm.id + '">' +
+        '<div class="border rounded p-2 bg-light">' +
+            '<div class="d-flex justify-content-between align-items-start mb-1">' +
+                '<span class="fw-bold small">' + escapeHtmlPm(pm.name) + '</span>' + badge +
+            '</div>' +
+            '<p class="text-muted mb-1" style="font-size:0.75rem;">' + escapeHtmlPm(pm.why_it_matters) + '</p>' +
+            '<p class="mb-1" style="font-size:0.7rem;"><strong>How to measure:</strong> ' + escapeHtmlPm(pm.how_to_measure) + '</p>' +
+            controls +
+        '</div>' +
+    '</div>';
+}
+function renderOutcomeIndicators(metrics) {
+    var wrap = document.getElementById('outcome-indicators-wrap');
+    if (!wrap) return;
+    var cardsHtml = metrics.map(metricCardHtml).join('');
+    wrap.innerHTML =
+        '<div class="card border-0 shadow-sm mb-3 mt-3">' +
+            '<div class="card-header d-flex align-items-center justify-content-between py-2 bg-transparent">' +
+                '<div class="d-flex align-items-center gap-2">' +
+                    '<i class="fas fa-tachometer-alt text-success"></i>' +
+                    '<span class="fw-semibold small">Outcome Indicators</span>' +
+                '</div>' +
+                '<button class="btn btn-sm btn-outline-success" onclick="regenerateProxyMetrics()" title="Re-generate metrics">' +
+                    '<i class="fas fa-sync-alt"></i>' +
+                '</button>' +
+            '</div>' +
+            '<div class="card-body py-2">' +
+                '<p class="text-muted mb-2" style="font-size:0.7rem;">' +
+                    '<i class="fas fa-info-circle me-1"></i>AI-suggested, real-world KPIs for this goal — tracked manually below, not derived from tasks. ' +
+                    'Each <i class="fas fa-sync-alt mx-1"></i>Re-generate asks the AI to brainstorm a fresh set, so names and count may change.' +
+                '</p>' +
+                '<div class="row gx-2">' + cardsHtml + '</div>' +
+            '</div>' +
+        '</div>';
+}
+function regenerateProxyMetrics() {
+    fetch("{% url 'generate_proxy_metrics_api' goal.id %}", {
+        method: 'POST',
+        headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}'}
+    }).then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Server error'); });
+        return r.json();
+    }).then(function(data) {
+        if (data.success) { renderOutcomeIndicators(data.metrics); }
+        else { alert(data.error || 'Failed.'); }
+    }).catch(function(err) { alert(err.message || 'Network error.'); });
+}
+function updateProxyMetric(metricId) {
+    var input = document.getElementById('pm-val-' + metricId);
+    var val = input.value.trim();
+    if (!val) return;
+    fetch("{% url 'update_proxy_metric_value_api' goal.id 0 %}".replace('/0/update-value/', '/' + metricId + '/update-value/'), {
+        method: 'POST',
+        headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}',
+                  'Content-Type': 'application/json'},
+        body: JSON.stringify({value: val})
+    }).then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Server error'); });
+        return r.json();
+    }).then(function(data) {
+        if (!data.success) { alert(data.error || 'Failed.'); return; }
+        var card = document.querySelector('#outcome-indicators-wrap [data-metric-id="' + metricId + '"]');
+        if (!card) return;
+        card.querySelector('.badge').outerHTML = '<span class="badge bg-success">' + escapeHtmlPm(data.current_value) + '</span>';
+        var inputGroup = card.querySelector('.input-group');
+        inputGroup.innerHTML =
+            '<input type="text" class="form-control" placeholder="New value" id="pm-val-' + metricId + '">' +
+            '<button class="btn btn-outline-primary btn-sm" onclick="updateProxyMetric(' + metricId + ')" title="Update value"><i class="fas fa-arrow-up"></i></button>';
+        var existingPrev = card.querySelector('small.text-muted');
+        if (existingPrev) existingPrev.remove();
+        if (data.previous_value !== null && data.previous_value !== undefined && data.previous_value !== '') {
+            var prevEl = document.createElement('small');
+            prevEl.className = 'text-muted';
+            prevEl.style.fontSize = '0.65rem';
+            prevEl.textContent = 'Previous: ' + data.previous_value;
+            inputGroup.insertAdjacentElement('afterend', prevEl);
+        }
+    }).catch(function(err) { alert(err.message || 'Network error.'); });
+}
+</script>
 {% endblock %}
 
 {# ================================================================ #}
@@ -219,4 +470,13 @@
     <div class="sidebar-value">{{ goal.organization.name }}</div>
 </div>
 {% endif %}
+
+<div class="sidebar-section">
+    <div class="sidebar-label">Version</div>
+    <div class="sidebar-value">
+        v{{ record.version }}
+        · <a href="#tab-versions" class="text-decoration-none"
+           onclick="event.preventDefault(); var t=document.querySelector('.strategic-tabs .nav-link[data-bs-target=&quot;#tab-versions&quot;]'); if(t) t.click();">View history</a>
+    </div>
+</div>
 {% endblock %}

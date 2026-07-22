@@ -414,56 +414,6 @@ body.colorblind-mode .text-info {
 }
 
 /* ============================================
-   ACCESSIBILITY TOGGLE BUTTON STYLES
-   ============================================ */
-
-#accessibility-toggle {
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    color: white;
-    padding: 0.375rem 0.5rem;
-    border-radius: 0.375rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-left: 0.5rem;
-}
-
-#accessibility-toggle:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.8);
-}
-
-#accessibility-toggle:focus {
-    outline: 2px solid rgba(255, 255, 255, 0.5);
-    outline-offset: 2px;
-}
-
-#accessibility-toggle.active {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: white;
-}
-
-#accessibility-toggle i {
-    font-size: 1rem;
-}
-
-/* Accessibility indicator when mode is active */
-body.colorblind-mode #accessibility-toggle::after {
-    content: "";
-    position: absolute;
-    top: -2px;
-    right: -2px;
-    width: 8px;
-    height: 8px;
-    background: #28a745;
-    border-radius: 50%;
-    border: 1px solid white;
-}
-
-/* ============================================
    LEGEND/KEY FOR COLOR BLIND MODE
    ============================================ */
 

@@ -4,6 +4,8 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import datetime
 
+from .ai_forms import OrganizationAISettingsForm  # noqa: F401
+
 
 class LocalDateTimeInput(forms.DateTimeInput):
     """
@@ -35,9 +37,11 @@ class LocalDateTimeInput(forms.DateTimeInput):
 
 
 class BoardForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = Board
-        fields = ['name', 'description', 'num_phases']
+        fields = ['name', 'description', 'num_phases',
+                  'aging_enabled', 'aging_warning_days', 'aging_critical_days']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
@@ -48,17 +52,60 @@ class BoardForm(forms.ModelForm):
                 'placeholder': '0 = no phases, 3 = Phase 1, 2, 3',
                 'title': 'Number of phases for organizing tasks in this board (0 to disable phases)'
             }),
+            'aging_enabled': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'aging_warning_days': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': 1, 'max': 365,
+            }),
+            'aging_critical_days': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': 1, 'max': 365,
+            }),
         }
         help_texts = {
             'num_phases': 'Set the number of phases for your project (e.g., 3 for Phase 1, Phase 2, Phase 3). Set to 0 if you don\'t need phase-based organization.',
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # create_board.html doesn't render these (only edit_board.html does),
+        # so without this they're required-but-missing and fail validation
+        # silently on the create form.
+        self.fields['aging_warning_days'].required = False
+        self.fields['aging_critical_days'].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get('aging_warning_days') is None:
+            cleaned['aging_warning_days'] = Board._meta.get_field('aging_warning_days').default
+        if cleaned.get('aging_critical_days') is None:
+            cleaned['aging_critical_days'] = Board._meta.get_field('aging_critical_days').default
+        if cleaned.get('aging_enabled'):
+            warning = cleaned.get('aging_warning_days')
+            critical = cleaned.get('aging_critical_days')
+            if warning is not None and warning < 1:
+                self.add_error('aging_warning_days', 'Warning threshold must be at least 1 day.')
+            if critical is not None and warning is not None and critical <= warning:
+                self.add_error('aging_critical_days',
+                               'Critical threshold must be greater than the warning threshold.')
+        return cleaned
+
 class ColumnForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = Column
-        fields = ['name']
+        fields = ['name', 'column_type']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'column_type': forms.Select(attrs={'class': 'form-select'}),
+        }
+        labels = {
+            'column_type': 'Column type',
+        }
+        help_texts = {
+            'column_type': (
+                'Leave on Auto to detect from the name. Set explicitly if you name the '
+                'column something custom (e.g. "Achieved") so features still recognise it '
+                'as a Done column.'
+            ),
         }
 
 class TaskLabelForm(forms.ModelForm):
@@ -313,10 +360,13 @@ class TaskForm(forms.ModelForm):
             # Filter out Lean Six Sigma labels - they have their own dedicated field
             self.fields['labels'].queryset = TaskLabel.objects.filter(board=board).exclude(category='lean')
             
-            # Show all users (no board-level or organization restrictions - simplified access model)
+            # Show only board members in the assignee dropdown (RBAC)
             from django.contrib.auth import get_user_model
+            from django.db.models import Q
             User = get_user_model()
-            self.fields['assigned_to'].queryset = User.objects.all().order_by('username')
+            self.fields['assigned_to'].queryset = User.objects.filter(
+                Q(board_memberships__board=board) | Q(id=board.created_by_id)
+            ).distinct().order_by('username')
             
             # Filter dependencies to only show tasks from the same board with dates
             self.fields['dependencies'].queryset = Task.objects.filter(
@@ -492,12 +542,44 @@ class TaskForm(forms.ModelForm):
             if parent_task == self.instance:
                 raise forms.ValidationError({'parent_task': 'A task cannot be its own parent.'})
             
-            # Check if this would create a circular dependency
-            if hasattr(self.instance, 'has_circular_dependency') and self.instance.has_circular_dependency(parent_task):
+            # Check if this would create a circular dependency. Only relevant when
+            # editing an existing task — a brand-new task has no pk yet and thus no
+            # subtasks, so has_circular_dependency() would query a reverse relation
+            # (self.subtasks.all()) on an unsaved instance and raise ValueError.
+            if (self.instance.pk and hasattr(self.instance, 'has_circular_dependency')
+                    and self.instance.has_circular_dependency(parent_task)):
                 raise forms.ValidationError({
                     'parent_task': f'Cannot set "{parent_task.title}" as parent - this would create a circular dependency.'
                 })
         
+        # Validate skill_match_score is in range 0-100
+        skill_match_score = cleaned_data.get('skill_match_score')
+        if skill_match_score is not None:
+            if skill_match_score < 0 or skill_match_score > 100:
+                self.add_error('skill_match_score', 'Skill match score must be between 0 and 100.')
+
+        # Validate start_date is not after due_date
+        start_date = cleaned_data.get('start_date')
+        due_date = cleaned_data.get('due_date')
+        if start_date and due_date:
+            # Normalize both to comparable types (due_date may be datetime, start_date may be date)
+            from datetime import date as date_type, datetime as datetime_type
+            start_comparable = start_date
+            due_comparable = due_date
+            if isinstance(start_date, datetime_type) and isinstance(due_date, datetime_type):
+                pass  # both datetime, directly comparable
+            elif isinstance(start_date, date_type) and isinstance(due_date, datetime_type):
+                start_comparable = timezone.make_aware(
+                    datetime_type.combine(start_date, datetime_type.min.time()),
+                    timezone.get_current_timezone()
+                ) if timezone.is_naive(datetime_type.combine(start_date, datetime_type.min.time())) else datetime_type.combine(start_date, datetime_type.min.time())
+            if start_comparable > due_comparable:
+                # Format dates in a clear human-readable way to avoid DD-MM ambiguity
+                start_str = f"{start_date.day} {start_date.strftime('%b')} {start_date.year}" if hasattr(start_date, 'day') else str(start_date)
+                due_date_only = due_date.date() if hasattr(due_date, 'date') else due_date
+                due_str = f"{due_date_only.day} {due_date_only.strftime('%b')} {due_date_only.year}" if hasattr(due_date_only, 'day') else str(due_date_only)
+                self.add_error('start_date', f'Start date ({start_str}) cannot be after the due date ({due_str}). Please update both dates.')
+
         # Auto-calculate risk score if both likelihood and impact are provided
         if risk_likelihood is not None and risk_impact is not None:
             risk_score = risk_likelihood * risk_impact
@@ -735,12 +817,25 @@ class TaskSearchForm(forms.Form):
     
     def __init__(self, *args, **kwargs):
         board = kwargs.pop('board', None)
+        current_user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
         
         if board:
             self.fields['column'].queryset = Column.objects.filter(board=board)
-            # Show all users instead of just board members
-            self.fields['assignee'].queryset = User.objects.all().order_by('username')
+            # For demo boards: show only demo users + the current logged-in user.
+            # For regular boards: show only actual board members (RBAC).
+            from django.db.models import Q
+            if getattr(board, 'is_official_demo_board', False):
+                demo_q = Q(profile__is_demo_account=True)
+                if current_user:
+                    demo_q |= Q(id=current_user.id)
+                self.fields['assignee'].queryset = User.objects.filter(
+                    demo_q
+                ).distinct().order_by('username')
+            else:
+                self.fields['assignee'].queryset = User.objects.filter(
+                    Q(board_memberships__board=board) | Q(id=board.created_by_id)
+                ).distinct().order_by('username')
 
 
 

@@ -50,19 +50,361 @@ function initializeCharts() {
         return;
     }
     
-    // Chart.js configurations
+    // Chart.js configurations — text color follows the active theme so axis
+    // labels/legends are legible in dark mode (see static/js/chart-theme.js).
     Chart.defaults.font.family = 'Nunito';
-    Chart.defaults.color = '#858796';
+    Chart.defaults.color = (window.getChartTheme ? window.getChartTheme().textColor : '#858796');
     
-    // Initialize all charts
-    console.log('Starting chart initialization...');
+    // Check for Spectra dynamic chart configs
+    const configEl = document.getElementById('promoted-chart-configs');
+    if (configEl) {
+        try {
+            const chartConfigs = JSON.parse(configEl.textContent);
+            console.log('Spectra dynamic charts detected:', chartConfigs.length);
+            initializeDynamicCharts(chartConfigs);
+        } catch (e) {
+            console.error('Failed to parse promoted chart configs:', e);
+            initializeFallbackCharts();
+        }
+    } else {
+        initializeFallbackCharts();
+    }
+    
+    // Register every chart this page created with the shared theming helper so
+    // axis/tick/legend text recolors when the user toggles light/dark mode.
+    // These charts rely on Chart.defaults.color (set above) rather than
+    // per-chart color overrides, so PrizmCharts' recolor-on-toggle (which
+    // refreshes the defaults then calls chart.update) is enough to keep them
+    // legible in both themes. Without this they'd keep their build-time color
+    // and go near-invisible after a toggle.
+    registerChartsForThemeToggle();
+
+    chartsInitialized = true;
+    console.log('All charts initialized successfully');
+}
+
+/**
+ * Register all live Chart.js instances on this page with PrizmCharts so they
+ * recolor on displayModeChanged. Safe no-op if chart-theme.js isn't loaded.
+ * Uses Chart.instances (Chart.js v3/v4) so we don't have to thread a return
+ * value through every new Chart(...) call site in this file.
+ */
+function registerChartsForThemeToggle() {
+    if (!window.PrizmCharts || typeof window.PrizmCharts.register !== 'function') return;
+    if (typeof Chart === 'undefined' || !Chart.instances) return;
+    try {
+        var already = window.PrizmCharts._registered || [];
+        Object.keys(Chart.instances).forEach(function (key) {
+            var chart = Chart.instances[key];
+            if (chart && already.indexOf(chart) === -1) {
+                window.PrizmCharts.register(chart);
+            }
+        });
+    } catch (e) {
+        console.warn('Chart theme-toggle registration skipped:', e);
+    }
+}
+
+/**
+ * Initialize charts dynamically from Spectra config.
+ * Each config object has: id, title, type, data_key, label_field, value_field,
+ * color, border_color, index_axis, fill, use_priority_colors, use_item_colors
+ */
+function initializeDynamicCharts(configs) {
+    const DATA_MAP = {
+        // Standard existing datasets
+        'tasks_by_column':        'tasks-by-column-data',
+        'tasks_by_priority':      'tasks-by-priority-data',
+        'tasks_by_user':          'tasks-by-user-data',
+        'tasks_by_lean_category': 'tasks-by-lean-data',
+        'completed_tasks':        'completed-tasks-data',
+        // New type-specific datasets
+        'cycle_time_distribution': 'cycle-time-data',
+        'weekly_completion':       'weekly-completion-data',
+        'label_type_breakdown':    'label-type-data',
+        'backlog_age':             'backlog-age-data',
+        'stage_funnel':            'stage-funnel-data',
+        'on_time_vs_late':         'on-time-late-data',
+        'stage_time':              'stage-time-data',
+    };
+
+    const PRIORITY_COLORS = window.PrizmAccessibility ?
+        window.PrizmAccessibility.getPriorityColors() : {
+            'Urgent': 'rgba(220, 53, 69, 0.8)',
+            'High': 'rgba(255, 193, 7, 0.8)',
+            'Medium': 'rgba(54, 162, 235, 0.8)',
+            'Low': 'rgba(108, 117, 125, 0.8)'
+        };
+
+    // Amber gradient for backlog age chart (index 0=lightest, 3=darkest)
+    const AMBER_GRADIENT = [
+        'rgba(255, 193,   7, 0.55)',
+        'rgba(255, 152,   0, 0.70)',
+        'rgba(245, 124,   0, 0.85)',
+        'rgba(230,  74,  25, 1.00)',
+    ];
+
+    configs.forEach(function(cfg) {
+        const canvas = document.getElementById(cfg.id);
+        if (!canvas) {
+            console.warn('Canvas not found for dynamic chart:', cfg.id);
+            return;
+        }
+
+        var dataElId = DATA_MAP[cfg.data_key];
+        if (!dataElId) {
+            console.warn('Unknown data_key:', cfg.data_key);
+            return;
+        }
+
+        var dataEl = document.getElementById(dataElId);
+        if (!dataEl) {
+            console.warn('Data element not found:', dataElId);
+            return;
+        }
+
+        let rawData;
+        try {
+            rawData = JSON.parse(dataEl.textContent);
+        } catch (e) {
+            console.error('Failed to parse data for', cfg.id, e);
+            return;
+        }
+
+        // ── Special case: label_type_breakdown → with null-fallback + title_inferred footnote + all-Chore fallback ──
+        if (cfg.data_key === 'label_type_breakdown') {
+            // rawData may be null (no tasks at all)
+            var labelData = rawData;
+            var titleInferred = false;
+            var allChore = false;
+
+            if (labelData && labelData.length > 0) {
+                titleInferred = !!(labelData[0].title_inferred);
+                var bugCount     = (labelData.find(function(i) { return i.name === 'Bug / Fix';     }) || {}).count || 0;
+                var featureCount = (labelData.find(function(i) { return i.name === 'Feature';       }) || {}).count || 0;
+                allChore = (bugCount === 0 && featureCount === 0);
+            } else {
+                allChore = true; // no data → treat same as all-Chore
+            }
+
+            // All-Chore (or no data): fall back to priority doughnut
+            if (allChore) {
+                var fallbackEl = document.getElementById('tasks-by-priority-data');
+                var fbRaw = null;
+                if (fallbackEl) {
+                    try { fbRaw = JSON.parse(fallbackEl.textContent); } catch (_) {}
+                }
+                if (fbRaw && fbRaw.length > 0) {
+                    var fbLabels = fbRaw.map(function(i) { return i.priority || 'Unknown'; });
+                    var fbValues = fbRaw.map(function(i) { return i.count || 0; });
+                    var fbColors = fbRaw.map(function(i) { return PRIORITY_COLORS[i.priority] || 'rgba(108,117,125,0.8)'; });
+                    new Chart(canvas, {
+                        type: 'doughnut',
+                        data: { labels: fbLabels, datasets: [{ data: fbValues, backgroundColor: fbColors, borderColor: '#ffffff', borderWidth: 2 }] },
+                        options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: true, position: 'bottom' } } }
+                    });
+                    var noteAllChore = document.createElement('p');
+                    noteAllChore.style.cssText = 'font-size:12px;font-style:italic;color:#6c757d;text-align:center;margin-top:8px;margin-bottom:0;';
+                    noteAllChore.textContent = 'No bug or feature labels found — showing priority breakdown instead.';
+                    canvas.closest('.chart-container').parentElement.appendChild(noteAllChore);
+                    console.log('Dynamic chart (label all-Chore fallback to priority):', cfg.id);
+                } else {
+                    canvas.parentElement.innerHTML = '<div class="text-center py-5"><i class="fas fa-chart-pie fa-3x text-muted mb-3"></i><p class="text-muted">No label data available</p><small class="text-muted">Add task labels to see breakdown</small></div>';
+                }
+                return;
+            }
+
+            // Has real Bug/Feature data — render label doughnut
+            var ldLabels = labelData.map(function(i) { return i.name; });
+            var ldValues = labelData.map(function(i) { return i.count || 0; });
+            var ldColors = labelData.map(function(i) { return i.color || 'rgba(108,117,125,0.8)'; });
+            new Chart(canvas, {
+                type: 'doughnut',
+                data: { labels: ldLabels, datasets: [{ data: ldValues, backgroundColor: ldColors, borderColor: '#ffffff', borderWidth: 2 }] },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: true, position: 'bottom' } } }
+            });
+            if (titleInferred) {
+                var noteInferred = document.createElement('p');
+                noteInferred.style.cssText = 'font-size:12px;font-style:italic;color:#6c757d;text-align:center;margin-top:8px;margin-bottom:0;';
+                noteInferred.textContent = 'Classification inferred from task titles — apply labels for more accurate results.';
+                canvas.closest('.chart-container').parentElement.appendChild(noteInferred);
+            }
+            console.log('Dynamic chart (label breakdown):', cfg.id, titleInferred ? '(title-inferred)' : '(label-based)');
+            return;
+        }
+
+        // ── Special case: stacked_series (on_time_vs_late) ──
+        if (cfg.stacked_series) {
+            // null means not enough due-date data → fall back to completed_tasks trend
+            if (!rawData) {
+                var fallbackTrendEl = document.getElementById('completed-tasks-data');
+                if (fallbackTrendEl) {
+                    try { rawData = JSON.parse(fallbackTrendEl.textContent); } catch (e3) { rawData = null; }
+                }
+                if (rawData && rawData.length > 0) {
+                    var tLabels = rawData.map(function(i) { return i.date || 'Unknown'; });
+                    var tValues = rawData.map(function(i) { return i.count || 0; });
+                    new Chart(canvas, {
+                        type: 'bar',
+                        data: { labels: tLabels, datasets: [{ label: 'Completed', data: tValues, backgroundColor: 'rgba(40,167,69,0.8)', borderColor: 'rgba(40,167,69,1)', borderWidth: 1 }] },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+                    });
+                    // Append a note that due-date data is sparse
+                    var noteDiv = document.createElement('div');
+                    noteDiv.className = 'text-muted small text-center mt-2';
+                    noteDiv.textContent = 'Showing completion trend (insufficient due-date data for on-time split)';
+                    canvas.closest('.chart-container').parentElement.appendChild(noteDiv);
+                    console.log('Dynamic chart (on-time fallback to trend):', cfg.id);
+                } else {
+                    canvas.parentElement.innerHTML = '<div class="text-center py-5"><i class="fas fa-chart-bar fa-3x text-muted mb-3"></i><p class="text-muted">No data available</p></div>';
+                }
+                return;
+            }
+            // Render stacked bar: green = on_time, coral = late
+            var stackLabels  = rawData.map(function(i) { return i.date; });
+            var onTimeValues = rawData.map(function(i) { return i.on_time || 0; });
+            var lateValues   = rawData.map(function(i) { return i.late   || 0; });
+            new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: stackLabels,
+                    datasets: [
+                        { label: 'On Time', data: onTimeValues, backgroundColor: 'rgba(40, 167, 69, 0.8)',  borderColor: 'rgba(40, 167, 69, 1)',  borderWidth: 1 },
+                        { label: 'Late',    data: lateValues,   backgroundColor: 'rgba(255, 99, 132, 0.8)', borderColor: 'rgba(255, 99, 132, 1)', borderWidth: 1 },
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true, position: 'bottom' } },
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
+                    }
+                }
+            });
+            console.log('Dynamic chart (stacked on-time/late):', cfg.id);
+            return;
+        }
+
+        // ── Standard path ──
+        if (!rawData || rawData.length === 0) {
+            const container = canvas.parentElement;
+            container.innerHTML = '<div class="text-center py-5"><i class="fas fa-chart-bar fa-3x text-muted mb-3"></i><p class="text-muted">No data available</p></div>';
+            return;
+        }
+
+        const labels = rawData.map(function(item) { return item[cfg.label_field] || 'Unknown'; });
+        const values = rawData.map(function(item) { return item[cfg.value_field] || 0; });
+
+        // If all values are zero, show a friendly "no data" message instead of an empty chart
+        var allZero = values.every(function(v) { return v === 0; });
+        if (allZero) {
+            const container = canvas.parentElement;
+            container.innerHTML = '<div class="text-center py-5"><i class="fas fa-chart-pie fa-3x text-muted mb-3"></i><p class="text-muted">No data available yet</p><small class="text-muted">Data will appear once tasks are categorised</small></div>';
+            return;
+        }
+
+        // Determine colors
+        let bgColors, borderColors;
+        if (cfg.use_priority_colors) {
+            bgColors = rawData.map(function(item) {
+                return PRIORITY_COLORS[item[cfg.label_field]] || 'rgba(108, 117, 125, 0.8)';
+            });
+            borderColors = '#ffffff';
+        } else if (cfg.use_item_colors) {
+            bgColors = rawData.map(function(item) { return item.color || cfg.color || 'rgba(54, 162, 235, 0.8)'; });
+            borderColors = '#ffffff';
+        } else {
+            bgColors = cfg.color || 'rgba(54, 162, 235, 0.8)';
+            borderColors = cfg.border_color || 'rgba(54, 162, 235, 1)';
+        }
+
+        // ── Amber gradient override for backlog age chart ──
+        if (cfg.amber_gradient) {
+            bgColors     = rawData.map(function(item, idx) { return AMBER_GRADIENT[Math.min(idx, AMBER_GRADIENT.length - 1)]; });
+            borderColors = rawData.map(function(item, idx) { return AMBER_GRADIENT[Math.min(idx, AMBER_GRADIENT.length - 1)].replace(/[\d.]+\)$/, '1)'); });
+        }
+
+        var chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: (cfg.type === 'doughnut' || cfg.type === 'pie'),
+                    position: 'bottom'
+                }
+            }
+        };
+
+        if (cfg.type === 'bar' || cfg.type === 'line') {
+            if (cfg.index_axis === 'y') {
+                chartOptions.indexAxis = 'y';
+                chartOptions.scales = { x: { beginAtZero: true, ticks: { stepSize: 1 } } };
+            } else {
+                chartOptions.scales = { y: { beginAtZero: true, ticks: { stepSize: 1 } } };
+            }
+        }
+
+        if (cfg.type === 'doughnut') {
+            chartOptions.cutout = '65%';
+        }
+
+        var dataset = {
+            label: cfg.title || 'Tasks',
+            data: values,
+            backgroundColor: bgColors,
+            borderColor: borderColors,
+            borderWidth: (cfg.type === 'doughnut') ? 2 : 1,
+        };
+
+        if (cfg.type === 'line') {
+            dataset.fill = !!cfg.fill;
+            dataset.tension = 0.3;
+            dataset.pointRadius = 3;
+        }
+
+        var instance = new Chart(canvas, {
+            type: cfg.type,
+            data: { labels: labels, datasets: [dataset] },
+            options: chartOptions
+        });
+
+        // Store priority chart for accessibility updates
+        if (cfg.id === 'priorityChart') {
+            priorityChartInstance = instance;
+        }
+
+        // ── Estimated label: append "(Estimated)" to card header + uniform-values guard ──
+        if (cfg.estimated_label) {
+            // Guard: if all bar values are identical, the estimation is meaningless — show placeholder
+            var uniqueVals = new Set(values);
+            if (uniqueVals.size === 1) {
+                var container = canvas.closest('.card');
+                var chartContainer = canvas.parentElement;
+                chartContainer.innerHTML = '<div class="text-center py-4"><i class="fas fa-chart-bar fa-3x text-muted mb-3"></i><p class="text-muted mb-1">Stage-level timing requires task column history</p><small class="text-muted">Estimated values are uniform for this board — add task history to see per-stage breakdown.</small></div>';
+                console.log('Dynamic chart (stage time uniform — showing placeholder):', cfg.id);
+                return;
+            }
+            var cardHeader = canvas.closest('.card');
+            if (cardHeader) {
+                var h6 = cardHeader.querySelector('.card-header h6');
+                if (h6 && !h6.textContent.includes('(Estimated)')) {
+                    h6.textContent += ' (Estimated)';
+                }
+            }
+        }
+
+        console.log('Dynamic chart initialized:', cfg.id, cfg.type);
+    });
+}
+
+function initializeFallbackCharts() {
+    console.log('Using fallback chart initialization...');
     initializeColumnChart();
     initializePriorityChart();
     initializeUserChart();
     initializeLeanChart();
-    
-    chartsInitialized = true;
-    console.log('All charts initialized successfully');
 }
 
 function initializeColumnChart() {
@@ -503,7 +845,70 @@ function generateAISummary(boardId) {
     // Show loading state
     btn.disabled = true;
     spinner.classList.remove('d-none');
-    
+
+    // Use progressive disclosure if the library is loaded
+    if (typeof triggerAITask === 'function') {
+        placeholder.classList.add('d-none');
+        container.classList.remove('d-none');
+        // Spectra-styled loader, driven by the real WebSocket status/progress.
+        textElement.innerHTML =
+            '<div class="prizm-spectra-loading">' +
+                '<i class="fas fa-robot prizm-spectra-icon" aria-hidden="true"></i>' +
+                '<p id="ai-summary-status" class="prizm-spectra-message">Preparing…</p>' +
+                '<div class="prizm-spectra-progress">' +
+                    '<div id="ai-summary-progress" class="prizm-spectra-progress__bar" style="width:0%"></div>' +
+                '</div>' +
+            '</div>';
+
+        triggerAITask('/api/summarize-board-analytics/' + boardId + '/', {
+            method: 'GET',
+            // Wait longer than the backend's real limit (Gemini 120s network
+            // timeout) so a slow-but-successful summary is delivered instead of
+            // a misleading "timed out" while the backend keeps running and
+            // consumes AI quota. A genuinely stuck call surfaces Gemini's own
+            // timeout as a real ai_error well before this fires.
+            timeoutMs: 140000,
+            containerSelector: '#ai-summary-text',
+            statusSelector: '#ai-summary-status',
+            progressSelector: '#ai-summary-progress',
+            onStatus: function(msg) {
+                var el = document.getElementById('ai-summary-status');
+                if (el) el.textContent = msg;
+            },
+            onResult: function(data) {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+                if (data.summary) {
+                    var summaryData = data.summary;
+                    if (typeof summaryData === 'string') {
+                        var trimmed = summaryData.trim();
+                        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                            try { summaryData = JSON.parse(summaryData); } catch(e) {}
+                        }
+                    }
+                    var formatted;
+                    if (typeof summaryData === 'string') {
+                        formatted = formatAISummary(summaryData);
+                    } else if (summaryData && typeof summaryData === 'object') {
+                        formatted = formatStructuredAISummary(summaryData);
+                    } else {
+                        formatted = '<div class="alert alert-warning">Invalid summary format.</div>';
+                    }
+                    textElement.innerHTML = formatted;
+                    var downloadBtn = document.getElementById('download-pdf-summary');
+                    if (downloadBtn) downloadBtn.classList.remove('d-none');
+                }
+            },
+            onError: function(msg) {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+                textElement.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>' + msg + '</div>';
+            },
+        });
+        return;
+    }
+
+    // Fallback: synchronous fetch (original behavior)
     fetch(`/api/summarize-board-analytics/${boardId}/`, {
         method: 'GET',
         headers: {
@@ -664,7 +1069,42 @@ function analyzeWorkflow(boardId) {
     // Show loading state
     btn.disabled = true;
     spinner.classList.remove('d-none');
-    
+
+    // Use progressive disclosure if the library is loaded
+    if (typeof triggerAITask === 'function') {
+        placeholder.classList.add('d-none');
+        container.classList.remove('d-none');
+        // Spectra-styled loader, driven by the real WebSocket status/progress.
+        contentElement.innerHTML =
+            '<div class="prizm-spectra-loading">' +
+                '<i class="fas fa-robot prizm-spectra-icon" aria-hidden="true"></i>' +
+                '<p id="workflow-status" class="prizm-spectra-message">Preparing…</p>' +
+                '<div class="prizm-spectra-progress">' +
+                    '<div id="workflow-progress" class="prizm-spectra-progress__bar" style="width:0%"></div>' +
+                '</div>' +
+            '</div>';
+
+        triggerAITask('/api/analyze-workflow-optimization/', {
+            method: 'POST',
+            body: { board_id: boardId },
+            containerSelector: '#workflow-optimization-content',
+            statusSelector: '#workflow-status',
+            progressSelector: '#workflow-progress',
+            onResult: function(data) {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+                contentElement.innerHTML = formatWorkflowOptimization(data);
+            },
+            onError: function(msg) {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+                contentElement.innerHTML = '<div class="alert alert-danger">' + msg + '</div>';
+            },
+        });
+        return;
+    }
+
+    // Fallback: synchronous fetch (original behavior)
     fetch('/api/analyze-workflow-optimization/', {
         method: 'POST',
         headers: {
@@ -775,23 +1215,34 @@ function formatAISummary(summary) {
         return '<p>Error formatting summary</p>';
     }
     
-    // Convert basic markdown-like formatting to HTML
+    // Convert markdown formatting to HTML properly
     let formatted = summary
+        // Headers first (before bold processing)
+        .replace(/###\s(.*?)$/gm, '<h6 class="mt-3 mb-2" style="font-size: 0.95rem;">$1</h6>')
+        .replace(/##\s(.*?)$/gm, '<h6 class="mt-3 mb-2" style="font-size: 1rem;">$1</h6>')
+        // Bold (**text** or __text__)
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/###\s(.*?)$/gm, '<h5>$1</h5>')
-        .replace(/##\s(.*?)$/gm, '<h4>$1</h4>')
-        .replace(/^-\s(.*?)$/gm, '<li>$1</li>')
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/^\s*<li>/gm, '<ul><li>')
-        .replace(/<\/li>\s*$/gm, '</li></ul>');
+        .replace(/__(.*?)__/g, '<strong>$1</strong>')
+        // Italic (*text* or _text_) - single asterisks, not inside words
+        .replace(/(?<!\w)\*(.*?)\*(?!\w)/g, '<em>$1</em>')
+        // Clean up any remaining stray asterisks (e.g. from malformed markdown)
+        .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+        // List items
+        .replace(/^[-•]\s+(.*?)$/gm, '<li style="font-size: 0.9rem;">$1</li>')
+        // Paragraphs
+        .replace(/\n\n/g, '</p><p style="font-size: 0.9rem;">')
+        // Remove any remaining raw asterisks used as bullets
+        .replace(/^\*\s+/gm, '');
     
-    // Wrap in paragraphs
+    // Wrap list items in <ul>
+    formatted = formatted.replace(/(<li[^>]*>.*?<\/li>\s*)+/g, '<ul class="ps-3">$&</ul>');
+    
+    // Wrap in paragraphs if not already wrapped
     if (!formatted.startsWith('<')) {
-        formatted = '<p>' + formatted + '</p>';
+        formatted = '<p style="font-size: 0.9rem;">' + formatted + '</p>';
     }
     
-    return formatted;
+    return '<div class="ai-summary-formatted">' + formatted + '</div>';
 }
 
 function formatStructuredAISummary(summary) {
@@ -826,13 +1277,16 @@ function formatStructuredAISummary(summary) {
     }
     
     // This function handles structured JSON summaries with explainability
-    let html = '<div class="structured-ai-summary">';
+    let html = '<div class="structured-ai-summary" style="font-size: 0.9rem;">';
+    
+    // Generation timestamp
+    html += '<div class="text-muted small mb-3"><i class="fas fa-clock me-1"></i>Generated at ' + new Date().toLocaleString() + '</div>';
     
     // Executive Summary
     if (summary.executive_summary) {
         html += '<div class="mb-4">';
-        html += '<h5 class="text-primary"><i class="fas fa-chart-line me-2"></i>Executive Summary</h5>';
-        html += '<p class="lead">' + escapeHtml(summary.executive_summary) + '</p>';
+        html += '<h6 class="text-primary" style="font-size: 1rem;"><i class="fas fa-chart-line me-2"></i>Executive Summary</h6>';
+        html += '<p style="font-size: 0.95rem;">' + cleanAIText(summary.executive_summary) + '</p>';
         
         // Confidence and Quality Indicators
         if (summary.confidence_score || summary.analysis_quality) {
@@ -860,7 +1314,7 @@ function formatStructuredAISummary(summary) {
         html += '<h6 class="text-' + healthColor + '"><i class="fas fa-heartbeat me-2"></i>Project Health</h6>';
         html += '<span class="badge bg-' + healthColor + ' mb-2">' + escapeHtml(health.overall_score || 'Unknown').toUpperCase() + '</span>';
         if (health.score_reasoning) {
-            html += '<p class="text-muted small">' + escapeHtml(health.score_reasoning) + '</p>';
+            html += '<p class="text-muted small">' + cleanAIText(health.score_reasoning) + '</p>';
         }
         
         // Render health indicators if present
@@ -896,9 +1350,9 @@ function formatStructuredAISummary(summary) {
             const confBadge = insight.confidence ? '<span class="badge bg-secondary me-2">' + insight.confidence + '</span>' : '';
             html += '<div class="card mb-2 border-left-info">';
             html += '<div class="card-body py-2">';
-            html += '<p class="mb-1">' + confBadge + escapeHtml(insight.insight || 'Insight') + '</p>';
+            html += '<p class="mb-1">' + confBadge + cleanAIText(insight.insight || 'Insight') + '</p>';
             if (insight.evidence) {
-                html += '<small class="text-muted"><strong>Evidence:</strong> ' + escapeHtml(String(insight.evidence)) + '</small>';
+                html += '<small class="text-muted"><strong>Evidence:</strong> ' + cleanAIText(String(insight.evidence)) + '</small>';
             }
             html += '</div></div>';
         });
@@ -914,9 +1368,9 @@ function formatStructuredAISummary(summary) {
             const severityColors = {critical: 'danger', high: 'warning', medium: 'info', low: 'secondary'};
             const severityColor = severityColors[concern.severity] || 'secondary';
             html += '<div class="alert alert-' + severityColor + ' py-2 mb-2">';
-            html += '<strong>' + escapeHtml(concern.concern || 'Concern') + '</strong>';
+            html += '<strong>' + cleanAIText(concern.concern || 'Concern') + '</strong>';
             if (concern.recommended_action) {
-                html += '<p class="mb-0 mt-1 small"><i class="fas fa-arrow-right me-1"></i>' + escapeHtml(String(concern.recommended_action)) + '</p>';
+                html += '<p class="mb-0 mt-1 small"><i class="fas fa-arrow-right me-1"></i>' + cleanAIText(String(concern.recommended_action)) + '</p>';
             }
             html += '</div>';
         });
@@ -932,32 +1386,39 @@ function formatStructuredAISummary(summary) {
             html += '<div class="card mb-2">';
             html += '<div class="card-body py-2">';
             html += '<div class="d-flex justify-content-between align-items-start">';
-            html += '<div><strong>' + (idx + 1) + '. ' + escapeHtml(rec.recommendation || 'Recommendation') + '</strong></div>';
+            html += '<div><strong>' + (idx + 1) + '. ' + cleanAIText(rec.recommendation || 'Recommendation') + '</strong></div>';
             if (rec.implementation_effort) {
                 const effortColor = rec.implementation_effort === 'low' ? 'success' : rec.implementation_effort === 'medium' ? 'warning' : 'danger';
                 html += '<span class="badge bg-' + effortColor + '">' + String(rec.implementation_effort) + ' effort</span>';
             }
             html += '</div>';
             if (rec.expected_impact) {
-                html += '<p class="mb-0 mt-1 small text-muted">' + escapeHtml(String(rec.expected_impact)) + '</p>';
+                html += '<p class="mb-0 mt-1 small text-muted">' + cleanAIText(String(rec.expected_impact)) + '</p>';
             }
             html += '</div></div>';
         });
         html += '</div>';
     }
     
-    // Lean Analysis
+    // Lean Analysis — merge into Areas of Concern if minimal data
     if (summary.lean_analysis) {
         const lean = summary.lean_analysis;
+        const hasWaste = lean.waste_identification && Array.isArray(lean.waste_identification) && lean.waste_identification.length > 0;
         html += '<div class="mb-4">';
-        html += '<h6 class="text-warning"><i class="fas fa-cogs me-2"></i>Lean Six Sigma Analysis</h6>';
+        html += '<h6 class="text-warning"><i class="fas fa-cogs me-2"></i>Process Efficiency (Lean Analysis)</h6>';
         if (lean.value_stream_efficiency) {
-            html += '<p><strong>Value Stream Efficiency:</strong> <span class="badge bg-info">' + String(lean.value_stream_efficiency).toUpperCase() + '</span></p>';
+            const effLevel = String(lean.value_stream_efficiency).toLowerCase();
+            const effColor = effLevel === 'high' ? 'success' : effLevel === 'medium' ? 'warning' : 'danger';
+            html += '<p><strong>Value Stream Efficiency:</strong> <span class="badge bg-' + effColor + '">' + String(lean.value_stream_efficiency).toUpperCase() + '</span>';
+            if (!hasWaste) {
+                html += ' <span class="text-muted small ms-2">— Measures how much of your workflow adds direct value vs. waiting/rework time</span>';
+            }
+            html += '</p>';
         }
-        if (lean.waste_identification && Array.isArray(lean.waste_identification) && lean.waste_identification.length > 0) {
+        if (hasWaste) {
             html += '<p class="mb-1"><strong>Waste Identified:</strong></p><ul class="small">';
             lean.waste_identification.forEach(waste => {
-                if (!waste) return; // Skip null/undefined items
+                if (!waste) return;
                 html += '<li>' + escapeHtml(waste.waste_type || 'Waste') + ' (' + (waste.tasks_affected || 0) + ' tasks)</li>';
             });
             html += '</ul>';
@@ -976,7 +1437,7 @@ function formatStructuredAISummary(summary) {
             const urgencyColor = urgencyColors[item.urgency] || 'secondary';
             const urgencyText = String(item.urgency || 'planned').replace('_', ' ');
             html += '<li class="mb-2">';
-            html += escapeHtml(item.action || 'Action item');
+            html += cleanAIText(item.action || 'Action item');
             html += ' <span class="badge bg-' + urgencyColor + ' ms-2">' + urgencyText + '</span>';
             html += '</li>';
         });
@@ -1217,4 +1678,20 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+/**
+ * Clean AI-generated text by escaping HTML and stripping markdown formatting.
+ * Use this instead of escapeHtml for AI-generated text that may contain asterisks.
+ */
+function cleanAIText(text) {
+    let cleaned = escapeHtml(text);
+    // Strip markdown: **bold** → bold, *italic* → italic, ## headers → text
+    cleaned = cleaned
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/^#{1,6}\s+/gm, '')
+        .replace(/__([^_]+)__/g, '$1')
+        .replace(/_([^_]+)_/g, '$1');
+    return cleaned;
 }

@@ -40,8 +40,15 @@
         text-align: center;
         transition: transform 0.2s;
     }
+    .stat-card {
+        cursor: pointer;
+    }
     .stat-card:hover {
         transform: scale(1.05);
+    }
+    .stat-card.active-filter {
+        outline: 3px solid rgba(255,255,255,0.7);
+        outline-offset: 2px;
     }
     .stat-number {
         font-size: 2.5rem;
@@ -69,16 +76,16 @@
         border-left: 3px solid #007bff;
         padding: 0.75rem;
         margin-bottom: 0.5rem;
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-radius: 4px;
         cursor: pointer;
         transition: background 0.2s;
     }
     .notification-item:hover {
-        background: #e9ecef;
+        background: var(--border-color);
     }
     .notification-item.unread {
-        background: #e7f3ff;
+        background: rgba(13, 110, 253, 0.12);
         font-weight: 500;
     }
     .filter-btn {
@@ -98,10 +105,6 @@
 {% endblock %}
 
 {% block content %}
-<!-- Demo Mode Banner -->
-{% if is_demo_mode %}
-    {% include 'demo/partials/demo_banner.html' %}
-{% endif %}
 
 <div class="container-fluid py-4">
     <!-- Header -->
@@ -125,9 +128,9 @@
             {% endif %}
         </div>
         <div class="col-md-4 text-end">
-            <button onclick="goBack()" class="btn btn-outline-secondary me-2">
+            <a href="{% url 'dashboard' %}" class="btn-prizm-back me-2">
                 <i class="fas fa-arrow-left me-1"></i> Back
-            </button>
+            </a>
             <button class="btn btn-primary me-2" onclick="triggerDetection()">
                 <i class="fas fa-sync-alt"></i> Scan Now
             </button>
@@ -140,25 +143,25 @@
     <!-- Statistics Cards -->
     <div class="row mb-4">
         <div class="col-md-3">
-            <div class="stat-card conflicts text-white">
+            <div class="stat-card conflicts text-white" onclick="filterBySeverity('all')" title="Show all active conflicts">
                 <p class="stat-number">{{ stats.total_active }}</p>
                 <p class="stat-label mb-0">Active Conflicts</p>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="stat-card critical text-white">
+            <div class="stat-card critical text-white" onclick="filterBySeverity('critical')" title="Filter critical conflicts">
                 <p class="stat-number">{{ stats.by_severity.critical }}</p>
                 <p class="stat-label mb-0">Critical</p>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="stat-card high-priority text-white">
+            <div class="stat-card high-priority text-white" onclick="filterBySeverity('high')" title="Filter high priority conflicts">
                 <p class="stat-number">{{ stats.by_severity.high }}</p>
                 <p class="stat-label mb-0">High Priority</p>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="stat-card notifications text-white">
+            <div class="stat-card notifications text-white" onclick="scrollToNotifications()" title="View your notifications">
                 <p class="stat-number">{{ stats.unread_notifications }}</p>
                 <p class="stat-label mb-0">Notifications</p>
             </div>
@@ -168,7 +171,7 @@
     <div class="row">
         <!-- Main Conflict List -->
         <div class="col-md-8">
-            <div class="card shadow-sm">
+            <div class="card shadow-sm" id="conflicts-list-card">
                 <div class="card-header bg-white">
                     <div class="d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Active Conflicts</h5>
@@ -191,7 +194,7 @@
                 <div class="card-body" style="max-height: 600px; overflow-y: auto;">
                     {% if conflicts %}
                         {% for conflict in conflicts %}
-                        <div class="conflict-card card mb-3 {{ conflict.severity }}" data-type="{{ conflict.conflict_type }}">
+                        <div class="conflict-card card mb-3 {{ conflict.severity }}" data-type="{{ conflict.conflict_type }}" data-severity="{{ conflict.severity }}">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start mb-2">
                                     <h6 class="mb-0">
@@ -225,7 +228,7 @@
                                     </div>
                                     <div>
                                         <small class="text-muted">
-                                            <i class="fas fa-clock"></i> {{ conflict.detected_at|timesince }} ago
+                                            <i class="fas fa-clock"></i> <span class="js-timeago" data-timestamp="{{ conflict.detected_at|date:'c' }}">{{ conflict.detected_at|timesince }} ago</span>
                                         </small>
                                     </div>
                                 </div>
@@ -266,7 +269,7 @@
         <!-- Sidebar -->
         <div class="col-md-4">
             <!-- Notifications -->
-            <div class="card shadow-sm mb-3">
+            <div class="card shadow-sm mb-3" id="notifications-panel">
                 <div class="card-header bg-white">
                     <h6 class="mb-0">
                         <i class="fas fa-bell"></i> Your Notifications
@@ -284,7 +287,7 @@
                                 <div>
                                     <strong>{{ notif.conflict.get_conflict_type_display }} Conflict</strong>
                                     <p class="mb-1 small">{{ notif.conflict.title }}</p>
-                                    <small class="text-muted">{{ notif.sent_at|timesince }} ago</small>
+                                    <small class="text-muted js-timeago" data-timestamp="{{ notif.sent_at|date:'c' }}">{{ notif.sent_at|timesince }} ago</small>
                                 </div>
                                 <span class="badge bg-{{ notif.conflict.get_severity_color }}">
                                     {{ notif.conflict.get_severity_display }}
@@ -329,7 +332,7 @@
                                 {% endfor %}
                             </div>
                             {% endif %}
-                            <small class="text-muted">{{ conflict.resolved_at|timesince }} ago</small>
+                            <small class="text-muted js-timeago" data-timestamp="{{ conflict.resolved_at|date:'c' }}">{{ conflict.resolved_at|timesince }} ago</small>
                         </div>
                         {% endfor %}
                     {% else %}
@@ -397,12 +400,90 @@
 <script>
 let currentConflictId = null;
 
+// ── Live "time ago" timestamps ────────────────────────────────────────────
+// Re-render every element carrying a machine-readable data-timestamp so the
+// relative time stays accurate while the user sits on the page. Pure frontend,
+// no server round-trips.
+function formatTimeAgo(isoString) {
+    const then = new Date(isoString);
+    if (isNaN(then.getTime())) return null;
+    let seconds = Math.floor((Date.now() - then.getTime()) / 1000);
+    if (seconds < 0) seconds = 0;
+    const units = [
+        ['year', 31536000],
+        ['month', 2592000],
+        ['week', 604800],
+        ['day', 86400],
+        ['hour', 3600],
+        ['minute', 60],
+    ];
+    for (const [name, secs] of units) {
+        const value = Math.floor(seconds / secs);
+        if (value >= 1) {
+            return value + ' ' + name + (value === 1 ? '' : 's') + ' ago';
+        }
+    }
+    return 'just now';
+}
+
+function refreshTimeAgo() {
+    document.querySelectorAll('.js-timeago').forEach(el => {
+        const ts = el.dataset.timestamp;
+        if (!ts) return;
+        const text = formatTimeAgo(ts);
+        if (text) el.textContent = text;
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    refreshTimeAgo();
+    setInterval(refreshTimeAgo, 60000);
+});
+
+// Filter by severity (stat card clicks)
+function filterBySeverity(severity) {
+    // Clear active state on all stat cards
+    document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active-filter'));
+    // Highlight the clicked card
+    const cardMap = { all: 0, critical: 1, high: 2 };
+    if (severity in cardMap) {
+        document.querySelectorAll('.stat-card')[cardMap[severity]].classList.add('active-filter');
+    }
+    // Reset the type filter buttons to 'All'
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.filter-btn[data-filter="all"]').classList.add('active');
+    // Show/hide conflict cards by severity
+    document.querySelectorAll('.conflict-card').forEach(card => {
+        if (severity === 'all' || card.dataset.severity === severity) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+    // Scroll to the conflicts list
+    const listCard = document.getElementById('conflicts-list-card');
+    if (listCard) listCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Scroll to notifications panel
+function scrollToNotifications() {
+    const panel = document.getElementById('notifications-panel');
+    if (panel) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        panel.style.outline = '2px solid #0891b2';
+        panel.style.outlineOffset = '2px';
+        setTimeout(() => { panel.style.outline = ''; panel.style.outlineOffset = ''; }, 1500);
+    }
+}
+
 // Filter conflicts
 document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.addEventListener('click', function() {
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         this.classList.add('active');
         
+        // Clear severity filter highlight when using type filters
+        document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active-filter'));
         const filter = this.dataset.filter;
         document.querySelectorAll('.conflict-card').forEach(card => {
             if (filter === 'all' || card.dataset.type === filter) {
@@ -417,7 +498,7 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
 // Trigger detection for all boards
 function triggerDetection() {
     if (confirm('This will scan all boards for conflicts. Continue?')) {
-        showLoading('Scanning for conflicts...');
+        var scanHandle = showScanOverlay('Scanning all boards for conflicts\u2026');
         // In production, trigger via API
         fetch('/conflicts/trigger/all/', {
             method: 'POST',
@@ -426,15 +507,15 @@ function triggerDetection() {
             }
         }).then(response => response.json())
           .then(data => {
-              hideLoading();
               if (data.success) {
-                  alert('Conflict detection started! Page will refresh shortly.');
-                  setTimeout(() => location.reload(), 3000);
+                  // Keep overlay running — backend scan takes ~30s; reload when ready
+                  setTimeout(() => location.reload(), 32000);
               } else {
+                  scanHandle.remove();
                   alert('Error: ' + data.error);
               }
           }).catch(error => {
-              hideLoading();
+              scanHandle.remove();
               alert('Error starting detection');
           });
     }
@@ -447,8 +528,11 @@ function scanBoard() {
         alert('Please select a board');
         return;
     }
-    
-    showLoading('Scanning board...');
+
+    const boardSelect = document.getElementById('boardSelect');
+    const boardName = boardSelect.options[boardSelect.selectedIndex].text;
+    var scanHandle = showScanOverlay('Scanning \u201c' + boardName + '\u201d for conflicts\u2026');
+
     fetch(`/conflicts/trigger/${boardId}/`, {
         method: 'POST',
         headers: {
@@ -456,16 +540,15 @@ function scanBoard() {
         }
     }).then(response => response.json())
       .then(data => {
-          hideLoading();
           if (data.success) {
-              alert(data.message);
-              // Redirect to filtered view showing only this board's conflicts
-              window.location.href = `/conflicts/?board_id=${data.board_id}`;
+              // Keep overlay running — redirect when scan results are ready
+              setTimeout(() => { window.location.href = `/conflicts/?board_id=${data.board_id}`; }, 25000);
           } else {
+              scanHandle.remove();
               alert('Error: ' + data.error);
           }
       }).catch(error => {
-          hideLoading();
+          scanHandle.remove();
           alert('Error scanning board');
       });
 }
@@ -522,26 +605,44 @@ function viewConflict(conflictId, notificationId) {
 }
 
 // Loading helpers
-function showLoading(message) {
-    // Simple loading indicator
-    const loading = document.createElement('div');
-    loading.id = 'loadingOverlay';
-    loading.innerHTML = `
-        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
-                    background: rgba(0,0,0,0.5); z-index: 9999; 
-                    display: flex; align-items: center; justify-content: center;">
-            <div style="background: white; padding: 2rem; border-radius: 10px; text-align: center;">
-                <div class="spinner-border text-primary mb-2" role="status"></div>
-                <p class="mb-0">${message}</p>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(loading);
+var _conflictLoadingHandle = null;
+
+function showScanOverlay(titleText) {
+    if (_conflictLoadingHandle) {
+        _conflictLoadingHandle.remove();
+    }
+    var overlay = document.createElement('div');
+    overlay.className = 'prizm-loading-overlay';
+    overlay.innerHTML =
+        '<div class="prizm-loading-container">' +
+            '<div class="prizm-spinner prizm-spinner--lg"></div>' +
+            '<p class="prizm-scan-title"></p>' +
+            '<p class="prizm-loading-message"></p>' +
+        '</div>';
+    overlay.querySelector('.prizm-scan-title').textContent = titleText;
+    document.body.appendChild(overlay);
+
+    var msgEl = overlay.querySelector('.prizm-loading-message');
+    var rotateHandle = PrizmLoading.rotateMessages(
+        msgEl,
+        PrizmLoading.messages.conflictScan,
+        32000
+    );
+
+    _conflictLoadingHandle = {
+        remove: function () {
+            rotateHandle.stop();
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            _conflictLoadingHandle = null;
+        }
+    };
+    return _conflictLoadingHandle;
 }
 
 function hideLoading() {
-    const loading = document.getElementById('loadingOverlay');
-    if (loading) loading.remove();
+    if (_conflictLoadingHandle) {
+        _conflictLoadingHandle.remove();
+    }
 }
 </script>
 {% endblock %}

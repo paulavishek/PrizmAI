@@ -46,6 +46,12 @@ def generate_scope_autopsy(self, report_id):
     board = report.board
     user = report.created_by
 
+    # Reset to generating on retry (report may have been marked failed by a previous attempt)
+    if report.status not in ('generating', 'complete'):
+        report.status = 'generating'
+        report.ai_summary = ''
+        report.save(update_fields=['status', 'ai_summary'])
+
     try:
         # 2. Collect baseline
         baseline = calculate_baseline(board)
@@ -57,7 +63,7 @@ def generate_scope_autopsy(self, report_id):
         events = estimate_cost_impact(events, board)
 
         # 4. Compute final numbers
-        final_task_count = Task.objects.filter(column__board=board).count()
+        final_task_count = Task.objects.filter(column__board=board, item_type='task').count()
         report.final_task_count = final_task_count
 
         if baseline['task_count'] > 0:
@@ -124,9 +130,13 @@ def generate_scope_autopsy(self, report_id):
         report.save()
 
         # 9. Create ScopeTimelineEvent records
+        # Clamp cumulative to actual task count to avoid contradictions
+        actual_task_count = report.final_task_count
         cumulative = baseline['task_count']
         for e in events:
             cumulative += e['net_task_change']
+            if cumulative > actual_task_count:
+                cumulative = actual_task_count
             ScopeTimelineEvent.objects.create(
                 report=report,
                 event_date=e['date'],
@@ -221,7 +231,7 @@ def _get_past_scope_patterns(board, user):
         # Get boards accessible to user
         if user:
             user_board_ids = set(
-                user.member_boards.values_list('id', flat=True)
+                Board.objects.filter(memberships__user=user).values_list('id', flat=True)
             ) | set(
                 user.created_boards.values_list('id', flat=True)
             )
@@ -257,12 +267,10 @@ def _get_past_scope_patterns(board, user):
 
 def _call_gemini_for_autopsy(board_snapshot, events, past_scope_notes, project_context):
     """
-    Call Gemini for forensic scope analysis.
+    Call AI router for forensic scope analysis.
     Returns parsed JSON dict with ai_summary, pattern_analysis, recommendations, etc.
     """
-    import google.generativeai as genai
-
-    genai.configure(api_key=settings.GEMINI_API_KEY)
+    from ai_assistant.utils.ai_router import AIRouter
 
     system_prompt = (
         "You are a forensic project analyst specializing in scope creep analysis. "
@@ -335,21 +343,23 @@ def _call_gemini_for_autopsy(board_snapshot, events, past_scope_notes, project_c
         "}"
     )
 
-    model = genai.GenerativeModel(
-        'gemini-2.5-flash',
-        system_instruction=system_prompt,
+    router = AIRouter()
+
+    from kanban_board.ai_cache import get_cached_ai_response
+
+    full_prompt = f"{system_prompt}\n---\n{user_prompt}"
+    raw = get_cached_ai_response(
+        prompt=full_prompt,
+        model_call=lambda: router.complete(
+            prompt=user_prompt,
+            user=None,  # Celery background task — no user context
+            system_prompt=system_prompt,
+            complexity='complex',
+        )['text'],
+        operation='scope_autopsy',
     )
-
-    generation_config = {
-        'temperature': 0.3,
-        'top_p': 0.8,
-        'top_k': 40,
-        'max_output_tokens': 4096,
-        'response_mime_type': 'application/json',
-    }
-
-    response = model.generate_content(user_prompt, generation_config=generation_config)
-    raw = response.text.strip()
+    if not raw:
+        raise RuntimeError('AI scope autopsy returned no response')
 
     # Strip markdown fences if accidentally returned
     if '```json' in raw:
@@ -443,8 +453,11 @@ def _create_autopsy_memory_node(report, ai_result, user):
     """
     try:
         from knowledge_graph.models import MemoryNode
+        from knowledge_graph.demo_guard import is_demo_board
 
         board = report.board
+        if is_demo_board(board):
+            return None  # demo memory is curated/deterministic — no live auto-capture
         primary_driver = ai_result.get('primary_scope_driver', 'Unknown')
         growth = report.total_scope_growth_percentage
 
@@ -481,7 +494,7 @@ def _create_autopsy_memory_node(report, ai_result, user):
         # Check for cross-project pattern count
         if user:
             user_board_ids = set(
-                user.member_boards.values_list('id', flat=True)
+                Board.objects.filter(memberships__user=user).values_list('id', flat=True)
             ) | set(
                 user.created_boards.values_list('id', flat=True)
             )

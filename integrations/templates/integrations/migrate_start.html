@@ -1,0 +1,257 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Migrate from another tool{% endblock %}
+
+{% block content %}
+<div class="container mt-4" id="migrate-app">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h3><i class="bi bi-box-arrow-in-down-right me-2"></i>Migrate a project into PrizmAI</h3>
+          <p class="text-muted mb-0">Connect your old tool and we'll copy the whole project across — then run an instant AI audit.</p>
+        </div>
+        <a href="{% url 'dashboard' %}" class="btn-prizm-back"><i class="bi bi-arrow-left"></i> Back</a>
+      </div>
+
+      {% csrf_token %}
+      {{ providers|json_script:"providers-json" }}
+
+      {# ---- Step 1: pick a provider ---- #}
+      <div class="card mb-4" id="step-provider">
+        <div class="card-body">
+          <p class="fw-semibold mb-3">1. Which tool are you coming from?</p>
+          <div class="row g-2">
+            {% for p in providers %}
+            <div class="col-6 col-md-4">
+              <button type="button"
+                      class="btn w-100 provider-btn {% if p.supported %}btn-outline-primary{% else %}btn-outline-secondary{% endif %}"
+                      data-provider="{{ p.id }}"
+                      data-needs-site="{{ p.needs_site|yesno:'1,' }}"
+                      data-needs-email="{{ p.needs_email|yesno:'1,' }}"
+                      data-site-hint="{{ p.site_hint|default:'' }}"
+                      data-token-url="{{ p.token_url|default:'' }}"
+                      {% if not p.supported %}disabled title="Coming soon"{% endif %}>
+                {{ p.label }}{% if not p.supported %} <span class="badge bg-secondary ms-1">soon</span>{% endif %}
+              </button>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      {# ---- Step 2: credentials ---- #}
+      <div class="card mb-4 d-none" id="step-credentials">
+        <div class="card-body">
+          <p class="fw-semibold mb-3">2. Connect your <span id="cred-provider-name">account</span></p>
+
+          {# What to expect — populated per provider #}
+          <div class="alert alert-info d-none" id="expectations">
+            <p class="fw-semibold mb-2"><i class="bi bi-info-circle me-1"></i>What to expect</p>
+            <ul class="mb-0 ps-3" id="expectations-list"></ul>
+          </div>
+
+          <div class="mb-3" id="site-group">
+            <label class="form-label">Site URL</label>
+            <input type="url" class="form-control" id="base_url" placeholder="https://your-team.atlassian.net">
+          </div>
+          <div class="mb-3" id="email-group">
+            <label class="form-label">Account email</label>
+            <input type="email" class="form-control" id="account_email" placeholder="you@company.com">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">API token</label>
+            <input type="password" class="form-control" id="api_token" placeholder="Paste your API token" autocomplete="off">
+            <div class="form-text">
+              Your token is encrypted before it's stored and never shown again.
+              <a href="#" id="token-help-link" target="_blank" rel="noopener" class="d-none">How do I create a token?</a>
+            </div>
+          </div>
+
+          <div class="alert alert-danger d-none mt-3" id="connect-error"></div>
+
+          <button type="button" class="btn btn-primary mt-2" id="connect-btn">
+            <i class="bi bi-plug me-1"></i> Connect &amp; find projects
+          </button>
+        </div>
+      </div>
+
+      {# ---- Step 3: pick a project ---- #}
+      <div class="card mb-4 d-none" id="step-projects">
+        <div class="card-body">
+          <p class="fw-semibold mb-1">3. Choose a project to migrate</p>
+          <p class="text-muted small">Connected as <span id="account-label" class="fw-semibold"></span>.</p>
+          <div class="mb-3">
+            <select class="form-select" id="project-select"></select>
+          </div>
+          <button type="button" class="btn btn-success" id="migrate-btn">
+            <i class="bi bi-rocket-takeoff me-1"></i> Start migration
+          </button>
+        </div>
+      </div>
+
+      {# ---- Step 4: progress ---- #}
+      <div class="card mb-4 d-none" id="step-progress">
+        <div class="card-body">
+          <p class="fw-semibold mb-3" id="progress-message">Starting…</p>
+          <div class="progress" style="height: 22px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" id="progress-bar"
+                 role="progressbar" style="width: 0%;">0%</div>
+          </div>
+          <div class="alert alert-danger d-none mt-3" id="progress-error"></div>
+          <div class="alert alert-success d-none mt-3" id="progress-done">
+            Done! Redirecting to your migrated project…
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+  const $ = (id) => document.getElementById(id);
+
+  const state = { provider: null, connectionId: null };
+
+  // Per-provider metadata (incl. "what to expect") from the server.
+  let providersById = {};
+  try {
+    const parsed = JSON.parse(document.getElementById('providers-json').textContent);
+    parsed.forEach((p) => { providersById[p.id] = p; });
+  } catch (e) { /* no-op */ }
+
+  function show(id) { $(id).classList.remove('d-none'); }
+  function hide(id) { $(id).classList.add('d-none'); }
+
+  async function postForm(url, data) {
+    const body = new URLSearchParams(data);
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    return resp.json();
+  }
+
+  // Step 1 -> 2
+  document.querySelectorAll('.provider-btn').forEach((btn) => {
+    if (btn.disabled) return;
+    btn.addEventListener('click', () => {
+      state.provider = btn.dataset.provider;
+      $('cred-provider-name').textContent = btn.textContent.trim();
+      $('site-group').classList.toggle('d-none', btn.dataset.needsSite !== '1');
+      $('email-group').classList.toggle('d-none', btn.dataset.needsEmail !== '1');
+
+      // Populate "what to expect" for the chosen tool.
+      const meta = providersById[state.provider] || {};
+      const items = meta.expectations || [];
+      const list = $('expectations-list');
+      list.innerHTML = '';
+      items.forEach((html) => {
+        const li = document.createElement('li');
+        li.innerHTML = html;  // trusted server-provided copy
+        list.appendChild(li);
+      });
+      $('expectations').classList.toggle('d-none', items.length === 0);
+      if (btn.dataset.siteHint) $('base_url').placeholder = btn.dataset.siteHint;
+      const help = $('token-help-link');
+      if (btn.dataset.tokenUrl) { help.href = btn.dataset.tokenUrl; help.classList.remove('d-none'); }
+      else { help.classList.add('d-none'); }
+      show('step-credentials');
+      $('step-credentials').scrollIntoView({ behavior: 'smooth' });
+    });
+  });
+
+  // Step 2 -> 3
+  $('connect-btn').addEventListener('click', async () => {
+    const btn = $('connect-btn');
+    hide('connect-error');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Connecting…';
+    try {
+      const data = await postForm("{% url 'integrations:migrate_connect' %}", {
+        provider: state.provider,
+        base_url: $('base_url').value,
+        account_email: $('account_email').value,
+        api_token: $('api_token').value,
+      });
+      if (!data.ok) {
+        $('connect-error').textContent = data.error || 'Could not connect.';
+        show('connect-error');
+        return;
+      }
+      state.connectionId = data.connection_id;
+      $('account-label').textContent = data.account || '(connected)';
+      const sel = $('project-select');
+      sel.innerHTML = '';
+      (data.projects || []).forEach((p) => {
+        const opt = document.createElement('option');
+        opt.value = p.id; opt.textContent = p.name + ' (' + p.id + ')';
+        sel.appendChild(opt);
+      });
+      if (!sel.options.length) {
+        $('connect-error').textContent = 'No projects found for this account.';
+        show('connect-error');
+        return;
+      }
+      show('step-projects');
+      $('step-projects').scrollIntoView({ behavior: 'smooth' });
+    } catch (e) {
+      $('connect-error').textContent = 'Something went wrong. Please try again.';
+      show('connect-error');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="bi bi-plug me-1"></i> Connect &amp; find projects';
+    }
+  });
+
+  // Step 3 -> 4
+  $('migrate-btn').addEventListener('click', async () => {
+    const sel = $('project-select');
+    const projectId = sel.value;
+    const projectName = sel.options[sel.selectedIndex].textContent.replace(/\s*\([^)]*\)\s*$/, '');
+    show('step-progress');
+    $('step-progress').scrollIntoView({ behavior: 'smooth' });
+    const data = await postForm("{% url 'integrations:migrate_run' %}", {
+      connection_id: state.connectionId,
+      project_id: projectId,
+      project_name: projectName,
+    });
+    if (!data.ok) {
+      $('progress-error').textContent = data.error || 'Could not start migration.';
+      show('progress-error');
+      return;
+    }
+    pollStatus(data.task_id);
+  });
+
+  function pollStatus(taskId) {
+    const url = "{% url 'integrations:migrate_status' 'TASK_ID' %}".replace('TASK_ID', taskId);
+    const tick = async () => {
+      let data;
+      try { data = await (await fetch(url)).json(); } catch (e) { setTimeout(tick, 2000); return; }
+      const pct = data.percent || 0;
+      const bar = $('progress-bar');
+      bar.style.width = pct + '%'; bar.textContent = pct + '%';
+      $('progress-message').textContent = data.message || 'Working…';
+      if (data.state === 'error') {
+        $('progress-error').textContent = data.message || 'Migration failed.';
+        show('progress-error');
+        bar.classList.add('bg-danger');
+        return;
+      }
+      if (data.state === 'done') {
+        show('progress-done');
+        if (data.redirect_url) setTimeout(() => { window.location.href = data.redirect_url; }, 1200);
+        return;
+      }
+      setTimeout(tick, 2000);
+    };
+    tick();
+  }
+})();
+</script>
+{% endblock %}

@@ -7,7 +7,7 @@
 <style>
     .roi-positive { color: #28a745; }
     .roi-negative { color: #dc3545; }
-    .roi-neutral { color: #6c757d; }
+    .roi-neutral { color: var(--text-muted); }
     
     .metric-card {
         border-left: 4px solid #28a745;
@@ -43,15 +43,15 @@
                     <h2><i class="fas fa-chart-bar me-2"></i>ROI Dashboard</h2>
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb">
-                            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}">Dashboard</a></li>
-                            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}">{{ board.name }}</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
                             <li class="breadcrumb-item"><a href="{% url 'budget_dashboard' board.id %}">Budget</a></li>
                             <li class="breadcrumb-item active">ROI</li>
                         </ol>
                     </nav>
                 </div>
                 <div>
-                    <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-secondary me-2">
+                    <a href="{% url 'budget_dashboard' board.id %}" class="btn-prizm-back me-2">
                         <i class="fas fa-arrow-left"></i> Back to Budget
                     </a>
                     <a href="{% url 'budget_analytics' board.id %}" class="btn btn-info">
@@ -93,9 +93,9 @@
         <div class="col-md-3">
             <div class="card metric-card">
                 <div class="card-body">
-                    <h6 class="text-muted mb-2">Total Investment</h6>
+                    <h6 class="text-muted mb-2">Project Budget</h6>
                     <h3>{{ budget.currency }} {{ roi_metrics.total_investment|floatformat:2 }}</h3>
-                    <small class="text-muted">Budget allocated</small>
+                    <small class="text-muted">Allocated budget</small>
                 </div>
             </div>
         </div>
@@ -179,7 +179,7 @@
                                 <tr>
                                     <th>Date</th>
                                     <th>ROI %</th>
-                                    <th>Investment</th>
+                                    <th>Actual Cost</th>
                                     <th>Expected Value</th>
                                     <th>Realized Value</th>
                                     <th>Completion</th>
@@ -188,28 +188,34 @@
                             </thead>
                             <tbody>
                                 {% for snapshot in roi_snapshots %}
-                                <tr class="snapshot-card">
-                                    <td>{{ snapshot.snapshot_date|date:"M d, Y" }}</td>
+                                <tr class="snapshot-card{% if forloop.last %} table-warning{% endif %}">
+                                    <td>
+                                        {{ snapshot.snapshot_date|date:"M d, Y" }}
+                                        {% if forloop.last %}<span class="badge bg-warning text-dark ms-1" title="Most recent snapshot — may reflect different inputs than the historical weekly series">Current</span>{% endif %}
+                                    </td>
                                     <td>
                                         <span class="{% if snapshot.roi_percentage > 0 %}roi-positive{% elif snapshot.roi_percentage < 0 %}roi-negative{% else %}roi-neutral{% endif %}">
                                             <strong>{{ snapshot.roi_percentage|floatformat:1 }}%</strong>
                                         </span>
                                     </td>
-                                    <td>{{ budget.currency }} {{ snapshot.total_cost|floatformat:2 }}</td>
+                                    <td title="Actual spend at snapshot time">{{ budget.currency }} {{ snapshot.total_cost|floatformat:2 }}</td>
                                     <td>{{ budget.currency }} {{ snapshot.expected_value|floatformat:2 }}</td>
                                     <td>{{ budget.currency }} {{ snapshot.realized_value|floatformat:2 }}</td>
                                     <td>
                                         {% if snapshot.total_tasks > 0 %}
-                                        <div class="progress" style="height: 20px; width: 100px;">
-                                            <div class="progress-bar bg-info" style="width: {% widthratio snapshot.completed_tasks snapshot.total_tasks 100 %}%">
-                                                {% widthratio snapshot.completed_tasks snapshot.total_tasks 100 %}%
+                                        {% with pct=snapshot.completed_tasks|floatformat:0 %}
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="progress flex-grow-1" style="height: 8px; min-width: 80px;">
+                                                <div class="progress-bar bg-info" style="width: {% widthratio snapshot.completed_tasks snapshot.total_tasks 100 %}%"></div>
                                             </div>
+                                            <small class="text-nowrap text-muted">{% widthratio snapshot.completed_tasks snapshot.total_tasks 100 %}%</small>
                                         </div>
+                                        {% endwith %}
                                         {% else %}
-                                        0%
+                                        <small class="text-muted">0%</small>
                                         {% endif %}
                                     </td>
-                                    <td>-</td>
+                                    <td>{% if forloop.last %}<em class="text-muted small">Latest</em>{% else %}-{% endif %}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -243,8 +249,8 @@
 
     <!-- Cost vs Value Analysis -->
     <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card">
+        <div class="col-md-6 d-flex">
+            <div class="card w-100">
                 <div class="card-header">
                     <h5 class="mb-0"><i class="fas fa-balance-scale me-2"></i>Cost vs Value</h5>
                 </div>
@@ -254,13 +260,13 @@
             </div>
         </div>
 
-        <div class="col-md-6">
-            <div class="card">
+        <div class="col-md-6 d-flex">
+            <div class="card w-100">
                 <div class="card-header">
                     <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Value Distribution</h5>
                 </div>
-                <div class="card-body">
-                    <canvas id="valueDistributionChart" height="200"></canvas>
+                <div class="card-body d-flex align-items-center justify-content-center" style="min-height: 0;">
+                    <canvas id="valueDistributionChart"></canvas>
                 </div>
             </div>
         </div>
@@ -272,50 +278,93 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'js/chart.umd.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
+    const chartTheme = window.getChartTheme ? window.getChartTheme() : { textColor: '#444', gridColor: 'rgba(0,0,0,0.05)' };
+
     {% if has_budget and roi_snapshots %}
     // ROI Trend Chart
     const roiDates = [{% for snapshot in roi_snapshots %}'{{ snapshot.snapshot_date|date:"M d" }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
     const roiValues = [{% for snapshot in roi_snapshots %}{{ snapshot.roi_percentage|default:0 }}{% if not forloop.last %}, {% endif %}{% endfor %}];
-    
-    new Chart(document.getElementById('roiTrendChart'), {
+    const lastIdx = roiValues.length - 1;
+
+    // Per-point styling: last point = orange to signal it is the current live snapshot
+    const roiPointColors = roiValues.map((v, i) => i === lastIdx ? '#fd7e14' : '#28a745');
+    const roiPointBorders = roiValues.map((v, i) => i === lastIdx ? '#c85a00' : '#1e7e34');
+    const roiPointRadii  = roiValues.map((v, i) => i === lastIdx ? 8 : 4);
+
+    const roiTrendChart = new Chart(document.getElementById('roiTrendChart'), {
         type: 'line',
         data: {
             labels: roiDates,
             datasets: [{
                 label: 'ROI %',
                 data: roiValues,
-                borderColor: roiValues[roiValues.length - 1] >= 0 ? '#28a745' : '#dc3545',
-                backgroundColor: roiValues[roiValues.length - 1] >= 0 ? 'rgba(40, 167, 69, 0.1)' : 'rgba(220, 53, 69, 0.1)',
+                borderColor: '#28a745',
+                backgroundColor: 'rgba(40, 167, 69, 0.1)',
                 tension: 0.4,
-                fill: true
+                fill: true,
+                pointBackgroundColor: roiPointColors,
+                pointBorderColor: roiPointBorders,
+                pointRadius: roiPointRadii,
+                pointHoverRadius: roiPointRadii.map(r => r + 2),
+                // Dash the segment leading to the current snapshot so it reads as
+                // a projection/gap rather than a smooth historical trend
+                segment: {
+                    borderDash:  (ctx) => ctx.p1DataIndex === lastIdx ? [6, 4] : undefined,
+                    borderColor: (ctx) => ctx.p1DataIndex === lastIdx ? '#fd7e14' : '#28a745',
+                }
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: true,
             plugins: {
-                legend: { display: false }
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.parsed.y.toFixed(1) + '%';
+                            if (context.dataIndex === lastIdx) {
+                                label += '  (current snapshot)';
+                            }
+                            return label;
+                        }
+                    }
+                }
             },
             scales: {
+                x: {
+                    ticks: { color: chartTheme.textColor },
+                    grid: { color: chartTheme.gridColor }
+                },
                 y: {
                     beginAtZero: true,
                     ticks: {
+                        color: chartTheme.textColor,
                         callback: function(value) {
                             return value + '%';
                         }
-                    }
+                    },
+                    grid: { color: chartTheme.gridColor }
                 }
             }
         }
     });
+    if (window.PrizmCharts) window.PrizmCharts.register(roiTrendChart);
 
     // Cost vs Value Chart
     const investments = [{% for snapshot in roi_snapshots %}{{ snapshot.total_cost }}{% if not forloop.last %}, {% endif %}{% endfor %}];
     const realizedValues = [{% for snapshot in roi_snapshots %}{{ snapshot.realized_value }}{% if not forloop.last %}, {% endif %}{% endfor %}];
-    
-    new Chart(document.getElementById('costValueChart'), {
+
+    // Last bar is semi-transparent + bordered to distinguish the current live snapshot
+    // from the closed historical series
+    const investBgColors   = investments.map((v, i)    => i === lastIdx ? 'rgba(0,123,255,0.35)'  : '#007bff');
+    const investBorderColors = investments.map((v, i)  => i === lastIdx ? '#007bff' : 'transparent');
+    const realizedBgColors = realizedValues.map((v, i) => i === lastIdx ? 'rgba(40,167,69,0.35)'  : '#28a745');
+    const realizedBorderColors = realizedValues.map((v, i) => i === lastIdx ? '#28a745' : 'transparent');
+
+    const costValueChart = new Chart(document.getElementById('costValueChart'), {
         type: 'bar',
         data: {
             labels: roiDates,
@@ -323,26 +372,49 @@
                 {
                     label: 'Investment',
                     data: investments,
-                    backgroundColor: '#007bff'
+                    backgroundColor: investBgColors,
+                    borderColor: investBorderColors,
+                    borderWidth: investments.map((v, i) => i === lastIdx ? 2 : 0),
                 },
                 {
                     label: 'Realized Value',
                     data: realizedValues,
-                    backgroundColor: '#28a745'
+                    backgroundColor: realizedBgColors,
+                    borderColor: realizedBorderColors,
+                    borderWidth: realizedValues.map((v, i) => i === lastIdx ? 2 : 0),
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: true,
+            plugins: {
+                legend: { labels: { color: chartTheme.textColor } },
+                tooltip: {
+                    callbacks: {
+                        afterTitle: function(context) {
+                            return context[0].dataIndex === lastIdx ? '(Current snapshot)' : '';
+                        }
+                    }
+                }
+            },
             scales: {
-                y: { beginAtZero: true }
+                x: {
+                    ticks: { color: chartTheme.textColor },
+                    grid: { color: chartTheme.gridColor }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: chartTheme.textColor },
+                    grid: { color: chartTheme.gridColor }
+                }
             }
         }
     });
+    if (window.PrizmCharts) window.PrizmCharts.register(costValueChart);
 
     // Value Distribution Chart
-    new Chart(document.getElementById('valueDistributionChart'), {
+    const valueDistributionChart = new Chart(document.getElementById('valueDistributionChart'), {
         type: 'doughnut',
         data: {
             labels: ['Realized Value', 'Remaining Potential'],
@@ -356,12 +428,13 @@
         },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'bottom' }
+                legend: { position: 'bottom', labels: { color: chartTheme.textColor } }
             }
         }
     });
+    if (window.PrizmCharts) window.PrizmCharts.register(valueDistributionChart);
     {% endif %}
 </script>
 {% endblock %}

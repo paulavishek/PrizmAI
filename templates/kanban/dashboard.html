@@ -1,11 +1,23 @@
 ﻿{% extends 'base.html' %}
 {% load summary_filters %}
+{% load kanban_filters %}
+{% load avatar_tags %}
 
 {% block title %}Dashboard - PrizmAI{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 
 {% block extra_css %}
 <style>
+    /* Hide the base.html sandbox-active-banner on the dashboard — replaced by inline controls */
+    .sandbox-active-banner {
+        display: none !important;
+    }
+
+    /* Hide the topbar SANDBOX badge on dashboard — it's shown in the sandbox controls bar */
+    .topbar-demo-badge {
+        display: none !important;
+    }
+
     /* Styles for clickable metric cards */
     .metrics-card {
         cursor: pointer;
@@ -38,317 +50,17 @@
         color: white;
     }
 
-    /* Demo Credentials — compact pill style */
-    .demo-credentials-banner {
-        background: transparent;
-        border: none;
-        border-radius: 0;
-        margin-bottom: 0.75rem;
-        overflow: visible;
-        box-shadow: none;
-        transition: none;
-        text-align: right;
+    /* High Risk Tasks modal — "High" Risk Level pill: the bright bg-warning
+       yellow + Bootstrap's text-dark got fought over by unrelated global CSS
+       (ai_explainability.css modal-body overrides), so pin it here instead —
+       this is the last stylesheet loaded for this page, guaranteed to win. */
+    #highRiskModal .badge.bg-warning {
+        background-color: #92400e !important;
+        color: #fff !important;
     }
 
-    .demo-credentials-banner.expanded {
-        box-shadow: none;
-    }
+    /* Demo onboarding panel CSS moved to templates/demo/partials/demo_info_dropdown.html */
 
-    .demo-banner-header {
-        padding: 0;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        user-select: none;
-        background: #f0f9ff;
-        border: 1px solid #bae6fd;
-        border-radius: 20px;
-        padding: 0.25rem 0.75rem;
-        font-size: 0.78rem;
-        color: #0369a1;
-        transition: background-color 0.2s ease;
-    }
-
-    .demo-banner-header:hover {
-        background: #e0f2fe;
-    }
-
-    .demo-banner-title {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        margin: 0;
-        font-size: 0.78rem;
-        font-weight: 600;
-        color: #0369a1;
-    }
-
-    .demo-banner-icon {
-        font-size: 0.75rem;
-        color: #0369a1;
-    }
-
-    .demo-toggle-icon {
-        font-size: 0.7rem;
-        color: #0369a1;
-        transition: transform 0.3s ease;
-    }
-
-    .demo-credentials-banner.expanded .demo-toggle-icon {
-        transform: rotate(180deg);
-    }
-
-    .demo-banner-content {
-        max-height: 0;
-        overflow: hidden;
-        transition: max-height 0.4s ease, padding 0.4s ease;
-        padding: 0;
-        text-align: left;
-        margin-top: 0.5rem;
-        background: white;
-        border: 1px solid #bae6fd;
-        border-radius: 10px;
-    }
-
-    .demo-credentials-banner.expanded .demo-banner-content {
-        max-height: 500px;
-        padding: 1rem 1.25rem 1.25rem 1.25rem;
-    }
-
-    .demo-users-row {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 1rem;
-        margin-top: 1rem;
-    }
-
-    @media (max-width: 992px) {
-        .demo-users-row {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    .demo-user-box {
-        background: white;
-        border-radius: 10px;
-        padding: 1rem;
-        border: 1px solid #b3e5fc;
-        transition: all 0.3s ease;
-    }
-
-    .demo-user-box:hover {
-        box-shadow: 0 4px 12px rgba(2, 136, 209, 0.2);
-        transform: translateY(-3px);
-    }
-
-    .demo-user-header {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 0.75rem;
-    }
-
-    .demo-user-init {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 0.9rem;
-        color: white;
-        flex-shrink: 0;
-    }
-
-    .demo-user-box.admin .demo-user-init {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    }
-
-    .demo-user-box.developer .demo-user-init {
-        background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-    }
-
-    .demo-user-box.strategist .demo-user-init {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    }
-
-    .demo-user-info h6 {
-        margin: 0;
-        font-size: 0.95rem;
-        font-weight: 700;
-        color: #01579b;
-    }
-
-    .demo-user-role {
-        font-size: 0.75rem;
-        color: #0288d1;
-        margin: 0;
-    }
-
-    .demo-cred-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.5rem;
-        background: #f8f9fa;
-        border-radius: 6px;
-        margin-bottom: 0.4rem;
-        font-size: 0.85rem;
-    }
-
-    .demo-cred-label {
-        color: #6c757d;
-        font-weight: 600;
-    }
-
-    .demo-cred-value {
-        font-family: 'Courier New', monospace;
-        font-weight: 700;
-        color: #01579b;
-        background: white;
-        padding: 0.2rem 0.6rem;
-        border-radius: 4px;
-        border: 1px solid #b3e5fc;
-    }
-
-    /* Demo Skills List */
-    .demo-skills-list {
-        margin-top: 0.75rem;
-        padding-top: 0.75rem;
-        border-top: 1px solid #e3f2fd;
-    }
-
-    .demo-skill-tag {
-        display: inline-block;
-        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-        color: #01579b;
-        padding: 0.25rem 0.6rem;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        margin-right: 0.3rem;
-        margin-bottom: 0.3rem;
-        border: 1px solid #90caf9;
-    }
-
-    /* Demo Login Button */
-    .demo-login-btn {
-        display: block;
-        width: 100%;
-        padding: 0.6rem;
-        margin-top: 0.75rem;
-        background: linear-gradient(135deg, #0288d1 0%, #0277bd 100%);
-        color: white;
-        text-align: center;
-        border-radius: 6px;
-        text-decoration: none;
-        font-weight: 600;
-        font-size: 0.85rem;
-        transition: all 0.3s ease;
-        border: none;
-    }
-
-    .demo-login-btn:hover {
-        background: linear-gradient(135deg, #0277bd 0%, #01579b 100%);
-        color: white;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(2, 136, 209, 0.3);
-    }
-
-    /* Demo mode banner pulse */
-    #demo-banner { animation: demoPulse 3s ease-in-out 1; }
-    @keyframes demoPulse {
-        0%,100% { box-shadow: 0 2px 8px rgba(255,193,7,.2); }
-        50%     { box-shadow: 0 4px 20px rgba(255,193,7,.5); }
-    }
-
-    /* Demo Boards Section */
-    .demo-boards-section {
-        padding-top: 1rem;
-        border-top: 2px solid #b3e5fc;
-    }
-
-    .demo-boards-title {
-        font-size: 1rem;
-        font-weight: 700;
-        color: #01579b;
-        margin-bottom: 0.75rem;
-        display: flex;
-        align-items: center;
-    }
-
-    .demo-boards-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 1rem;
-    }
-
-    @media (max-width: 992px) {
-        .demo-boards-grid {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    .demo-board-item {
-        background: white;
-        border-radius: 8px;
-        padding: 1rem;
-        border: 1px solid #e3f2fd;
-        text-align: center;
-        transition: all 0.3s ease;
-    }
-
-    .demo-board-item:hover {
-        border-color: #0288d1;
-        box-shadow: 0 4px 12px rgba(2, 136, 209, 0.15);
-        transform: translateY(-2px);
-    }
-
-    .demo-board-icon {
-        width: 50px;
-        height: 50px;
-        margin: 0 auto 0.75rem;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.5rem;
-        color: white;
-    }
-
-    .demo-board-item.software .demo-board-icon {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    }
-
-    .demo-board-item.marketing .demo-board-icon {
-        background: linear-gradient(135deg, #f857a6 0%, #ff5858 100%);
-    }
-
-    .demo-board-item.bug .demo-board-icon {
-        background: linear-gradient(135deg, #ffa726 0%, #fb8c00 100%);
-    }
-
-    .demo-board-name {
-        font-weight: 700;
-        font-size: 0.9rem;
-        color: #01579b;
-        margin-bottom: 0.4rem;
-    }
-
-    .demo-board-desc {
-        font-size: 0.75rem;
-        color: #6c757d;
-        line-height: 1.3;
-    }
-
-    /* Adjust max-height for expanded content with new sections */
-    .demo-credentials-banner.expanded .demo-banner-content {
-        max-height: 850px;
-        padding: 1rem 1.25rem 1.25rem 1.25rem;
-    }
-    
     /* Welcome Modal Styles */
     .welcome-modal .modal-header {
         background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
@@ -432,7 +144,7 @@
     .mission-card:hover { box-shadow: 0 4px 16px rgba(78,115,223,0.18) !important; }
 
     /* Status badges */
-    .ms-status-badge { font-size: 0.68rem; padding: 0.25em 0.6em; }
+    .ms-status-badge { font-size: 0.75rem; padding: 0.3em 0.7em; }
     .ms-status-badge.status-active    { background-color: #1cc88a; color: #fff; }
     .ms-status-badge.status-completed { background-color: #36b9cc; color: #fff; }
     .ms-status-badge.status-on_hold   { background-color: #f6c23e; color: #333; }
@@ -465,7 +177,7 @@
     .board-tile-row:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 
     /* AI summary block */
-    .ai-summary-block { font-size: 0.82rem; }
+    .ai-summary-block { font-size: 0.875rem; }
 
     /* Bullet list rendering for AI summaries */
     .ai-bullet-list {
@@ -496,12 +208,12 @@
     }
     /* Hide toggle link when only 1-2 bullets */
     .ai-summary-text .summary-read-more { cursor: pointer; }
-    .summary-ts { font-size: 0.7rem; display: block; margin-top: 2px; }
+    .summary-ts { font-size: 0.75rem; display: block; margin-top: 2px; }
 
     /* Extra-small button variant */
     .btn-xs {
-        font-size: 0.7rem;
-        padding: 0.15rem 0.4rem;
+        font-size: 0.75rem;
+        padding: 0.2rem 0.45rem;
         line-height: 1.4;
         border-radius: 4px;
     }
@@ -510,8 +222,9 @@
 
     /* Spinner inside button */
     .btn-spinner { display: none; }
-    .btn-loading .btn-spinner { display: inline-block; }
-    .btn-loading .btn-label  { display: none; }
+    .btn-loading .btn-spinner { display: inline-block; vertical-align: middle; }
+    /* Keep the label visible during loading so the button shows its status
+       ("Refreshing…") next to the spinner, consistent with the Spectra loader. */
 
     /* Summary flash highlight when a new result arrives */
     @keyframes summaryfade {
@@ -540,11 +253,11 @@
     .metrics-panel::-webkit-scrollbar-thumb { background: #dee2e6; border-radius: 3px; }
 
     .panel-section-header {
-        font-size: 0.72rem;
+        font-size: 0.78rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: #6c757d;
+        color: var(--text-secondary);
         border-bottom: 2px solid #e3e6f0;
         padding-bottom: 6px;
         margin-bottom: 10px;
@@ -570,8 +283,8 @@
         line-height: 1.1;
     }
     .panel-kpi-box .kpi-label {
-        font-size: 0.62rem;
-        color: #6c757d;
+        font-size: 0.7rem;
+        color: var(--text-secondary);
         text-transform: uppercase;
         letter-spacing: 0.04em;
     }
@@ -582,7 +295,7 @@
         margin-bottom: 6px;
     }
     .panel-board-name {
-        font-size: 0.75rem;
+        font-size: 0.82rem;
         width: 110px;
         min-width: 110px;
         white-space: nowrap;
@@ -603,8 +316,8 @@
         transition: width 0.4s ease;
     }
     .panel-board-pct {
-        font-size: 0.7rem;
-        color: #6c757d;
+        font-size: 0.78rem;
+        color: var(--text-secondary);
         width: 32px;
         text-align: right;
         flex-shrink: 0;
@@ -612,8 +325,8 @@
     .panel-chart-wrap { position: relative; height: 180px; }
     .panel-risk-badge {
         display: inline-block;
-        font-size: 0.65rem;
-        padding: 1px 5px;
+        font-size: 0.75rem;
+        padding: 2px 7px;
         border-radius: 3px;
         background: #fff3cd;
         color: #856404;
@@ -632,13 +345,15 @@
        ZONE 1 — KPI COMMAND STRIP
        ================================================================ */
     .kpi-card {
-        border-radius: 12px;
-        border: 1px solid #e3e6f0;
+        border-radius: var(--card-radius-sm, 12px);
+        border: var(--card-border, 1px solid #e3e6f0);
+        background: var(--card-bg-surface, #fff);
+        box-shadow: var(--card-shadow, none);
         transition: transform 0.18s ease, box-shadow 0.18s ease;
     }
     .kpi-card:hover {
         transform: translateY(-4px);
-        box-shadow: 0 8px 24px rgba(0,0,0,0.10) !important;
+        box-shadow: var(--card-shadow-hover, 0 8px 24px rgba(0,0,0,0.10)) !important;
     }
     .kpi-icon-wrap {
         width: 52px;
@@ -655,7 +370,7 @@
         line-height: 1.0;
     }
     .kpi-big-label {
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         font-weight: 600;
         color: #495057;
         text-transform: uppercase;
@@ -663,39 +378,125 @@
         margin-top: 2px;
     }
     .kpi-sub {
-        font-size: 0.7rem;
-        color: #6c757d;
+        font-size: 0.78rem;
+        color: var(--text-secondary);
         margin-top: 1px;
     }
 
+    /* My Tasks row hover — theme-aware (replaces hardcoded #f1f4f8 inline hover) */
+    .dash-task-row {
+        transition: background 0.15s ease;
+    }
+    .dash-task-row:hover {
+        background: var(--bg-tertiary, #f1f4f8);
+    }
+
     /* ================================================================
-       MISSION OVERVIEW — Scrollable card body
+       HIERARCHY NAVIGATOR — Scrollable tab-content
        ================================================================ */
-    #mission-overview-card .card-body {
+    #hierarchy-navigator .tab-content {
         scrollbar-width: thin;
         scrollbar-color: #c5cbe3 transparent;
     }
-    #mission-overview-card .card-body::-webkit-scrollbar {
+    #hierarchy-navigator .tab-content::-webkit-scrollbar {
         width: 6px;
     }
-    #mission-overview-card .card-body::-webkit-scrollbar-track {
+    #hierarchy-navigator .tab-content::-webkit-scrollbar-track {
         background: transparent;
     }
-    #mission-overview-card .card-body::-webkit-scrollbar-thumb {
+    #hierarchy-navigator .tab-content::-webkit-scrollbar-thumb {
         background-color: #c5cbe3;
         border-radius: 3px;
     }
-    #mission-overview-card .card-body::-webkit-scrollbar-thumb:hover {
+    #hierarchy-navigator .tab-content::-webkit-scrollbar-thumb:hover {
         background-color: #8490b5;
+    }
+    /* Scrollable card grid within each tab pane */
+    #hierarchy-navigator .hn-cards-grid {
+        max-height: 420px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #c5cbe3 transparent;
+        padding-right: 2px;
+    }
+    #hierarchy-navigator .hn-cards-grid::-webkit-scrollbar {
+        width: 5px;
+    }
+    #hierarchy-navigator .hn-cards-grid::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    #hierarchy-navigator .hn-cards-grid::-webkit-scrollbar-thumb {
+        background-color: #c5cbe3;
+        border-radius: 3px;
     }
 
     /* ================================================================
        DAILY AI BRIEFING CARD
        ================================================================ */
-    #daily-briefing-card {
+    /* Unified Focus Today command-center card */
+    #focus-briefing-card {
         border-radius: 12px;
-        background: linear-gradient(135deg, #f0fdfa 0%, #ffffff 100%);
     }
+    /* Compact decision-item rows in the Focus Today widget */
+    .cmd-item {
+        padding: 0.35rem 0.4rem;
+        border-radius: 6px;
+        transition: background 0.12s ease;
+    }
+    .cmd-item:not(.cmd-item-static):hover {
+        background: rgba(99, 102, 241, 0.07);
+    }
+    .cmd-item-static { cursor: default; }
+    [data-bs-theme="dark"] .cmd-item:not(.cmd-item-static):hover {
+        background: rgba(255, 255, 255, 0.06);
+    }
+    [data-bs-theme="dark"] .cmd-item span[style*="color:#1e293b"] { color: #e8e9f3 !important; }
+
+    /* Prominent AI Briefing band + action-plan button */
+    .ai-briefing-row {
+        background: linear-gradient(135deg, rgba(79,70,229,0.06) 0%, rgba(79,70,229,0.02) 100%);
+        border: 1px solid rgba(79,70,229,0.16);
+        border-radius: 8px;
+        padding: 0.55rem 0.75rem;
+    }
+    .ai-briefing-bot { font-size: 1rem; margin-top: 2px; }
+    .ai-action-plan-btn {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: #fff;
+        font-weight: 600;
+        white-space: nowrap;
+        border: none;
+        box-shadow: 0 2px 8px rgba(79,70,229,0.25);
+        transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .ai-action-plan-btn:hover {
+        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(79,70,229,0.35);
+    }
+    [data-bs-theme="dark"] .ai-briefing-row {
+        background: rgba(99,102,241,0.10);
+        border-color: rgba(129,140,248,0.30);
+    }
+    [data-bs-theme="dark"] .ai-briefing-row p { color: #cfd3e3 !important; }
+    [data-bs-theme="dark"] .ai-briefing-row strong[style*="color:#4f46e5"] { color: #a5b4fc !important; }
+    [data-bs-theme="dark"] #focus-briefing-card p[style*="color:#374151"] { color: #cfd3e3 !important; }
+
+    /* SPI/CPI "Dragged by" offender bands: hardcoded pale peach/mint
+       backgrounds don't adapt to dark mode, so the mint one in particular
+       reads as "no box at all" against a near-black card. */
+    [data-bs-theme="dark"] #spi-offender-note {
+        background: rgba(234,88,12,0.18) !important;
+        border-top-color: rgba(234,88,12,0.4) !important;
+    }
+    [data-bs-theme="dark"] #spi-offender-note span,
+    [data-bs-theme="dark"] #spi-offender-note a { color: #fdba8c !important; }
+    [data-bs-theme="dark"] #cpi-offender-note {
+        background: rgba(34,197,94,0.18) !important;
+        border-top-color: rgba(34,197,94,0.4) !important;
+    }
+    [data-bs-theme="dark"] #cpi-offender-note span,
+    [data-bs-theme="dark"] #cpi-offender-note a { color: #81c995 !important; }
     .briefing-item {
         background: white;
         border-radius: 8px;
@@ -705,9 +506,9 @@
     }
     .briefing-tag {
         display: inline-block;
-        font-size: 0.7rem;
+        font-size: 0.78rem;
         font-weight: 700;
-        padding: 0.2rem 0.55rem;
+        padding: 0.25rem 0.65rem;
         border-radius: 20px;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -726,12 +527,16 @@
         transform: translateY(-2px);
         border-color: #93c5fd !important;
     }
+    .briefing-item-risk.briefing-item-clickable:hover {
+        box-shadow: 0 4px 14px rgba(146, 64, 14, 0.18);
+        border-color: #fcd34d !important;
+    }
     .briefing-item-clickable .briefing-action-footer {
         display: flex;
         align-items: center;
         justify-content: flex-end;
         margin-top: 0.5rem;
-        font-size: 0.72rem;
+        font-size: 0.78rem;
         font-weight: 600;
         color: #1e40af;
         opacity: 0.75;
@@ -753,9 +558,9 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 26px; height: 26px;
+        width: 28px; height: 28px;
         border-radius: 50%;
-        font-size: 0.78rem;
+        font-size: 0.82rem;
         font-weight: 800;
         flex-shrink: 0;
         margin-right: 0.6rem;
@@ -764,7 +569,7 @@
     .step-high     .action-step-number { background:#fef3c7; color:#92400e; }
     .step-overdue  .action-step-number { background:#fee2e2; color:#b91c1c; }
     .action-why-text {
-        font-size: 0.81rem;
+        font-size: 0.875rem;
         color: #4b5563;
         line-height: 1.5;
         margin-bottom: 0.55rem;
@@ -777,16 +582,52 @@
         border: 1px solid #bbf7d0;
         border-radius: 6px;
         padding: 0.45rem 0.65rem;
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         font-weight: 600;
         color: #065f46;
     }
     .action-next-box i { color: #10b981; margin-top: 2px; flex-shrink: 0; }
 
+    /* PM Action Plan step cards — dark mode */
+    [data-bs-theme="dark"] #aiRecommendedActionsModal [style*="#eff6ff"] {
+        background: rgba(59,130,246,0.12) !important;
+        border-color: rgba(59,130,246,0.35) !important;
+    }
+    [data-bs-theme="dark"] #aiRecommendedActionsModal [style*="color:#1e3a8a"] { color: #cfe0ff !important; }
+    [data-bs-theme="dark"] #aiRecommendedActionsModal [style*="color:#1e40af"] { color: #8fb3ff !important; }
+    [data-bs-theme="dark"] .action-step-card {
+        background: var(--card-bg);
+        border-color: var(--border-color);
+    }
+    [data-bs-theme="dark"] .action-why-text { color: var(--text-secondary); }
+    [data-bs-theme="dark"] .step-critical .action-step-number { background: rgba(239,68,68,0.2); color: #f28b82; }
+    [data-bs-theme="dark"] .step-high     .action-step-number { background: rgba(245,158,11,0.2); color: #fdd663; }
+    [data-bs-theme="dark"] .step-overdue  .action-step-number { background: rgba(239,68,68,0.2); color: #f28b82; }
+    [data-bs-theme="dark"] .action-next-box {
+        background: rgba(16,185,129,0.12);
+        border-color: rgba(16,185,129,0.35);
+        color: #81c995;
+    }
+    [data-bs-theme="dark"] .action-next-box i { color: #81c995; }
+    [data-bs-theme="dark"] #aiRecommendedActionsModal [style*="color:#6b7280"] { color: var(--text-muted) !important; }
+    [data-bs-theme="dark"] #aiRecommendedActionsModal [style*="color:#dc2626"] { color: #f28b82 !important; }
+
     /* ================================================================
        ZONE 3 — ENLARGED CHART CARDS
        ================================================================ */
     .zone3-chart-card .card-body { min-height: 300px; }
+
+    /* Scrollable chart wrappers (enterprise scale) */
+    .chart-scroll-h { overflow-x: auto; overflow-y: hidden; }
+    .chart-scroll-v { overflow-y: auto; overflow-x: hidden; }
+    .chart-scroll-h::-webkit-scrollbar,
+    .chart-scroll-v::-webkit-scrollbar { width: 5px; height: 5px; }
+    .chart-scroll-h::-webkit-scrollbar-track,
+    .chart-scroll-v::-webkit-scrollbar-track { background: #f1f3f5; border-radius: 4px; }
+    .chart-scroll-h::-webkit-scrollbar-thumb,
+    .chart-scroll-v::-webkit-scrollbar-thumb { background: #ced4da; border-radius: 4px; }
+    .chart-scroll-h::-webkit-scrollbar-thumb:hover,
+    .chart-scroll-v::-webkit-scrollbar-thumb:hover { background: #adb5bd; }
 
     /* Risk Heatmap Grid */
     .risk-heatmap-grid {
@@ -802,23 +643,24 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        font-size: 0.7rem;
+        font-size: 0.78rem;
         font-weight: 700;
         color: white;
-        cursor: default;
+        cursor: pointer;
         transition: transform 0.15s ease;
     }
     .risk-heatmap-cell:hover { transform: scale(1.06); }
+    .risk-heatmap-cell:focus-visible { outline: 2px solid #1e40af; outline-offset: 2px; }
     .risk-heatmap-cell .cell-count { font-size: 1.2rem; font-weight: 800; line-height: 1; }
     /*  likelihood (row) × impact (col):  1×1=low, 3×3=critical  */
-    .rhc-1-1 { background: #d1fae5; color: #065f46; }
-    .rhc-1-2 { background: #a7f3d0; color: #065f46; }
-    .rhc-1-3 { background: #fef3c7; color: #92400e; }
-    .rhc-2-1 { background: #a7f3d0; color: #065f46; }
-    .rhc-2-2 { background: #fde68a; color: #92400e; }
-    .rhc-2-3 { background: #fca5a5; color: #7f1d1d; }
-    .rhc-3-1 { background: #fef3c7; color: #92400e; }
-    .rhc-3-2 { background: #fca5a5; color: #7f1d1d; }
+    .rhc-1-1 { background: #86EFAC; color: #065f46; }
+    .rhc-1-2 { background: #BBF7D0; color: #065f46; }
+    .rhc-1-3 { background: #FCD34D; color: #92400e; }
+    .rhc-2-1 { background: #BBF7D0; color: #065f46; }
+    .rhc-2-2 { background: #FCD34D; color: #92400e; }
+    .rhc-2-3 { background: #F87171; color: #fff; }
+    .rhc-3-1 { background: #FCD34D; color: #92400e; }
+    .rhc-3-2 { background: #F87171; color: #fff; }
     .rhc-3-3 { background: #ef4444; color: #fff; }
 
     /* SPI / CPI Gauge (half-donut) */
@@ -829,7 +671,7 @@
         text-align: center;
     }
     .gauge-value { font-size: 1.6rem; font-weight: 800; }
-    .gauge-sub   { font-size: 0.68rem; color: #6c757d; text-transform: uppercase; }
+    .gauge-sub   { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; }
 
     /* ================================================================
        HEALTH / TRAFFIC-LIGHT PILLS on mission cards
@@ -838,9 +680,9 @@
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        font-size: 0.65rem;
+        font-size: 0.75rem;
         font-weight: 700;
-        padding: 0.2em 0.55em;
+        padding: 0.3em 0.7em;
         border-radius: 20px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
@@ -864,9 +706,9 @@
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        font-size: 0.68rem;
+        font-size: 0.75rem;
         font-weight: 700;
-        padding: 0.2em 0.65em;
+        padding: 0.3em 0.75em;
         border-radius: 12px;
         text-transform: uppercase;
         letter-spacing: 0.03em;
@@ -879,12 +721,14 @@
         flex-shrink: 0;
     }
     /* Schedule Status pills */
-    .status-pill.on-track  { background: #d1fae5; color: #065f46; }
-    .status-pill.on-track .pill-dot  { background: #10b981; }
-    .status-pill.at-risk   { background: #fef3c7; color: #92400e; }
-    .status-pill.at-risk .pill-dot   { background: #f59e0b; }
+    .status-pill.on_track, .status-pill.on-track  { background: #d1fae5; color: #065f46; }
+    .status-pill.on_track .pill-dot, .status-pill.on-track .pill-dot  { background: #10b981; }
+    .status-pill.at_risk, .status-pill.at-risk   { background: #fef3c7; color: #92400e; }
+    .status-pill.at_risk .pill-dot, .status-pill.at-risk .pill-dot   { background: #f59e0b; }
     .status-pill.late      { background: #fee2e2; color: #7f1d1d; }
     .status-pill.late .pill-dot      { background: #ef4444; }
+    .status-pill.not_assessed  { background: #f1f5f9; color: #64748b; }
+    .status-pill.not_assessed .pill-dot  { background: #94a3b8; }
     /* Risk Level pills */
     .risk-pill.low     { background: #d1fae5; color: #065f46; }
     .risk-pill.low .pill-dot     { background: #10b981; }
@@ -892,25 +736,231 @@
     .risk-pill.medium .pill-dot  { background: #f59e0b; }
     .risk-pill.high    { background: #fee2e2; color: #7f1d1d; }
     .risk-pill.high .pill-dot    { background: #ef4444; }
+    .risk-pill.not_assessed  { background: #f1f5f9; color: #64748b; }
+    .risk-pill.not_assessed .pill-dot  { background: #94a3b8; }
 
     /* ================================================================
-       MISSION OVERVIEW CARDS  (progressive disclosure layout)
+       HIERARCHY NAVIGATOR  (tabbed Goal / Mission / Strategy / Board)
        ================================================================ */
-    .mission-summary-card {
-        border: 1px solid #e3e6f0;
+    .hn-tabs {
+        gap: 0;
+        background: #f8fafc;
+    }
+    .hn-tabs .nav-link {
+        border: none;
+        border-bottom: 3px solid transparent;
+        border-radius: 0;
+        color: #64748b;
+        font-size: 0.9rem;
+        font-weight: 600;
+        padding: 0.6rem 1rem;
+        transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .hn-tabs .nav-link:hover { background: #f1f5f9; }
+    .hn-tabs .nav-link.active { background: transparent; }
+    /* Per-level accent colours — inactive (muted) and active (full) */
+    #hn-tab-goals           { color: #d97706; }
+    #hn-tab-goals:hover     { color: #b45309; }
+    #hn-tab-goals.active    { color: #b45309; border-bottom-color: #f59e0b; }
+    #hn-tab-missions        { color: #3b82f6; }
+    #hn-tab-missions:hover  { color: #1d4ed8; }
+    #hn-tab-missions.active { color: #1d4ed8; border-bottom-color: #3b82f6; }
+    #hn-tab-strategies        { color: #10b981; }
+    #hn-tab-strategies:hover  { color: #047857; }
+    #hn-tab-strategies.active { color: #047857; border-bottom-color: #10b981; }
+    #hn-tab-boards          { color: #8b5cf6; }
+    #hn-tab-boards:hover    { color: #6d28d9; }
+    #hn-tab-boards.active   { color: #6d28d9; border-bottom-color: #8b5cf6; }
+    .hn-count {
+        font-size: 0.82rem;
+        padding: 0.2em 0.55em;
+        margin-left: 4px;
+        background: #e2e8f0;
+        color: #475569;
+        vertical-align: middle;
+    }
+    #hn-tab-goals.active .hn-count      { background: #b45309; color: #fff; opacity: 0.9; }
+    #hn-tab-missions.active .hn-count   { background: #1d4ed8; color: #fff; opacity: 0.9; }
+    #hn-tab-strategies.active .hn-count { background: #047857; color: #fff; opacity: 0.9; }
+    #hn-tab-boards.active .hn-count     { background: #6d28d9; color: #fff; opacity: 0.9; }
+
+    /* Level badge chips */
+    .hn-level-badge {
+        font-size: 0.65rem; letter-spacing: 0.07em; text-transform: uppercase;
+        padding: 2px 7px; border-radius: 4px; font-weight: 700;
+    }
+    .hn-level-badge--goal     { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .hn-level-badge--mission  { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+    .hn-level-badge--strategy { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+    .hn-level-badge--board    { background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; }
+
+    /* Card items */
+    .hn-item {
+        border: 1px solid #e2e8f0;
         border-radius: 12px;
         transition: box-shadow 0.15s ease, transform 0.15s ease;
-        background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+        cursor: pointer;
     }
-    .mission-summary-card:hover {
-        box-shadow: 0 6px 20px rgba(78,115,223,0.14);
+    .hn-item:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
         transform: translateY(-2px);
     }
-    .mission-summary-card .card-body { padding: 1rem 1.15rem; }
-    .goal-header-card {
-        border-left: 4px solid #ffc107;
-        border-radius: 12px;
-        background: linear-gradient(135deg, #fffbea 0%, #fff 100%);
+    .hn-item--goal     { border-left: 4px solid #f59e0b; background: linear-gradient(135deg,#fffbeb 0%,#fff 100%); }
+    .hn-item--mission  { border-left: 4px solid #3b82f6; background: linear-gradient(135deg,#eff6ff 0%,#fff 100%); }
+    .hn-item--strategy { border-left: 4px solid #10b981; background: linear-gradient(135deg,#ecfdf5 0%,#fff 100%); }
+    .hn-item--board    { border-left: 4px solid #8b5cf6; background: linear-gradient(135deg,#f5f3ff 0%,#fff 100%); }
+    .hn-item .card-body { padding: 0.9rem 1rem; }
+
+    /* Expand panels — kept hidden in template; content cloned to preview slot */
+    .hn-expand {
+        display: none !important;   /* always hidden; JS clones content to .hn-preview-slot */
+    }
+    @keyframes hnSlideDown {
+        from { opacity: 0; transform: translateY(-6px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Full-width preview slot below the cards grid */
+    .hn-preview-slot {
+        margin-top: 16px;
+        padding-top: 12px;
+        border-top: 2px solid #e2e8f0;
+        animation: hnSlideDown 0.25s ease-out;
+    }
+    .hn-preview-slot .hn-preview-header {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        margin-bottom: 4px;
+    }
+    .hn-preview-slot .hn-preview-close {
+        cursor: pointer;
+        color: #94a3b8;
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        background: #f8fafc;
+        transition: all 0.15s;
+    }
+    .hn-preview-slot .hn-preview-close:hover {
+        color: #ef4444;
+        border-color: #fca5a5;
+        background: #fef2f2;
+    }
+
+    /* Active/selected card highlight */
+    .hn-item--active.hn-item--goal     { box-shadow: 0 0 0 2px #f59e0b, 0 4px 16px rgba(245,158,11,0.18) !important; transform: translateY(-2px); }
+    .hn-item--active.hn-item--mission  { box-shadow: 0 0 0 2px #3b82f6, 0 4px 16px rgba(59,130,246,0.18) !important; transform: translateY(-2px); }
+    .hn-item--active.hn-item--strategy { box-shadow: 0 0 0 2px #10b981, 0 4px 16px rgba(16,185,129,0.18) !important; transform: translateY(-2px); }
+    .hn-item--active.hn-item--board    { box-shadow: 0 0 0 2px #8b5cf6, 0 4px 16px rgba(139,92,246,0.18) !important; transform: translateY(-2px); }
+
+    /* Filtered-out cards */
+    .hn-card.hn-hidden { display: none !important; }
+
+    /* ── Dark-mode overrides for Hierarchy Navigator (light-mode look unchanged) ── */
+    [data-bs-theme="dark"] .hn-tabs { background: rgba(255,255,255,0.03); }
+    [data-bs-theme="dark"] .hn-tabs .nav-link:hover { background: rgba(255,255,255,0.06); }
+    [data-bs-theme="dark"] .hn-count { background: #3a3d4d; color: #c3c6d4; }
+    /* Tab labels: the light-mode colors (#b45309, #1d4ed8, #047857, #6d28d9) are
+       dark saturated shades tuned for a white bg and vanish on the dark surface.
+       Replicate the Goal-badge chip look instead — a tinted pill + bright text —
+       so the active tab reads as clearly here as the "Goal" badge does on the card. */
+    [data-bs-theme="dark"] #hn-tab-goals            { color: #b98a4a; }
+    [data-bs-theme="dark"] #hn-tab-goals:hover       { color: #fbbf24; }
+    [data-bs-theme="dark"] #hn-tab-goals.active      { color: #fbbf24; background: rgba(245,158,11,0.16); border-bottom-color: #f59e0b; }
+    [data-bs-theme="dark"] #hn-tab-missions          { color: #6b83b3; }
+    [data-bs-theme="dark"] #hn-tab-missions:hover    { color: #60a5fa; }
+    [data-bs-theme="dark"] #hn-tab-missions.active   { color: #60a5fa; background: rgba(59,130,246,0.16); border-bottom-color: #3b82f6; }
+    [data-bs-theme="dark"] #hn-tab-strategies        { color: #4c9b80; }
+    [data-bs-theme="dark"] #hn-tab-strategies:hover  { color: #34d399; }
+    [data-bs-theme="dark"] #hn-tab-strategies.active { color: #34d399; background: rgba(16,185,129,0.16); border-bottom-color: #10b981; }
+    [data-bs-theme="dark"] #hn-tab-boards            { color: #9081b8; }
+    [data-bs-theme="dark"] #hn-tab-boards:hover      { color: #a78bfa; }
+    [data-bs-theme="dark"] #hn-tab-boards.active     { color: #a78bfa; background: rgba(139,92,246,0.16); border-bottom-color: #8b5cf6; }
+    /* Goal/mission/strategy/board cards: distinct surface + strong border so they
+       stand apart from the dark page; keep the colored left accent bar. */
+    [data-bs-theme="dark"] .hn-item {
+        border: 1.5px solid rgba(255,255,255,0.26);
+        background: var(--card-bg-surface, #2a2d3a) !important;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    }
+    [data-bs-theme="dark"] .hn-item:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.55); }
+    [data-bs-theme="dark"] .hn-item--goal     { border-left: 4px solid #f59e0b; }
+    [data-bs-theme="dark"] .hn-item--mission  { border-left: 4px solid #3b82f6; }
+    [data-bs-theme="dark"] .hn-item--strategy { border-left: 4px solid #10b981; }
+    [data-bs-theme="dark"] .hn-item--board    { border-left: 4px solid #8b5cf6; }
+    [data-bs-theme="dark"] .hn-preview-slot { border-top-color: rgba(255,255,255,0.12); }
+    /* Close button: light-mode uses a near-white pill (#f8fafc bg, light-grey
+       border/text) which reads fine on the light-mode card but floats as a
+       jarring white box against the dark surface here. */
+    [data-bs-theme="dark"] .hn-preview-slot .hn-preview-close {
+        color: #c3c6d4;
+        border-color: rgba(255,255,255,0.18);
+        background: rgba(255,255,255,0.08);
+    }
+    [data-bs-theme="dark"] .hn-preview-slot .hn-preview-close:hover {
+        color: #f28b82;
+        border-color: rgba(242,139,130,0.5);
+        background: rgba(242,139,130,0.12);
+    }
+    /* The expanded preview card is a pastel "light surface" chip by design
+       (like the Goal badge) — its title/text colors are dark shades meant to
+       sit on that light background. theme.css's global dark-mode rules were
+       bleeding through though: .card-body forces a near-black bg (the inline
+       pastel is only on the parent .card, not this child), and
+       .text-muted/.text-success/.text-warning/.text-danger/.text-dark plus
+       .btn-outline-primary/.btn-outline-secondary get brightened for dark
+       backgrounds elsewhere — both combine to put dark text on a dark bg.
+       Pin this component back to its light-surface look. */
+    [data-bs-theme="dark"] .hn-preview-slot .card-body {
+        background-color: transparent !important;
+        color: inherit !important;
+    }
+    [data-bs-theme="dark"] .hn-preview-slot .text-muted   { color: #57534e !important; }
+    [data-bs-theme="dark"] .hn-preview-slot .text-success { color: #15803d !important; }
+    [data-bs-theme="dark"] .hn-preview-slot .text-warning { color: #b45309 !important; }
+    [data-bs-theme="dark"] .hn-preview-slot .text-danger  { color: #b91c1c !important; }
+    [data-bs-theme="dark"] .hn-preview-slot .text-dark    { color: #1f2937 !important; }
+    [data-bs-theme="dark"] .hn-preview-slot .btn-outline-primary   { color: #1d4ed8 !important; border-color: #1d4ed8 !important; }
+    [data-bs-theme="dark"] .hn-preview-slot .btn-outline-secondary { color: #475569 !important; border-color: #94a3b8 !important; }
+
+    /* ── Dark-mode overrides for Performance Analytics inner cards (issue: light
+       header strips + low-contrast text in dark). Inline header bg has no
+       !important, so a scoped !important rule wins. ── */
+    [data-bs-theme="dark"] #analyticsZone3 .card {
+        background: var(--card-bg-surface, #2a2d3a) !important;
+        border: 1px solid rgba(255,255,255,0.14) !important;
+    }
+    [data-bs-theme="dark"] #analyticsZone3 .card .card-header {
+        background: rgba(255,255,255,0.05) !important;
+        border-bottom: 1px solid rgba(255,255,255,0.10) !important;
+    }
+    [data-bs-theme="dark"] #analyticsZone3 .card-header span,
+    [data-bs-theme="dark"] #analyticsZone3 .card-header .small,
+    [data-bs-theme="dark"] #analyticsZone3 .card-header .fw-semibold { color: #e8e9f3 !important; }
+    [data-bs-theme="dark"] #analyticsZone3 .badge.bg-light { background: #3a3d4d !important; color: #c3c6d4 !important; }
+    /* Risk Heatmap axis/row labels (inline color:#495057) */
+    [data-bs-theme="dark"] #analyticsZone3 [style*="color:#495057"] { color: #c7ccdd !important; }
+    /* Scope-creep tinted headline box: inline light bg → subtle dark so themed text reads */
+    [data-bs-theme="dark"] #analyticsZone3 [style*="#f0fdf4"],
+    [data-bs-theme="dark"] #analyticsZone3 [style*="#fffbeb"],
+    [data-bs-theme="dark"] #analyticsZone3 [style*="#fef2f2"] { background: rgba(255,255,255,0.06) !important; }
+
+    /* ── Dark-mode: AI Briefing inner cards behave like Goal cards (dark surface,
+       prominent border) and faded body text becomes legible. ── */
+    [data-bs-theme="dark"] .briefing-item {
+        background: var(--card-bg-surface, #2a2d3a) !important;
+        border: 1px solid rgba(255,255,255,0.14) !important;
+    }
+    [data-bs-theme="dark"] #focus-briefing-card [style*="color:#374151"] { color: #cfd3e3 !important; }
+
+    /* ── Dark-mode: Hierarchy Navigator title (inline #334155) + Goals active count badge ── */
+    [data-bs-theme="dark"] #hierarchy-navigator .card-header h6 { color: #e8e9f3 !important; }
+    [data-bs-theme="dark"] .hn-tabs .nav-link.active .hn-count {
+        background: rgba(255,255,255,0.18) !important;
+        color: #fff !important;
+        opacity: 1 !important;
     }
 
     /* ================================================================
@@ -919,6 +969,7 @@
 
     /* -- Global card radius consistency -- */
     .card { border-radius: 12px !important; overflow: hidden; }
+    #hierarchy-navigator { overflow: visible !important; }
     .card .card-header { border-radius: 0 !important; }
 
     /* -- Dashboard page heading -- */
@@ -950,7 +1001,7 @@
 
     /* Metadata timestamps and secondary text */
     .summary-ts, .board-tile-row .text-muted.small {
-        font-size: 0.70rem !important;
+        font-size: 0.75rem !important;
         opacity: 0.75;
     }
 
@@ -980,84 +1031,54 @@
     .ai-summary-text ul { padding-left: 1.2em; margin-bottom: 0; }
     .ai-summary-text li { margin-bottom: 0.2em; font-size: 0.83rem; }
 
-    /* -- Daily briefing card visual separator -- */
-    #daily-briefing-card .briefing-item + .briefing-item {
-        border-left: 1px solid rgba(0,0,0,0.07);
-        padding-left: 1rem;
+
+    /* ── Hierarchy Navigator: enhanced card text sizes ── */
+    #hierarchy-navigator .hn-item .card-body h6 { font-size: 1.05rem !important; line-height: 1.3; }
+    #hierarchy-navigator .hn-item .card-body small { font-size: 0.82rem !important; }
+    #hierarchy-navigator .hn-item .card-body .badge.bg-light { font-size: 0.73rem !important; }
+    #hierarchy-navigator .hn-item .card-body .text-danger { font-size: 0.78rem !important; }
+    #hierarchy-navigator .hn-preview-slot .fw-semibold.small { font-size: 0.85rem !important; }
+    #hierarchy-navigator .hn-preview-slot p.text-muted { font-size: 0.82rem !important; }
+    #hierarchy-navigator .hn-preview-slot .d-flex span { font-size: 0.8rem !important; }
+
+    /* ── Hierarchy Navigator: card description overflow prevention ── */
+    #hierarchy-navigator .hn-item .card-body {
+        overflow: hidden;
+    }
+    #hierarchy-navigator .hn-item .card-body .flex-grow-1 {
+        min-width: 0;
+        overflow: hidden;
+    }
+    #hierarchy-navigator .hn-item .card-body h6 {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+    #hierarchy-navigator .hn-item .card-body small.text-muted {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        word-break: break-word;
+    }
+    #hierarchy-navigator .hn-expand p.text-muted {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+        word-break: break-word;
     }
 </style>
 {% endblock %}
 
 {% block content %}
 
-{% if demo_mode %}
-<!-- ============================================================ -->
-<!-- DEMO MODE BANNER — full-width, unmissable                   -->
-<!-- ============================================================ -->
-<div id="demo-banner" class="alert alert-warning mb-0 rounded-0 border-0 shadow-sm"
-     style="position:sticky;top:0;z-index:1050;background:linear-gradient(135deg,#fff3cd 0%,#ffe69c 100%);">
-    <div class="container-fluid d-flex flex-wrap align-items-center justify-content-between gap-2 py-1">
-        <div class="d-flex align-items-center gap-2">
-            <i class="fas fa-eye fa-lg text-warning"></i>
-            <span class="fw-bold text-dark">You're viewing the demo workspace</span>
-            <span class="text-muted d-none d-md-inline">
-                — Meet the team: <strong>Alex Chen</strong> (Admin), <strong>Sam Rivera</strong> (Dev), <strong>Jordan Taylor</strong> (Analyst)
-                &bull; 1 demo board with 30 tasks
-            </span>
-        </div>
-        <div class="d-flex gap-2 flex-shrink-0">
-            <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-dark">
-                    <i class="fas fa-times me-1"></i>Exit demo
-                </button>
-            </form>
-        </div>
-    </div>
-</div>
-{% endif %}
+{# Sandbox banner is handled globally by base.html — no duplicate here #}
 
-{% if demo_mode %}
-<!-- ═══ WORKSPACE MODE SWITCHER (Demo active) ═══ -->
-<div class="d-flex align-items-center gap-2 mb-3 p-2 rounded" style="background:#fffbeb;border:1px solid #fde68a;">
-    <span class="fw-semibold text-warning-emphasis" style="font-size:0.8rem;">
-        <i class="fas fa-map-signs me-1 text-warning"></i>You are in:
-    </span>
-    <span class="btn btn-sm btn-warning fw-bold" style="cursor:default;pointer-events:none;" title="Currently active">
-        <i class="fas fa-eye me-1"></i>Demo&nbsp;Workspace
-    </span>
-    <span class="text-muted" style="font-size:0.75rem;">|</span>
-    <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-outline-secondary">
-            <i class="fas fa-briefcase me-1"></i>My Workspace
-        </button>
-    </form>
-    <a href="{% url 'onboarding_welcome' %}" class="btn btn-sm btn-outline-primary">
-        <i class="fas fa-rocket me-1"></i>Set up my workspace
-    </a>
-</div>
-{% else %}
-<!-- ═══ WORKSPACE MODE SWITCHER (My Workspace active) ═══ -->
-<div class="d-flex align-items-center gap-2 mb-3 p-2 rounded" style="background:#eff6ff;border:1px solid #bfdbfe;">
-    <span class="fw-semibold text-primary-emphasis" style="font-size:0.8rem;">
-        <i class="fas fa-map-signs me-1 text-primary"></i>You are in:
-    </span>
-    <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-outline-warning">
-            <i class="fas fa-eye me-1"></i>Demo Workspace
-        </button>
-    </form>
-    <span class="text-muted" style="font-size:0.75rem;">|</span>
-    <span class="btn btn-sm btn-primary fw-bold" style="cursor:default;pointer-events:none;" title="Currently active">
-        <i class="fas fa-briefcase me-1"></i>My&nbsp;Workspace
-    </span>
-    <a href="{% url 'onboarding_welcome' %}" class="btn btn-sm btn-outline-primary">
-        <i class="fas fa-rocket me-1"></i>Set up with AI
-    </a>
-</div>
-{% endif %}
 
 {% if show_assign_banner %}
 <!-- One-time onboarding banner: remind user to assign tasks -->
@@ -1068,82 +1089,133 @@
 </div>
 {% endif %}
 
+{# Demo onboarding info now lives in the navbar "Demo Info" dropdown (see templates/demo/partials/demo_info_dropdown.html) #}
+
 <!-- ============================================================ -->
-<!-- DECISION CENTER WIDGET                                      -->
+<!-- UNIFIED "FOCUS TODAY" MORNING COMMAND CENTER                 -->
+<!-- AI Briefing headline (situation) + top decision items        -->
+<!-- (action) in one always-populated card. Full /decision-center -->
+<!-- page is the expanded version of this same content.           -->
 <!-- ============================================================ -->
-<div class="row mb-3" id="decision-center-widget">
-    <div class="col-12">
-        <div class="card shadow-sm border-0" style="border-left: 4px solid #6366f1 !important;">
-            <div class="card-body p-3">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <h6 class="mb-0 fw-bold">
-                        <i class="fas fa-bolt text-warning me-1"></i> Decision Center
-                    </h6>
-                    <a href="{% url 'decision_center:decision_center' %}" class="btn btn-sm btn-outline-primary">
-                        Open Full View <i class="fas fa-arrow-right ms-1"></i>
-                    </a>
-                </div>
-                <!-- Loading skeleton -->
-                <div id="dc-widget-loading">
-                    <div class="d-flex gap-3">
-                        <div class="placeholder-glow flex-fill"><span class="placeholder col-8"></span></div>
-                        <div class="placeholder-glow flex-fill"><span class="placeholder col-6"></span></div>
-                        <div class="placeholder-glow flex-fill"><span class="placeholder col-7"></span></div>
-                    </div>
-                </div>
-                <!-- Content (hidden until loaded) -->
-                <div id="dc-widget-content" style="display:none;">
-                    <p class="mb-2 text-muted small" id="dc-widget-headline"></p>
-                    <div class="d-flex flex-wrap gap-3 align-items-center">
-                        <span class="badge bg-danger bg-opacity-10 text-danger px-3 py-2" id="dc-action-badge">
-                            <i class="fas fa-circle-exclamation me-1"></i>
-                            <span id="dc-action-count">0</span> Action Required
-                        </span>
-                        <span class="badge bg-info bg-opacity-10 text-info px-3 py-2" id="dc-awareness-badge">
-                            <i class="fas fa-info-circle me-1"></i>
-                            <span id="dc-awareness-count">0</span> Awareness
-                        </span>
-                        <span class="badge bg-success bg-opacity-10 text-success px-3 py-2" id="dc-quickwin-badge">
-                            <i class="fas fa-bolt me-1"></i>
-                            <span id="dc-quickwin-count">0</span> Quick Wins
-                        </span>
-                        <span class="text-muted small ms-auto" id="dc-widget-meta"></span>
-                    </div>
-                </div>
-                <!-- All-clear state -->
-                <div id="dc-widget-empty" style="display:none;">
-                    <p class="mb-0 text-success"><i class="fas fa-check-circle me-1"></i> All clear — no decisions pending</p>
-                </div>
-            </div>
+{% if features.show_decision_center %}
+<div class="card prizm-surface border-0 mb-3" id="focus-briefing-card" style="border-left: 4px solid #6366f1 !important;">
+    <div class="card-body p-3" id="decision-center-widget">
+
+        {# ── Header: title + action-count pill ── #}
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <h6 class="mb-0 fw-bold">
+                <i class="fas fa-bolt text-warning me-1"></i> Focus Today
+            </h6>
+            {% if dc_action_count %}
+            <span class="dc-badge dc-badge-danger flex-shrink-0" style="padding:3px 11px; font-size:0.76rem;">
+                <span id="dc-action-count">{{ dc_action_count }}</span>&nbsp;action{{ dc_action_count|pluralize }}
+            </span>
+            {% endif %}
         </div>
+
+        {% if daily_briefing.workspace_is_new %}
+        {# ── New-workspace welcome variant ── #}
+        <p class="mb-0 small" style="color:#374151;">
+            <i class="fas fa-robot me-1" style="color:#0e9f6e;"></i>
+            {% if daily_briefing.ws_goal_name %}Your <strong>{{ daily_briefing.ws_goal_name }}</strong> workspace is ready — {% else %}Your workspace is ready — {% endif %}
+            {% if daily_briefing.ws_board_count %}Spectra built {{ daily_briefing.ws_mission_count }} mission{{ daily_briefing.ws_mission_count|pluralize }}, {{ daily_briefing.ws_board_count }} board{{ daily_briefing.ws_board_count|pluralize }} and {{ daily_briefing.ws_total_tasks }} starter task{{ daily_briefing.ws_total_tasks|pluralize }}. Open a board and move your first task forward to get started.{% else %}Open a board and move your first task forward to get started.{% endif %}
+        </p>
+        {% else %}
+
+        {# ── AI Briefing headline (situation) + AI Action Plan button on one row ── #}
+        {% if dc_headline %}
+        <div class="ai-briefing-row d-flex align-items-start justify-content-between gap-3 mb-2">
+            <p class="mb-0 d-flex align-items-start gap-2" style="color:#374151; line-height:1.5;">
+                <i class="fas fa-robot flex-shrink-0 ai-briefing-bot" style="color:#6366f1;"></i>
+                <span style="font-size:0.86rem;"><strong style="color:#4f46e5;">AI Briefing:</strong> {{ dc_headline }}</span>
+            </p>
+            {% if daily_briefing.action_plan %}
+            <button type="button" class="btn btn-sm ai-action-plan-btn flex-shrink-0" data-bs-toggle="modal" data-bs-target="#aiRecommendedActionsModal">
+                <i class="fas fa-wand-magic-sparkles me-1"></i> View AI Action Plan
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {# ── Body: top decision items — the real mixed queue rows ── #}
+        <div class="d-flex flex-column">
+            {% for item in dc_top_items %}
+            <a class="cmd-item d-flex align-items-baseline gap-2 text-decoration-none{% if not item.widget_url %} cmd-item-static{% endif %}"
+               {% if item.widget_url %}href="{{ item.widget_url }}"{% endif %}
+               title="{{ item.suggested_action|default:item.title }}">
+                <span class="dc-badge flex-shrink-0 {% if item.priority_level == 'action_required' %}dc-badge-danger{% elif item.priority_level == 'quick_win' %}dc-badge-success{% else %}dc-badge-info{% endif %}" style="padding:2px 9px; font-size:0.7rem;">
+                    {{ item.widget_label }}
+                </span>
+                <span class="flex-fill" style="min-width:0; line-height:1.4; overflow-wrap:anywhere;">
+                    <span style="font-size:0.84rem; color:#1e293b; font-weight:500;">{{ item.title }}</span>
+                    {% if item.description %}<span class="text-muted" style="font-size:0.78rem;"> — {{ item.description }}</span>{% endif %}
+                </span>
+                <span class="text-muted flex-shrink-0" style="font-size:0.72rem; white-space:nowrap;" title="Estimated time to review and decide — not to resolve the underlying issue">~{{ item.estimated_minutes }}m review</span>
+            </a>
+            {% empty %}
+            <p class="mb-0 text-success small"><i class="fas fa-check-circle me-1"></i> All clear — no decisions pending</p>
+            {% endfor %}
+        </div>
+
+        {# ── Footer: open the full Decision Center ── #}
+        <div class="mt-2 pt-2" style="border-top:1px solid var(--border-light, #eef0f5);">
+            <a href="{% url 'decision_center:decision_center' %}" class="btn btn-sm btn-outline-primary">
+                Open Decision Center{% if dc_action_count %} (<span id="dc-action-count-2">{{ dc_action_count }}</span> Action{{ dc_action_count|pluralize }} Required){% endif %} <i class="fas fa-arrow-right ms-1"></i>
+            </a>
+        </div>
+        {% endif %}{# /not workspace_is_new #}
+
     </div>
 </div>
+{% endif %}
+<!-- /Focus Today Command Center -->
 
 <!-- ============================================================ -->
 <!-- ZONE 1: COMPACT KPI STRIP                                   -->
 <!-- ============================================================ -->
-<div class="d-flex flex-wrap gap-2 mb-3 align-items-center" id="kpi-strip">
-    <div class="kpi-pill" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#totalTasksModal" aria-label="View all tasks">
-        <i class="fas fa-tasks text-primary me-1"></i>
-        <strong class="text-primary">{{ task_count }}</strong> <span class="text-muted">Tasks</span>
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-stretch" id="kpi-strip">
+    <div class="kpi-pill kpi-pill-lg flex-fill justify-content-center" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#totalTasksModal" aria-label="View all tasks">
+        <i class="fas fa-tasks text-primary me-2"></i>
+        <strong class="text-primary">{{ task_count }}</strong>&nbsp;<span class="text-muted">Tasks</span>
     </div>
-    <div class="kpi-pill" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#completedTasksModal" aria-label="View completed tasks">
-        <i class="fas fa-check-circle text-success me-1"></i>
-        <strong class="text-success">{{ completed_count }}</strong> <span class="text-muted">Done</span>
-        <span class="kpi-pill-sub">{{ completion_rate }}%</span>
+    <div class="kpi-pill kpi-pill-lg flex-fill justify-content-center" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#completedTasksModal" aria-label="View completed tasks">
+        <i class="fas fa-check-circle text-success me-2"></i>
+        <strong class="text-success">{{ completed_count }}</strong>&nbsp;<span class="text-muted">Done</span>
+        <span class="kpi-pill-sub ms-1">{{ completion_rate }}%</span>
     </div>
-    <div class="kpi-pill {% if overdue_count > 0 %}kpi-pill-alert{% endif %}" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#overdueTasksModal" aria-label="View overdue tasks">
-        <i class="fas fa-exclamation-circle {% if overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %} me-1"></i>
-        <strong class="{% if overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %}">{{ overdue_count }}</strong> <span class="text-muted">Overdue</span>
+    <div class="kpi-pill kpi-pill-lg flex-fill justify-content-center {% if overdue_count > 0 %}kpi-pill-alert{% endif %}" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#overdueTasksModal" aria-label="View overdue tasks">
+        <i class="fas fa-exclamation-circle {% if overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %} me-2"></i>
+        <strong class="{% if overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %}">{{ overdue_count }}</strong>&nbsp;<span class="text-muted">Overdue</span>
     </div>
-    <div class="kpi-pill {% if total_high_risk > 0 %}kpi-pill-warn{% endif %}" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#highRiskModal" aria-label="View high risk tasks">
-        <i class="fas fa-shield-alt {% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %} me-1"></i>
-        <strong class="{% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %}">{{ total_high_risk }}</strong> <span class="text-muted">High Risk</span>
+    {% if features.show_full_analytics %}
+    <div class="kpi-pill kpi-pill-lg flex-fill justify-content-center {% if total_high_risk > 0 %}kpi-pill-warn{% endif %}" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#highRiskModal" aria-label="View high risk tasks">
+        <i class="fas fa-shield-alt {% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %} me-2"></i>
+        <strong class="{% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %}">{{ total_high_risk }}</strong>&nbsp;<span class="text-muted">High Risk</span>
     </div>
+    {% endif %}
+
 </div>
 <!-- /KPI Strip -->
 
+<!-- ── PrizmDiscovery Widget ─────────────────────────────────────────
+     Removed from the dashboard to declutter: the "to score" count now shows
+     as a badge on the sidebar Discovery item (sidebar_discovery_to_score,
+     via kanban.context_processors.discovery_count). Open Discovery from the
+     left nav to score/promote ideas. -->
+{% if daily_briefing.workspace_is_new and discovery_ideas_to_score > 0 %}
+<div class="card prizm-surface mb-3">
+    <div class="card-body py-2 px-3">
+        <span class="text-muted" style="font-size:0.8rem;">
+            <i class="fas fa-robot me-1 text-warning"></i>Spectra suggested {{ discovery_ideas_to_score }} starter idea{{ discovery_ideas_to_score|pluralize }} from your goal —
+            <a href="{% url 'discovery_dashboard' %}?stage=new" class="text-decoration-none">score them in Discovery →</a>
+        </span>
+    </div>
+</div>
+{% endif %}
+<!-- /Discovery Widget -->
+
 <!-- AI Recommended Actions Modal -->
+{% if features.show_decision_center %}
 <div class="modal fade" id="aiRecommendedActionsModal" tabindex="-1"
      aria-labelledby="aiRecommendedActionsLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -1170,7 +1242,7 @@
                 {% if daily_briefing.action_plan %}
                 <div class="d-flex flex-column gap-2">
                 {% for step in daily_briefing.action_plan %}
-                    <div class="action-step-card {% if step.task.risk_level == 'critical' %}step-critical{% elif step.task.risk_level == 'high' %}step-high{% else %}step-overdue{% endif %}">
+                    <div class="action-step-card {% if daily_briefing.action_type == 'stalled' %}step-overdue{% elif step.task.risk_level == 'critical' %}step-critical{% elif step.task.risk_level == 'high' %}step-high{% else %}step-overdue{% endif %}">
                         {# Title row #}
                         <div class="d-flex align-items-center mb-2">
                             <span class="action-step-number">{{ forloop.counter }}</span>
@@ -1178,30 +1250,36 @@
                                 <span class="fw-bold" style="font-size:0.92rem;">{{ step.task.title }}</span>
                             </div>
                             <div class="d-flex align-items-center gap-1 flex-shrink-0 ms-2">
-                                {% if step.task.risk_level == 'critical' %}
-                                    <span class="badge bg-danger" style="font-size:0.68rem;">Critical</span>
+                                {% if daily_briefing.action_type == 'stalled' %}
+                                    <span class="badge bg-warning text-dark" style="font-size:0.75rem;">
+                                        <i class="far fa-clock me-1"></i>Stalled{% if step.task.days_in_column %} · {{ step.task.days_in_column }}d{% endif %}
+                                    </span>
+                                {% elif step.task.risk_level == 'critical' %}
+                                    <span class="badge bg-danger" style="font-size:0.75rem;">Critical</span>
+                                {% elif step.task.risk_level == 'high' %}
+                                    <span class="badge bg-warning text-dark" style="font-size:0.75rem;">High Risk</span>
                                 {% else %}
-                                    <span class="badge bg-warning text-dark" style="font-size:0.68rem;">High Risk</span>
+                                    <span class="badge bg-danger" style="font-size:0.75rem;">Overdue</span>
                                 {% endif %}
                                 {% if step.task.due_date %}
-                                <span class="text-muted" style="font-size:0.71rem;">
+                                <span class="text-muted" style="font-size:0.78rem;">
                                     <i class="fas fa-calendar-alt me-1"></i>{{ step.task.due_date|date:"M d" }}
                                 </span>
                                 {% endif %}
                                 {% if step.task.assigned_to %}
-                                <span class="text-muted" style="font-size:0.71rem;">
+                                <span class="text-muted" style="font-size:0.78rem;">
                                     <i class="fas fa-user me-1"></i>{{ step.task.assigned_to.username }}
                                 </span>
                                 {% else %}
-                                <span style="font-size:0.71rem; color:#dc2626;">
+                                <span style="font-size:0.78rem; color:#dc2626;">
                                     <i class="fas fa-user-slash me-1"></i>Unassigned
                                 </span>
                                 {% endif %}
-                                <span class="badge priority-{{ step.task.priority }}" style="font-size:0.68rem;">{{ step.task.priority|title }}</span>
-                                <span style="font-size:0.71rem; color:#6b7280;">{{ step.task.progress }}%</span>
+                                <span class="badge priority-{{ step.task.priority }}" style="font-size:0.75rem;">{{ step.task.priority|title }}</span>
+                                <span style="font-size:0.78rem; color:#6b7280;">{{ step.task.progress }}%</span>
                                 <a href="{% url 'task_detail' step.task.id %}"
                                    class="btn btn-xs btn-outline-primary ms-1"
-                                   style="font-size:0.72rem; padding:0.15rem 0.5rem;">
+                                   style="font-size:0.78rem; padding:0.2rem 0.55rem;">
                                     Open
                                 </a>
                             </div>
@@ -1232,7 +1310,7 @@
 
             </div>
             <div class="modal-footer d-flex justify-content-between align-items-center">
-                <small class="text-muted" style="font-size:0.72rem;">
+                <small class="text-muted" style="font-size:0.78rem;">
                     {% if daily_briefing.ai_powered %}
                         <i class="fas fa-robot me-1" style="color:#3b82f6;"></i>
                         <span style="color:#1e40af; font-weight:600;">Spectra AI</span>
@@ -1257,135 +1335,9 @@
         </div>
     </div>
 </div>
+{% endif %}
 <!-- /AI Recommended Actions Modal -->
 
-<!-- Demo Credentials — compact pill -->
-{% if demo_mode %}
-<div class="demo-credentials-banner" id="demoCredentialsBanner">
-    <div class="demo-banner-header" onclick="toggleDemoBanner()">
-        <i class="fas fa-user-shield demo-banner-icon"></i>
-        <span class="demo-banner-title">Demo Credentials</span>
-        <i class="fas fa-chevron-down demo-toggle-icon"></i>
-    </div>
-    <div class="demo-banner-content">
-        <div class="demo-users-row">
-            <!-- Alex Chen - Admin -->
-            <div class="demo-user-box admin">
-                <div class="demo-user-header">
-                    <div class="demo-user-init">AC</div>
-                    <div class="demo-user-info">
-                        <h6>Alex Chen</h6>
-                        <p class="demo-user-role">Admin</p>
-                    </div>
-                </div>
-                <div class="demo-cred-item">
-                    <span class="demo-cred-label">Username:</span>
-                    <span class="demo-cred-value">alex_chen_demo</span>
-                </div>
-                <div class="demo-cred-item">
-                    <span class="demo-cred-label">Password:</span>
-                    <span class="demo-cred-value">demo123</span>
-                </div>
-                <div class="demo-skills-list">
-                    <p style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: #555;">Key Skills:</p>
-                    <span class="demo-skill-tag">Project Management</span>
-                    <span class="demo-skill-tag">Agile/Scrum</span>
-                    <span class="demo-skill-tag">Leadership</span>
-                </div>
-                <a href="{% url 'quick_demo_login' 'alex_chen_demo' %}" class="demo-login-btn">
-                    <i class="fas fa-sign-in-alt me-1"></i>Login as Alex
-                </a>
-            </div>
-
-            <!-- Sam Rivera - Developer -->
-            <div class="demo-user-box developer">
-                <div class="demo-user-header">
-                    <div class="demo-user-init">SR</div>
-                    <div class="demo-user-info">
-                        <h6>Sam Rivera</h6>
-                        <p class="demo-user-role">Developer</p>
-                    </div>
-                </div>
-                <div class="demo-cred-item">
-                    <span class="demo-cred-label">Username:</span>
-                    <span class="demo-cred-value">sam_rivera_demo</span>
-                </div>
-                <div class="demo-cred-item">
-                    <span class="demo-cred-label">Password:</span>
-                    <span class="demo-cred-value">demo123</span>
-                </div>
-                <div class="demo-skills-list">
-                    <p style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: #555;">Key Skills:</p>
-                    <span class="demo-skill-tag">Python</span>
-                    <span class="demo-skill-tag">JavaScript</span>
-                    <span class="demo-skill-tag">Django</span>
-                    <span class="demo-skill-tag">React</span>
-                </div>
-                <a href="{% url 'quick_demo_login' 'sam_rivera_demo' %}" class="demo-login-btn">
-                    <i class="fas fa-sign-in-alt me-1"></i>Login as Sam
-                </a>
-            </div>
-
-            <!-- Jordan Taylor - Strategist -->
-            <div class="demo-user-box strategist">
-                <div class="demo-user-header">
-                    <div class="demo-user-init">JT</div>
-                    <div class="demo-user-info">
-                        <h6>Jordan Taylor</h6>
-                        <p class="demo-user-role">Strategist</p>
-                    </div>
-                </div>
-                <div class="demo-cred-item">
-                    <span class="demo-cred-label">Username:</span>
-                    <span class="demo-cred-value">jordan_taylor_demo</span>
-                </div>
-                <div class="demo-cred-item">
-                    <span class="demo-cred-label">Password:</span>
-                    <span class="demo-cred-value">demo123</span>
-                </div>
-                <div class="demo-skills-list">
-                    <p style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: #555;">Key Skills:</p>
-                    <span class="demo-skill-tag">Strategic Planning</span>
-                    <span class="demo-skill-tag">Business Analysis</span>
-                </div>
-                <a href="{% url 'quick_demo_login' 'jordan_taylor_demo' %}" class="demo-login-btn">
-                    <i class="fas fa-sign-in-alt me-1"></i>Login as Jordan
-                </a>
-            </div>
-        </div>
-
-        <!-- Demo Boards Section -->
-        <div class="demo-boards-section mt-4">
-            <h5 class="demo-boards-title">
-                <i class="fas fa-folder-open me-2"></i>Pre-Populated Demo Board
-            </h5>
-            <div class="demo-boards-grid">
-                <!-- Software Development Board -->
-                <div class="demo-board-item software">
-                    <div class="demo-board-icon">
-                        <i class="fas fa-code"></i>
-                    </div>
-                    <div class="demo-board-name">Software Development</div>
-                    <div class="demo-board-desc">30 tasks with sprints, dependencies, and Gantt charts</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- AI Feature Notice -->
-        <div class="alert alert-info mt-4" style="border-left: 4px solid #17a2b8; background-color: #e7f6f8; border-radius: 8px;">
-            <div class="d-flex align-items-start">
-                <i class="fas fa-info-circle me-3" style="font-size: 1.2rem; color: #17a2b8; margin-top: 2px;"></i>
-                <div style="flex: 1;">
-                    <strong style="color: #0c5460;">Note about AI Features:</strong>
-                    <p style="margin-bottom: 0; margin-top: 0.5rem; color: #0c5460; font-size: 0.9rem;">
-                        AI-powered features are not available for these demo users. Logging in with any of these demo accounts will not allow you to access AI features.
-                    </p>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
 
 {{ chart_data|json_script:"dashboardChartData" }}
 
@@ -1398,7 +1350,7 @@
     <div class="col-lg-7 col-md-12">
 
         <!-- Board Cards Grid -->
-        <div class="card shadow-sm h-100" id="board-cards-section">
+        <div class="card prizm-surface h-100" id="board-cards-section">
             <div class="card-header py-2 d-flex align-items-center justify-content-between">
                 <h6 class="m-0 fw-bold text-primary">
                     <i class="fas fa-columns me-2"></i>My Boards
@@ -1412,49 +1364,27 @@
                     </a>
                 </div>
             </div>
-            <div class="card-body p-3">
-                {% if boards %}
+            <div class="card-body p-3" style="overflow-y:auto; max-height:600px;">
+                {% if owned_boards %}
                 <div class="row g-3">
-                    {% for board in boards %}
+                    {% for board in owned_boards %}
                     <div class="col-md-6 col-xl-4">
                         <a href="{% url 'board_detail' board.id %}" class="text-decoration-none">
                             <div class="board-card-grid" style="border-left:4px solid {% cycle '#3b82f6' '#8b5cf6' '#f59e0b' '#10b981' '#ec4899' '#6366f1' %};">
                                 <div class="d-flex align-items-start justify-content-between mb-2">
                                     <h6 class="board-card-title mb-0">{{ board.name }}</h6>
-                                    {% with status=board.get_current_scope_status %}
-                                    {% if status.scope_change_pct is not None %}
-                                        {% if status.scope_change_pct > 30 %}
-                                        <span class="board-health-dot bg-danger" title="At Risk"></span>
-                                        {% elif status.scope_change_pct > 15 %}
-                                        <span class="board-health-dot bg-warning" title="Caution"></span>
-                                        {% else %}
-                                        <span class="board-health-dot bg-success" title="Healthy"></span>
-                                        {% endif %}
+                                    {# Board health dot: holistic signal from schedule, risk, budget, scope, blockers #}
+                                    {% with health=board_health_map|get_item:board.id %}
+                                    {% if health.level == 'red' %}
+                                        <span class="board-health-dot bg-danger" title="{{ health.tooltip }}"></span>
+                                    {% elif health.level == 'amber' %}
+                                        <span class="board-health-dot bg-warning" title="{{ health.tooltip }}"></span>
                                     {% else %}
-                                        <span class="board-health-dot bg-success" title="Healthy"></span>
+                                        <span class="board-health-dot bg-success" title="{{ health.tooltip }}"></span>
                                     {% endif %}
                                     {% endwith %}
                                 </div>
-                                <div class="d-flex align-items-center justify-content-between mb-2">
-                                    <small class="text-muted">{{ board.task_set.count }} tasks</small>
-                                    {% if board.strategy %}
-                                    <small class="text-muted" style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle;"><i class="fas fa-bullseye me-1"></i>{{ board.strategy.mission.name }}</small>
-                                    {% endif %}
-                                </div>
-                                <div class="board-card-progress">
-                                    {% with total=board.task_set.count done=board.completed_task_count %}
-                                    {% if total > 0 %}
-                                    <div class="progress" style="height: 4px;">
-                                        <div class="progress-bar {% if done == total %}bg-success{% elif done > 0 %}bg-primary{% else %}bg-secondary{% endif %}" 
-                                             style="width: {% widthratio done total 100 %}%"></div>
-                                    </div>
-                                    {% else %}
-                                    <div class="progress" style="height: 4px;">
-                                        <div class="progress-bar bg-secondary" style="width: 0%"></div>
-                                    </div>
-                                    {% endif %}
-                                    {% endwith %}
-                                </div>
+                                {% include 'kanban/partials/board_card.html' with board=board is_shared=False %}
                             </div>
                         </a>
                     </div>
@@ -1472,6 +1402,45 @@
             </div>
         </div>
 
+        {% if shared_boards %}
+        <!-- ======================================================== -->
+        <!-- Shared with me (boards from other users' workspaces)     -->
+        <!-- ======================================================== -->
+        <div class="card prizm-surface mb-4 mt-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="fas fa-user-friends me-2"></i>Shared with me
+                </h6>
+                <small class="text-muted">Boards you collaborate on, owned by other workspaces</small>
+            </div>
+            <div class="card-body p-3" style="overflow-y:auto; max-height:400px;">
+                <div class="row g-3">
+                    {% for board in shared_boards %}
+                    <div class="col-md-6 col-xl-4">
+                        <a href="{% url 'board_detail' board.id %}" class="text-decoration-none">
+                            <div class="board-card-grid" style="border-left:4px solid #64748b;">
+                                <div class="d-flex align-items-start justify-content-between mb-2">
+                                    <h6 class="board-card-title mb-0">{{ board.name }}</h6>
+                                    {% with health=board_health_map|get_item:board.id %}
+                                    {% if health.level == 'red' %}
+                                        <span class="board-health-dot bg-danger" title="{{ health.tooltip }}"></span>
+                                    {% elif health.level == 'amber' %}
+                                        <span class="board-health-dot bg-warning" title="{{ health.tooltip }}"></span>
+                                    {% else %}
+                                        <span class="board-health-dot bg-success" title="{{ health.tooltip }}"></span>
+                                    {% endif %}
+                                    {% endwith %}
+                                </div>
+                                {% include 'kanban/partials/board_card.html' with board=board is_shared=True my_role=my_board_roles|get_item:board.id %}
+                            </div>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
     </div>
     <!-- /col-lg-7 (Board Cards) -->
 
@@ -1479,7 +1448,7 @@
     <!-- RIGHT COLUMN: My Tasks                                   -->
     <!-- ======================================================== -->
     <div class="col-lg-5 col-md-12">
-        <div class="card shadow h-100">
+        <div class="card prizm-surface h-100">
             <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                 <div class="d-flex align-items-center">
                     <h6 class="m-0 font-weight-bold text-primary me-2">
@@ -1501,29 +1470,39 @@
                 {% if my_tasks %}
                 <ul class="list-group list-group-flush">
                     {% for task in my_tasks %}
-                    <li class="list-group-item px-3 py-2" style="list-style:none;">
-                        <div class="d-flex justify-content-between align-items-start mb-1">
-                            <span class="fw-semibold small">{{ task.title|truncatechars:50 }}</span>
-                            <span class="badge priority-{{ task.priority }} ms-1 flex-shrink-0">{{ task.priority|title }}</span>
-                        </div>
-                        <div class="text-muted" style="font-size:0.72rem;">
-                            <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }}
-                            <span class="text-muted ms-1">/ {{ task.column.name }}</span>
-                        </div>
-                        {% if task.due_date %}
-                        <div style="font-size:0.72rem;" class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
-                            <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
-                            {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-danger ms-1" style="font-size:0.6rem;">Overdue</span>{% endif %}
-                        </div>
-                        {% endif %}
-                        <div class="d-flex align-items-center gap-2 mt-1">
-                            <div class="progress flex-grow-1" style="height:5px;">
-                                <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                                     role="progressbar" style="width:{{ task.progress }}%"></div>
+                    <li class="list-group-item px-0 py-0" style="list-style:none; border-bottom: 1px solid var(--border-color, #e9ecef);">
+                        <a href="{% url 'task_detail' task.id %}" class="d-block px-3 py-3 text-decoration-none text-reset dash-task-row">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <div class="d-flex align-items-center gap-2 min-w-0">
+                                    <span class="text-muted flex-shrink-0" style="font-size:0.72rem; font-family:monospace;">{{ task.column.board.get_task_prefix }}-{{ task.id }}</span>
+                                    <span class="fw-semibold small text-truncate">{{ task.title|truncatechars:45 }}</span>
+                                </div>
+                                <span class="badge priority-{{ task.priority }} ms-1 flex-shrink-0">{{ task.priority|title }}</span>
                             </div>
-                            <span style="font-size:0.68rem;" class="text-muted flex-shrink-0">{{ task.progress }}%</span>
-                            <a href="{% url 'task_detail' task.id %}" class="btn btn-xs btn-primary flex-shrink-0">View</a>
-                        </div>
+                            <div class="text-muted" style="font-size:0.78rem;">
+                                <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }}
+                                <span class="text-muted ms-1">/ {{ task.column.name }}</span>
+                            </div>
+                            {% if task.due_date %}
+                            <div style="font-size:0.78rem;" class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
+                                <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
+                                {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-danger ms-1" style="font-size:0.68rem;">Overdue</span>{% endif %}
+                            </div>
+                            {% endif %}
+                            {% if my_tasks_sort_by == 'recent' %}
+                            <div style="font-size:0.78rem;" class="text-muted">
+                                <i class="far fa-clock me-1"></i>Updated {{ task.updated_at|timesince }} ago
+                            </div>
+                            {% endif %}
+                            <div class="d-flex align-items-center gap-2 mt-1">
+                                <div class="progress flex-grow-1" style="height:5px;">
+                                    <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         role="progressbar" style="width:{{ task.progress }}%"></div>
+                                </div>
+                                <span style="font-size:0.75rem;" class="text-muted flex-shrink-0">{{ task.progress }}%</span>
+                                <span class="text-primary flex-shrink-0" style="font-size:0.75rem;"><i class="fas fa-arrow-right"></i></span>
+                            </div>
+                        </a>
                     </li>
                     {% endfor %}
                 </ul>
@@ -1548,303 +1527,527 @@
 <!-- /Row 2: Board Cards + My Tasks -->
 
 <!-- ============================================================ -->
-<!-- ROW 3: AI BRIEFING (full width, collapsed by default)       -->
+<!-- ROW 4: HIERARCHY NAVIGATOR — Tabbed Goal / Mission / Strategy / Board -->
 <!-- ============================================================ -->
-{% if daily_briefing.has_content %}
-<div class="card shadow-sm mb-3" id="daily-briefing-card">
-    <div class="card-body p-3">
-        {% if daily_briefing.workspace_is_new %}
-        <div class="d-flex align-items-center gap-2">
-            <i class="fas fa-robot" style="color:#0e9f6e;"></i>
-            <span class="fw-bold" style="font-size:0.88rem; color:#0e9f6e;">AI Briefing</span>
-        </div>
-        <p class="mt-2 mb-0 small" style="color:#374151;">Your workspace is all set. Open a board and move your first task forward to get started.</p>
-        {% else %}
-        <div class="d-flex align-items-center justify-content-between">
-            <div class="d-flex align-items-center gap-2" role="button" data-bs-toggle="collapse" data-bs-target="#briefingDetail" 
-                 aria-expanded="false" aria-controls="briefingDetail" style="cursor:pointer;">
-                <i class="fas fa-robot" style="color:#0e9f6e;"></i>
-                <span class="fw-bold" style="font-size:0.88rem; color:#0e9f6e;">AI Briefing</span>
-                <span class="text-muted" style="font-size:0.82rem;">
-                    — {% if daily_briefing.pulse %}{{ daily_briefing.pulse|truncatechars:80 }}{% else %}{{ daily_briefing.action|truncatechars:80 }}{% endif %}
-                </span>
-                <i class="fas fa-chevron-down text-muted ms-1" style="font-size:0.7rem; transition:transform 0.2s;" id="briefingChevron"></i>
-            </div>
-        </div>
-        <div class="collapse mt-3" id="briefingDetail">
-            <div class="row g-2">
-                {% if daily_briefing.pulse %}
-                <div class="col-md-4">
-                    <div class="briefing-item">
-                        <span class="briefing-tag briefing-pulse">🟢 Overall Pulse</span>
-                        <p class="mb-0 small mt-2" style="color:#374151;">{{ daily_briefing.pulse }}</p>
-                    </div>
-                </div>
-                {% endif %}
-                {% if daily_briefing.risk %}
-                <div class="col-md-4">
-                    <div class="briefing-item">
-                        <span class="briefing-tag briefing-risk">⚠️ Top Risk Item</span>
-                        {% if daily_briefing.top_risk %}
-                        <div class="mt-2">
-                            <a href="{% url 'task_detail' daily_briefing.top_risk.task.id %}"
-                               class="fw-semibold text-decoration-none"
-                               style="font-size:0.82rem; color:#1e3a8a;"
-                               title="{{ daily_briefing.top_risk.task.title }}">
-                                {{ daily_briefing.top_risk.task.title|truncatechars:52 }}
-                            </a>
-                            <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
-                                {% if daily_briefing.top_risk.risk_level == 'critical' %}
-                                    <span class="badge bg-danger" style="font-size:0.65rem;">Critical</span>
-                                {% else %}
-                                    <span class="badge bg-warning text-dark" style="font-size:0.65rem;">High Risk</span>
-                                {% endif %}
-                                <small class="text-muted" style="font-size:0.72rem;">
-                                    <i class="fas fa-calendar-alt me-1"></i>{{ daily_briefing.top_risk.due_label }}
-                                </small>
-                                {% if daily_briefing.top_risk.board_name %}
-                                <small class="text-muted" style="font-size:0.72rem;">
-                                    <i class="fas fa-columns me-1"></i>{{ daily_briefing.top_risk.board_name|truncatechars:20 }}
-                                </small>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endif %}
-                {% if daily_briefing.action %}
-                <div class="col-md-4">
-                    <div class="briefing-item briefing-item-clickable"
-                         data-bs-toggle="modal" data-bs-target="#aiRecommendedActionsModal"
-                         role="button" tabindex="0"
-                         aria-label="View AI recommended actions">
-                        <span class="briefing-tag briefing-action">💡 Recommended Action</span>
-                        <p class="mb-0 small mt-2 fw-semibold" style="color:#1e40af;">{{ daily_briefing.action }}</p>
-                        <div class="briefing-action-footer">
-                            View details <i class="fas fa-arrow-right ms-1"></i>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
+{% if features.show_hierarchy %}
+<div class="card prizm-surface mb-4" id="hierarchy-navigator">
+    <div class="card-header py-2">
+        <h6 class="m-0 fw-bold" style="color:#334155;">
+            <i class="fas fa-sitemap me-2" style="color:#6366f1;"></i>Hierarchy Navigator
+        </h6>
     </div>
-</div>
-{% endif %}
-<!-- /AI Briefing -->
 
-<!-- ============================================================ -->
-<!-- ROW 4: MISSION OVERVIEW — Card-based Progressive Disclosure -->
-<!-- ============================================================ -->
-<div class="card shadow mb-4" id="mission-overview-card">
-    <div class="card-header py-2 d-flex align-items-center justify-content-between">
-        <div class="d-flex align-items-center gap-2">
-            <h6 class="m-0 fw-bold text-primary">
-                <i class="fas fa-bullseye me-2 text-primary"></i>Mission Overview
-            </h6>
-            {% if mission_count %}
-            <span class="badge bg-primary rounded-pill ms-1">{{ mission_count }}</span>
-            {% endif %}
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <a href="{% url 'goal_list' %}" class="btn btn-sm btn-outline-warning text-dark">
-                <i class="fas fa-trophy fa-sm"></i><span class="d-none d-md-inline ms-1">Goals</span>
-            </a>
-            <a href="{% url 'mission_list' %}" class="btn btn-sm btn-outline-primary">
-                <i class="fas fa-bullseye fa-sm"></i><span class="d-none d-md-inline ms-1">Missions</span>
-            </a>
-            <a href="{% url 'create_mission' %}" class="btn btn-sm btn-primary">
-                <i class="fas fa-plus fa-sm"></i>
-            </a>
-        </div>
+    {# ── Tab pills ── #}
+    <ul class="nav hn-tabs px-3 pt-2 border-bottom" id="hierarchyTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="hn-tab-goals" data-bs-toggle="tab"
+                    data-bs-target="#hn-pane-goals" type="button" role="tab"
+                    aria-controls="hn-pane-goals" aria-selected="true">
+                <i class="fas fa-trophy me-1"></i>Goals
+                {% if goal_count %}<span class="badge rounded-pill hn-count">{{ goal_count }}</span>{% endif %}
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="hn-tab-missions" data-bs-toggle="tab"
+                    data-bs-target="#hn-pane-missions" type="button" role="tab"
+                    aria-controls="hn-pane-missions" aria-selected="false">
+                <i class="fas fa-bullseye me-1"></i>Missions
+                {% if mission_count %}<span class="badge rounded-pill hn-count">{{ mission_count }}</span>{% endif %}
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="hn-tab-strategies" data-bs-toggle="tab"
+                    data-bs-target="#hn-pane-strategies" type="button" role="tab"
+                    aria-controls="hn-pane-strategies" aria-selected="false">
+                <i class="fas fa-chess-knight me-1"></i>Strategies
+                {% if strategy_count %}<span class="badge rounded-pill hn-count">{{ strategy_count }}</span>{% endif %}
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="hn-tab-boards" data-bs-toggle="tab"
+                    data-bs-target="#hn-pane-boards" type="button" role="tab"
+                    aria-controls="hn-pane-boards" aria-selected="false">
+                <i class="fas fa-clipboard-list me-1"></i>Boards
+                {% if hierarchy_board_count %}<span class="badge rounded-pill hn-count">{{ hierarchy_board_count }}</span>{% endif %}
+            </button>
+        </li>
+    </ul>
+
+    {# ── Active-filter banner ── #}
+    <div id="hn-filter-bar" class="d-none px-3 py-2 d-flex align-items-center gap-2" style="background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+        <i class="fas fa-filter" style="color:#94a3b8; font-size:0.7rem;"></i>
+        <small class="text-muted">Showing <span id="hn-filter-label" class="fw-semibold text-dark"></span></small>
+        <button class="btn btn-sm btn-link text-danger p-0 ms-auto" style="font-size:0.75rem;" onclick="hnClearFilter()">
+            <i class="fas fa-times me-1"></i>Clear filter
+        </button>
     </div>
-    <div class="card-body p-3">
+
+    {# ── Tab panes ── #}
+    <div class="tab-content p-3" id="hierarchyTabContent">
+
+        {# ═══════════════════════ GOALS TAB ═══════════════════════ #}
+        <div class="tab-pane fade show active" id="hn-pane-goals" role="tabpanel" aria-labelledby="hn-tab-goals">
         {% if goal_tree %}
-        {% for goal_entry in goal_tree %}
-
-        {# ---- GOAL GROUP HEADER ---- #}
-        {% if goal_entry.goal %}
-        <div class="goal-header-card card border-0 shadow-sm mb-3 p-3">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="fas fa-trophy text-warning"></i>
-                    <div>
-                        <span class="badge text-uppercase fw-semibold me-1"
-                              style="background:#fff8e1; color:#b8860b; border:1px solid #ffe082; font-size:0.58rem; letter-spacing:0.07em; padding:2px 6px;">
-                            Organization Goal
-                        </span>
-                        <h6 class="mb-0 fw-bold">
-                            <a href="{% url 'goal_detail' goal_entry.goal.id %}" class="text-decoration-none text-dark">{{ goal_entry.goal.name }}</a>
-                        </h6>
-                        {% if goal_entry.goal.target_metric %}
-                        <small class="text-warning fw-semibold"><i class="fas fa-bullseye me-1"></i>{{ goal_entry.goal.target_metric }}</small>
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="d-flex align-items-center gap-2 flex-shrink-0 flex-wrap">
-                    {% if goal_entry.goal.status == 'active' %}
-                        <span class="badge bg-success">Active</span>
-                    {% elif goal_entry.goal.status == 'completed' %}
-                        <span class="badge bg-primary">Completed</span>
-                    {% else %}
-                        <span class="badge bg-warning text-dark">On Hold</span>
-                    {% endif %}
-                    {# Goal-level health pills #}
-                    <span class="status-pill {{ goal_entry.schedule_status|default:'on_track' }}">
-                        <span class="pill-dot"></span>
-                        {% if goal_entry.schedule_status == 'late' %}Late{% elif goal_entry.schedule_status == 'at_risk' %}At Risk{% else %}On Track{% endif %}
-                    </span>
-                    <span class="risk-pill {{ goal_entry.risk_level|default:'low' }}">
-                        <span class="pill-dot"></span>
-                        {% if goal_entry.risk_level == 'high' %}High Risk{% elif goal_entry.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
-                    </span>
-                    {% if goal_entry.completion_pct is not None %}
-                    <span class="badge bg-light text-dark border" style="font-size:0.68rem;">
-                        {{ goal_entry.completion_pct }}% complete
-                    </span>
-                    {% endif %}
-                    <span class="badge bg-light text-dark border">
-                        <i class="fas fa-bullseye text-primary me-1"></i>{{ goal_entry.missions|length }} mission{{ goal_entry.missions|length|pluralize }}
-                    </span>
-                    <a href="{% url 'goal_detail' goal_entry.goal.id %}" class="btn btn-sm btn-outline-warning text-dark" title="Open Goal">
-                        <i class="fas fa-external-link-alt fa-xs"></i>
-                    </a>
-                </div>
-            </div>
-            {% if goal_entry.total_tasks %}
-            <div class="progress mt-2" style="height:5px;">
-                <div class="progress-bar {% if goal_entry.completion_pct < 30 %}bg-danger{% elif goal_entry.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                     role="progressbar" style="width:{{ goal_entry.completion_pct }}%;"></div>
-            </div>
-            {% endif %}
-        </div>
-        {% else %}
-        {# Ungrouped missions #}
-        <div class="text-muted small mb-2 ps-1 mt-3">
-            <i class="fas fa-minus-circle me-1"></i><em>Missions not linked to an Organization Goal</em>
-        </div>
-        {% endif %}
-
-        {# ---- MISSION SUMMARY CARDS (responsive grid) ---- #}
-        <div class="row g-3 mb-4">
-            {% for mission_item in goal_entry.missions %}
-            {% with mission=mission_item.mission %}
-            <div class="col-md-6 col-lg-4">
-                <div class="mission-summary-card card h-100 shadow-sm" style="border-left: 4px solid #4e73df;">
-                    <div class="card-body">
-                        {# Header: Mission name + status #}
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div class="flex-grow-1 me-2">
-                                <span class="badge text-uppercase fw-semibold me-1"
-                                      style="background:#e8f0fe; color:#3a5bd9; border:1px solid #c0d0f8; font-size:0.55rem; letter-spacing:0.07em; padding:2px 6px;">
-                                    Mission
-                                </span>
-                                <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">
-                                    {{ mission.name }}
-                                </h6>
-                                {% if mission.description %}
-                                <small class="text-muted" style="font-size:0.78rem;">{{ mission.description|truncatechars:90 }}</small>
+            <div class="hn-cards-grid">
+            <div class="row g-3">
+            {% for ge in goal_tree %}{% if ge.goal %}
+                <div class="col-md-6 col-lg-4 hn-card" data-goal-id="{{ ge.goal.id }}">
+                    <div class="card h-100 shadow-sm hn-item hn-item--goal" role="button"
+                         onclick="hnToggleExpand('goal', {{ ge.goal.id }})">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1 me-2">
+                                    <span class="badge hn-level-badge hn-level-badge--goal">Goal</span>
+                                    <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">{{ ge.goal.name }}</h6>
+                                    {% if ge.goal.target_metric %}
+                                    <small class="text-muted" style="font-size:0.76rem;"><i class="fas fa-bullseye me-1" style="color:#d97706;"></i>{{ ge.goal.target_metric }}</small>
+                                    {% endif %}
+                                </div>
+                                {% if ge.goal.status == 'active' %}
+                                    <span class="badge bg-success flex-shrink-0">Active</span>
+                                {% elif ge.goal.status == 'completed' %}
+                                    <span class="badge bg-primary flex-shrink-0">Completed</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark flex-shrink-0">On Hold</span>
                                 {% endif %}
                             </div>
-                            <span class="badge ms-status-badge status-{{ mission.status }} flex-shrink-0">{{ mission.get_status_display }}</span>
-                        </div>
-
-                        {# Progress bar #}
-                        {% if mission_item.total_tasks %}
-                        <div class="d-flex align-items-center gap-2 mb-2">
-                            <div class="progress flex-grow-1" style="height:6px;">
-                                <div class="progress-bar {% if mission_item.completion_pct < 30 %}bg-danger{% elif mission_item.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                                     role="progressbar" style="width:{{ mission_item.completion_pct }}%;"></div>
+                            {% if ge.total_tasks %}
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <div class="progress flex-grow-1" style="height:5px;">
+                                    <div class="progress-bar {% if ge.completion_pct < 30 %}bg-danger{% elif ge.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         role="progressbar" style="width:{{ ge.completion_pct }}%;"></div>
+                                </div>
+                                <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.78rem;">{{ ge.completion_pct }}%</small>
                             </div>
-                            <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.72rem;">{{ mission_item.completion_pct }}%</small>
-                        </div>
-                        <small class="text-muted d-block mb-2" style="font-size:0.7rem;">
-                            {{ mission_item.done_tasks }}/{{ mission_item.total_tasks }} tasks complete
-                        </small>
-                        {% endif %}
-
-                        {# Dual health pills #}
-                        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-                            <span class="status-pill {{ mission_item.schedule_status }}">
-                                <span class="pill-dot"></span>
-                                {% if mission_item.schedule_status == 'late' %}Late{% elif mission_item.schedule_status == 'at_risk' %}At Risk{% else %}On Track{% endif %}
-                            </span>
-                            <span class="risk-pill {{ mission_item.risk_level }}">
-                                <span class="pill-dot"></span>
-                                {% if mission_item.risk_level == 'high' %}High Risk{% elif mission_item.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
-                            </span>
-                        </div>
-
-                        {# Child summary #}
-                        <small class="text-muted d-block mb-2" style="font-size:0.72rem;">
-                            <i class="fas fa-sitemap me-1 text-primary"></i>
-                            {{ mission_item.strategy_count }} strateg{{ mission_item.strategy_count|pluralize:"y,ies" }}{% if mission_item.strategy_count %}:
-                            {% if mission_item.strategies_on_track %}<span class="text-success fw-semibold">{{ mission_item.strategies_on_track }} On Track</span>{% endif %}
-                            {% if mission_item.strategies_at_risk %}<span class="text-warning fw-semibold ms-1">{{ mission_item.strategies_at_risk }} At Risk</span>{% endif %}
-                            {% if mission_item.strategies_late %}<span class="text-danger fw-semibold ms-1">{{ mission_item.strategies_late }} Late</span>{% endif %}
                             {% endif %}
-                        </small>
-
-                        {# View Details button #}
-                        <a href="{{ mission.get_absolute_url }}" class="btn btn-sm btn-outline-primary w-100 mt-1">
-                            View Details <i class="fas fa-arrow-right ms-1"></i>
-                        </a>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="status-pill {{ ge.schedule_status|default:'not_assessed' }}">
+                                    <span class="pill-dot"></span>
+                                    {% if ge.schedule_status == 'late' %}Late{% elif ge.schedule_status == 'at_risk' %}At Risk{% elif ge.schedule_status == 'on_track' %}On Track{% else %}No Timeline{% endif %}
+                                </span>
+                                <span class="risk-pill {{ ge.risk_level|default:'not_assessed' }}">
+                                    <span class="pill-dot"></span>
+                                    {% if ge.risk_level == 'high' %}High Risk{% elif ge.risk_level == 'medium' %}Med Risk{% elif ge.risk_level == 'low' %}Low Risk{% else %}Risk Not Assessed{% endif %}
+                                </span>
+                                <span class="badge bg-light text-dark border" style="font-size:0.66rem;">
+                                    <i class="fas fa-bullseye text-primary me-1"></i>{{ ge.missions|length }} mission{{ ge.missions|length|pluralize }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {# ── Inline expansion panel ── #}
+                    <div class="hn-expand d-none" id="hn-expand-goal-{{ ge.goal.id }}">
+                        <div class="card border-0 shadow-sm mt-2" style="background:#fefce8; border-left:3px solid #f59e0b !important;">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-semibold small" style="color:#92400e;"><i class="fas fa-trophy text-warning me-1"></i>{{ ge.goal.name }}</span>
+                                    <div class="d-flex gap-1">
+                                        <a href="{% url 'goal_detail' ge.goal.id %}" class="btn btn-sm btn-outline-warning text-dark" style="font-size:0.7rem;">
+                                            <i class="fas fa-external-link-alt fa-xs me-1"></i>Full page
+                                        </a>
+                                        <button class="btn btn-sm btn-warning text-dark" style="font-size:0.7rem;"
+                                                onclick="event.stopPropagation(); hnDrillDown('hn-pane-missions','goalId','{{ ge.goal.id }}','missions under {{ ge.goal.name|truncatechars:30 }}')">
+                                            <i class="fas fa-bullseye fa-xs me-1"></i>{{ ge.missions|length }} Mission{{ ge.missions|length|pluralize }} <i class="fas fa-arrow-right fa-xs ms-1"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                {% if ge.goal.description %}
+                                <p class="text-muted mb-0" style="font-size:0.76rem;">{{ ge.goal.description|truncatechars:200 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
                     </div>
                 </div>
+            {% endif %}{% endfor %}
             </div>
+            </div>{# /hn-cards-grid #}
+        {% else %}
+            {# Empty state — depends on whether boards exist #}
+            <div class="text-center py-5">
+                {% if owned_boards %}
+                {# User has boards but no goal hierarchy — manual workspace #}
+                <i class="fas fa-trophy fa-4x mb-3" style="opacity:0.3;color:#6366f1;"></i>
+                <p class="mb-2 fw-semibold">No Workspace Goals yet</p>
+                <p class="text-muted small mb-4">
+                    You have <strong>{{ owned_boards|length }} board{{ owned_boards|length|pluralize }}</strong> in this workspace.
+                    Create an <strong>Workspace Goal</strong> to organize your boards into a hierarchy.
+                </p>
+                {% if can_create_goal %}
+                <a href="{% url 'create_goal' %}" class="btn btn-primary">
+                    <i class="fas fa-trophy fa-sm me-1"></i> Create Workspace Goal
+                </a>
+                {% else %}
+                <p class="text-muted small"><i class="fas fa-lock me-1"></i> Only Workspace Admins can create Workspace Goals.</p>
+                {% endif %}
+                {% elif onboarding_profile.onboarding_version == 2 and not demo_mode %}
+                <i class="fas fa-wand-magic-sparkles fa-4x mb-3" style="opacity:0.35;color:#6366f1;"></i>
+                <p class="mb-2 fw-semibold">Your workspace is empty</p>
+                <p class="text-muted small mb-4">
+                    Let AI build a complete workspace from your workspace's goal,
+                    or create things manually.
+                </p>
+                {% if can_create_goal %}
+                <a href="{% url 'onboarding_goal' %}" class="btn btn-primary">
+                    <i class="fas fa-rocket fa-sm me-1"></i> Set up with AI
+                </a>
+                <a href="{% url 'create_goal' %}" class="btn btn-outline-secondary ms-2">
+                    <i class="fas fa-trophy fa-sm me-1"></i> Create Goal manually
+                </a>
+                {% else %}
+                <p class="text-muted small"><i class="fas fa-lock me-1"></i> Only Workspace Admins can create Workspace Goals.</p>
+                {% endif %}
+                {% else %}
+                <i class="fas fa-trophy fa-4x text-warning mb-3" style="opacity:0.3;"></i>
+                <p class="mb-2 fw-semibold">No Workspace Goals yet</p>
+                <p class="text-muted small mb-4">
+                    Define an <strong>Workspace Goal</strong> (your North Star),
+                    then add Missions, Strategies and Boards underneath it.
+                </p>
+                {% if can_create_goal %}
+                <a href="{% url 'create_goal' %}" class="btn btn-warning text-dark">
+                    <i class="fas fa-trophy fa-sm me-1"></i> Create Workspace Goal
+                </a>
+                {% else %}
+                <p class="text-muted small"><i class="fas fa-lock me-1"></i> Only Workspace Admins can create Workspace Goals.</p>
+                {% endif %}
+                {% endif %}
+            </div>
+        {% endif %}
+        </div>
+
+        {# ═══════════════════════ MISSIONS TAB ═══════════════════════ #}
+        <div class="tab-pane fade" id="hn-pane-missions" role="tabpanel" aria-labelledby="hn-tab-missions">
+        {% if mission_tree %}
+            <div class="hn-cards-grid">
+            <div class="row g-3">
+            {% for mi in mission_tree %}
+            {% with mission=mi.mission %}
+                <div class="col-md-6 col-lg-4 hn-card" data-mission-id="{{ mission.id }}"
+                     data-goal-id="{{ mission.organization_goal_id|default:'' }}">
+                    <div class="card h-100 shadow-sm hn-item hn-item--mission" role="button"
+                         onclick="hnToggleExpand('mission', {{ mission.id }})">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1 me-2">
+                                    <span class="badge hn-level-badge hn-level-badge--mission">Mission</span>
+                                    <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">{{ mission.name }}</h6>
+                                    {% if mission.description %}
+                                    <small class="text-muted" style="font-size:0.76rem;">{{ mission.description|truncatechars:90 }}</small>
+                                    {% endif %}
+                                </div>
+                                <span class="badge ms-status-badge status-{{ mission.status }} flex-shrink-0">{{ mission.get_status_display }}</span>
+                            </div>
+                            {% if mi.total_tasks %}
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <div class="progress flex-grow-1" style="height:6px;">
+                                    <div class="progress-bar {% if mi.completion_pct < 30 %}bg-danger{% elif mi.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         role="progressbar" style="width:{{ mi.completion_pct }}%;"></div>
+                                </div>
+                                <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.72rem;">{{ mi.completion_pct }}%</small>
+                            </div>
+                            <small class="text-muted d-block mb-2" style="font-size:0.7rem;">
+                                {{ mi.done_tasks }}/{{ mi.total_tasks }} tasks complete
+                            </small>
+                            {% endif %}
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="status-pill {{ mi.schedule_status }}">
+                                    <span class="pill-dot"></span>
+                                    {% if mi.schedule_status == 'late' %}Late{% elif mi.schedule_status == 'at_risk' %}At Risk{% elif mi.schedule_status == 'on_track' %}On Track{% else %}No Timeline{% endif %}
+                                </span>
+                                <span class="risk-pill {{ mi.risk_level }}">
+                                    <span class="pill-dot"></span>
+                                    {% if mi.risk_level == 'high' %}High Risk{% elif mi.risk_level == 'medium' %}Med Risk{% elif mi.risk_level == 'low' %}Low Risk{% else %}Risk Not Assessed{% endif %}
+                                </span>
+                                <span class="badge bg-light text-dark border" style="font-size:0.66rem;">
+                                    <i class="fas fa-chess-knight text-primary me-1"></i>{{ mi.strategy_count }} strateg{{ mi.strategy_count|pluralize:"y,ies" }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {# ── Inline expansion panel ── #}
+                    <div class="hn-expand d-none" id="hn-expand-mission-{{ mission.id }}">
+                        <div class="card border-0 shadow-sm mt-2" style="background:#eff6ff; border-left:3px solid #3b82f6 !important;">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-semibold small" style="color:#1e40af;"><i class="fas fa-bullseye me-1" style="color:#3b82f6;"></i>{{ mission.name }}</span>
+                                    <div class="d-flex gap-1">
+                                        <a href="{{ mission.get_absolute_url }}" class="btn btn-sm btn-outline-primary" style="font-size:0.7rem;">
+                                            <i class="fas fa-external-link-alt fa-xs me-1"></i>Full page
+                                        </a>
+                                        {% if mi.strategy_count %}
+                                        <button class="btn btn-sm btn-primary" style="font-size:0.7rem;"
+                                                onclick="event.stopPropagation(); hnDrillDown('hn-pane-strategies','missionId','{{ mission.id }}','strategies under {{ mission.name|truncatechars:30 }}')">
+                                            <i class="fas fa-chess-knight fa-xs me-1"></i>{{ mi.strategy_count }} Strateg{{ mi.strategy_count|pluralize:"y,ies" }} <i class="fas fa-arrow-right fa-xs ms-1"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% if mi.strategies_on_track or mi.strategies_at_risk or mi.strategies_late %}
+                                <div class="d-flex gap-2 flex-wrap" style="font-size:0.72rem;">
+                                    {% if mi.strategies_on_track %}<span class="text-success fw-semibold">{{ mi.strategies_on_track }} On Track</span>{% endif %}
+                                    {% if mi.strategies_at_risk %}<span class="text-warning fw-semibold">{{ mi.strategies_at_risk }} At Risk</span>{% endif %}
+                                    {% if mi.strategies_late %}<span class="text-danger fw-semibold">{{ mi.strategies_late }} Late</span>{% endif %}
+                                </div>
+                                {% endif %}
+                                {% if mission.description %}
+                                <p class="text-muted mb-0 mt-1" style="font-size:0.76rem;">{{ mission.description|truncatechars:200 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             {% endwith %}
             {% endfor %}
-        </div>
-        {% endfor %}
-
+            </div>
+            </div>{# /hn-cards-grid #}
         {% else %}
-        <!-- Empty state: no goals or missions yet -->
-        <div class="text-center py-5">
-            {% if onboarding_profile.onboarding_version == 2 and not demo_mode %}
-            <i class="fas fa-wand-magic-sparkles fa-4x mb-3" style="opacity:0.35;color:#6366f1;"></i>
-            <p class="mb-2 fw-semibold">Your workspace is empty</p>
-            <p class="text-muted small mb-4">
-                Let AI build a complete workspace from your organization's goal,
-                or create things manually.
-            </p>
-            <a href="{% url 'onboarding_welcome' %}" class="btn btn-primary">
-                <i class="fas fa-rocket fa-sm me-1"></i> Set up with AI
-            </a>
-            <a href="{% url 'create_goal' %}" class="btn btn-outline-secondary ms-2">
-                <i class="fas fa-trophy fa-sm me-1"></i> Create Goal manually
-            </a>
-            <a href="{% url 'create_board' %}" class="btn btn-outline-secondary ms-2">
-                <i class="fas fa-plus fa-sm me-1"></i> New Board
-            </a>
-            {% else %}
-            <i class="fas fa-trophy fa-4x text-warning mb-3" style="opacity:0.3;"></i>
-            <p class="mb-2 fw-semibold">No Organization Goals or Missions yet</p>
-            <p class="text-muted small mb-4">
-                Start at the top — define an <strong>Organization Goal</strong> (your North Star),
-                then add Missions, Strategies and Boards underneath it.
-            </p>
-            <a href="{% url 'create_goal' %}" class="btn btn-warning text-dark">
-                <i class="fas fa-trophy fa-sm me-1"></i> Create Organization Goal
-            </a>
-            <a href="{% url 'create_mission' %}" class="btn btn-primary ms-2">
-                <i class="fas fa-bullseye fa-sm me-1"></i> New Mission
-            </a>
-            <a href="{% url 'create_board' %}" class="btn btn-outline-secondary ms-2">
-                <i class="fas fa-plus fa-sm me-1"></i> New Board
-            </a>
-            {% endif %}
-        </div>
+            <div class="text-center py-4">
+                <i class="fas fa-bullseye fa-3x mb-3" style="opacity:0.2; color:#3b82f6;"></i>
+                <p class="mb-2 fw-semibold text-muted">No missions yet</p>
+                <a href="{% url 'create_mission' %}" class="btn btn-sm btn-primary"><i class="fas fa-plus fa-sm me-1"></i>New Mission</a>
+            </div>
         {% endif %}
-    </div>
+        </div>
+
+        {# ═══════════════════════ STRATEGIES TAB ═══════════════════════ #}
+        <div class="tab-pane fade" id="hn-pane-strategies" role="tabpanel" aria-labelledby="hn-tab-strategies">
+        {% if mission_tree %}
+            <div class="hn-cards-grid">
+            <div class="row g-3">
+            {% for mi in mission_tree %}{% for si in mi.strategies %}
+            {% with strategy=si.strategy %}
+                <div class="col-md-6 col-lg-4 hn-card"
+                     data-strategy-id="{{ strategy.id }}"
+                     data-mission-id="{{ mi.mission.id }}"
+                     data-goal-id="{{ mi.mission.organization_goal_id|default:'' }}">
+                    <div class="card h-100 shadow-sm hn-item hn-item--strategy" role="button"
+                         onclick="hnToggleExpand('strategy', {{ strategy.id }})">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1 me-2">
+                                    <span class="badge hn-level-badge hn-level-badge--strategy">Strategy</span>
+                                    <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">{{ strategy.name }}</h6>
+                                    <small class="text-muted" style="font-size:0.72rem;">
+                                        <i class="fas fa-bullseye me-1" style="color:#3b82f6;"></i>{{ mi.mission.name|truncatechars:35 }}
+                                    </small>
+                                </div>
+                                <span class="badge bg-light text-dark border flex-shrink-0" style="font-size:0.66rem;">
+                                    {{ si.board_count }} board{{ si.board_count|pluralize }}
+                                </span>
+                            </div>
+                            {% if si.total_tasks %}
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <div class="progress flex-grow-1" style="height:6px;">
+                                    <div class="progress-bar {% if si.completion_pct < 30 %}bg-danger{% elif si.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         role="progressbar" style="width:{{ si.completion_pct }}%;"></div>
+                                </div>
+                                <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.72rem;">{{ si.completion_pct }}%</small>
+                            </div>
+                            <small class="text-muted d-block mb-2" style="font-size:0.7rem;">
+                                {{ si.done_tasks }}/{{ si.total_tasks }} tasks
+                            </small>
+                            {% endif %}
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="status-pill {{ si.schedule_status }}">
+                                    <span class="pill-dot"></span>
+                                    {% if si.schedule_status == 'late' %}Late{% elif si.schedule_status == 'at_risk' %}At Risk{% elif si.schedule_status == 'on_track' %}On Track{% else %}No Timeline{% endif %}
+                                </span>
+                                <span class="risk-pill {{ si.risk_level }}">
+                                    <span class="pill-dot"></span>
+                                    {% if si.risk_level == 'high' %}High Risk{% elif si.risk_level == 'medium' %}Med Risk{% elif si.risk_level == 'low' %}Low Risk{% else %}Risk Not Assessed{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {# ── Inline expansion panel ── #}
+                    <div class="hn-expand d-none" id="hn-expand-strategy-{{ strategy.id }}">
+                        <div class="card border-0 shadow-sm mt-2" style="background:#ecfdf5; border-left:3px solid #10b981 !important;">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-semibold small" style="color:#065f46;"><i class="fas fa-chess-knight me-1" style="color:#10b981;"></i>{{ strategy.name }}</span>
+                                    <div class="d-flex gap-1">
+                                        <a href="{% url 'strategy_detail' mi.mission.id strategy.id %}"
+                                           class="btn btn-sm btn-outline-success" style="font-size:0.7rem;">
+                                            <i class="fas fa-external-link-alt fa-xs me-1"></i>Full page
+                                        </a>
+                                        {% if si.board_count %}
+                                        <button class="btn btn-sm btn-success" style="font-size:0.7rem;"
+                                                onclick="event.stopPropagation(); hnDrillDown('hn-pane-boards','strategyId','{{ strategy.id }}','boards under {{ strategy.name|truncatechars:30 }}')">
+                                            <i class="fas fa-clipboard-list fa-xs me-1"></i>{{ si.board_count }} Board{{ si.board_count|pluralize }} <i class="fas fa-arrow-right fa-xs ms-1"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% if strategy.description %}
+                                <p class="text-muted mb-0" style="font-size:0.76rem;">{{ strategy.description|truncatechars:200 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endwith %}
+            {% endfor %}{% endfor %}
+            </div>
+            </div>{# /hn-cards-grid #}
+            {% if not strategy_count %}
+            <div class="text-center py-4">
+                <i class="fas fa-chess-knight fa-3x mb-3" style="opacity:0.2; color:#10b981;"></i>
+                <p class="mb-2 fw-semibold text-muted">No strategies yet</p>
+                <p class="text-muted small">Create strategies under your missions to track execution.</p>
+            </div>
+            {% endif %}
+        {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-chess-knight fa-3x mb-3" style="opacity:0.2; color:#10b981;"></i>
+                <p class="mb-2 fw-semibold text-muted">No strategies yet</p>
+                <p class="text-muted small">Create missions first, then add strategies to track execution.</p>
+            </div>
+        {% endif %}
+        </div>
+
+        {# ═══════════════════════ BOARDS TAB ═══════════════════════ #}
+        <div class="tab-pane fade" id="hn-pane-boards" role="tabpanel" aria-labelledby="hn-tab-boards">
+        {% if mission_tree or standalone_boards %}
+            <div class="hn-cards-grid">
+            <div class="row g-3">
+            {# Boards linked to strategies #}
+            {% for mi in mission_tree %}{% for si in mi.strategies %}{% for bi in si.boards %}
+                <div class="col-md-6 col-lg-4 hn-card"
+                     data-board-id="{{ bi.board.id }}"
+                     data-strategy-id="{{ si.strategy.id }}"
+                     data-mission-id="{{ mi.mission.id }}"
+                     data-goal-id="{{ mi.mission.organization_goal_id|default:'' }}">
+                    <div class="card h-100 shadow-sm hn-item hn-item--board" role="button"
+                         onclick="hnToggleExpand('board', {{ bi.board.id }})">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1 me-2">
+                                    <span class="badge hn-level-badge hn-level-badge--board">Board</span>
+                                    <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">{{ bi.board.name }}</h6>
+                                    <small class="text-muted" style="font-size:0.72rem;">
+                                        <i class="fas fa-chess-knight me-1" style="color:#10b981;"></i>{{ si.strategy.name|truncatechars:35 }}
+                                    </small>
+                                </div>
+                                {% if bi.board.project_deadline %}
+                                <span class="badge bg-light text-dark border flex-shrink-0" style="font-size:0.64rem;">
+                                    <i class="far fa-calendar me-1"></i>{{ bi.board.project_deadline|date:"M j" }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            {% if bi.total_tasks %}
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <div class="progress flex-grow-1" style="height:6px;">
+                                    <div class="progress-bar {% if bi.completion_pct < 30 %}bg-danger{% elif bi.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         role="progressbar" style="width:{{ bi.completion_pct }}%;"></div>
+                                </div>
+                                <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.72rem;">{{ bi.completion_pct }}%</small>
+                            </div>
+                            <small class="text-muted d-block mb-2" style="font-size:0.7rem;">
+                                {{ bi.done_tasks }}/{{ bi.total_tasks }} tasks
+                            </small>
+                            {% endif %}
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="status-pill {{ bi.schedule_status }}">
+                                    <span class="pill-dot"></span>
+                                    {% if bi.schedule_status == 'late' %}Late{% elif bi.schedule_status == 'at_risk' %}At Risk{% elif bi.schedule_status == 'on_track' %}On Track{% else %}No Timeline{% endif %}
+                                </span>
+                                <span class="risk-pill {{ bi.risk_level }}">
+                                    <span class="pill-dot"></span>
+                                    {% if bi.risk_level == 'high' %}High Risk{% elif bi.risk_level == 'medium' %}Med Risk{% elif bi.risk_level == 'low' %}Low Risk{% else %}Risk Not Assessed{% endif %}
+                                </span>
+                                {% if bi.high_risk_tasks %}
+                                <small class="text-danger" style="font-size:0.68rem;"><i class="fas fa-exclamation-triangle me-1"></i>{{ bi.high_risk_tasks }} risk</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {# ── Inline expansion panel ── #}
+                    <div class="hn-expand d-none" id="hn-expand-board-{{ bi.board.id }}">
+                        <div class="card border-0 shadow-sm mt-2" style="background:#f5f3ff; border-left:3px solid #8b5cf6 !important;">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-semibold small" style="color:#5b21b6;"><i class="fas fa-clipboard-list me-1" style="color:#8b5cf6;"></i>{{ bi.board.name }}</span>
+                                    <a href="{% url 'board_detail' bi.board.id %}" class="btn btn-sm btn-outline-secondary" style="font-size:0.7rem;">
+                                        <i class="fas fa-external-link-alt fa-xs me-1"></i>Open board
+                                    </a>
+                                </div>
+                                {% if bi.board.description %}
+                                <p class="text-muted mb-0 mt-1" style="font-size:0.76rem;">{{ bi.board.description|truncatechars:200 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}{% endfor %}{% endfor %}
+
+            {# Standalone boards (no strategy) #}
+            {% for board in standalone_boards %}
+                <div class="col-md-6 col-lg-4 hn-card" data-board-id="{{ board.id }}">
+                    <div class="card h-100 shadow-sm hn-item hn-item--board hn-item--standalone" role="button"
+                         onclick="hnToggleExpand('board', {{ board.id }})">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1 me-2">
+                                    <span class="badge hn-level-badge hn-level-badge--board">Board</span>
+                                    <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">{{ board.name }}</h6>
+                                    <small class="text-muted fst-italic" style="font-size:0.72rem;">
+                                        <i class="fas fa-unlink me-1"></i>Not linked to a strategy
+                                    </small>
+                                </div>
+                                {% if board.project_deadline %}
+                                <span class="badge bg-light text-dark border flex-shrink-0" style="font-size:0.64rem;">
+                                    <i class="far fa-calendar me-1"></i>{{ board.project_deadline|date:"M j" }}
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="hn-expand d-none" id="hn-expand-board-{{ board.id }}">
+                        <div class="card border-0 shadow-sm mt-2" style="background:#f5f3ff; border-left:3px solid #8b5cf6 !important;">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-semibold small" style="color:#5b21b6;"><i class="fas fa-clipboard-list me-1" style="color:#8b5cf6;"></i>{{ board.name }}</span>
+                                    <a href="{% url 'board_detail' board.id %}" class="btn btn-sm btn-outline-secondary" style="font-size:0.7rem;">
+                                        <i class="fas fa-external-link-alt fa-xs me-1"></i>Open board
+                                    </a>
+                                </div>
+                                {% if board.description %}
+                                <p class="text-muted mb-0 mt-1" style="font-size:0.76rem;">{{ board.description|truncatechars:200 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+            </div>{# /hn-cards-grid #}
+
+            {% if not hierarchy_board_count %}
+            <div class="text-center py-4">
+                <i class="fas fa-clipboard-list fa-3x mb-3" style="opacity:0.2; color:#8b5cf6;"></i>
+                <p class="mb-2 fw-semibold text-muted">No boards yet</p>
+                <a href="{% url 'create_board' %}" class="btn btn-sm btn-primary"><i class="fas fa-plus fa-sm me-1"></i>New Board</a>
+            </div>
+            {% endif %}
+        {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-clipboard-list fa-3x mb-3" style="opacity:0.2; color:#8b5cf6;"></i>
+                <p class="mb-2 fw-semibold text-muted">No boards yet</p>
+                <a href="{% url 'create_board' %}" class="btn btn-sm btn-primary"><i class="fas fa-plus fa-sm me-1"></i>New Board</a>
+            </div>
+        {% endif %}
+        </div>
+
+    </div>{# /tab-content #}
 </div>
-<!-- /Mission Overview -->
+{% endif %}
+<!-- /Hierarchy Navigator -->
 
 <!-- ============================================================ -->
 <!-- ZONE 3: PERFORMANCE ANALYTICS (collapsed by default)        -->
 <!-- ============================================================ -->
-<div class="card shadow-sm mb-4">
+{% if features.show_full_analytics %}
+<div class="card prizm-surface mb-4">
     <div class="card-header py-2 d-flex align-items-center justify-content-between"
          role="button" data-bs-toggle="collapse" data-bs-target="#analyticsZone3" aria-expanded="false">
         <div>
@@ -1868,8 +2071,9 @@
             <div class="card-header py-2 d-flex align-items-center" style="background:#e8f0fe;">
                 <i class="fas fa-bullseye me-2 text-primary"></i>
                 <span class="fw-semibold small text-primary">Mission Completion &amp; Risk</span>
+                <span id="missionChartCount" class="ms-auto badge bg-light text-muted" style="font-size:0.65rem;"></span>
             </div>
-            <div class="card-body p-2" style="height:300px; position:relative;">
+            <div class="card-body p-2 chart-scroll-h" style="height:300px;">
                 {% if chart_missions %}
                 <canvas id="missionChart"></canvas>
                 {% else %}
@@ -1885,8 +2089,9 @@
             <div class="card-header py-2 d-flex align-items-center" style="background:#f0f4ff;">
                 <i class="fas fa-chess-knight me-2 text-secondary"></i>
                 <span class="fw-semibold small">Strategy Progress — Done vs Remaining</span>
+                <span id="strategyChartCount" class="ms-auto badge bg-light text-muted" style="font-size:0.65rem;"></span>
             </div>
-            <div class="card-body p-2" style="height:300px; position:relative;">
+            <div class="card-body p-2 chart-scroll-v" style="height:300px;">
                 {% if chart_strategies %}
                 <canvas id="strategyChart"></canvas>
                 {% else %}
@@ -1908,15 +2113,15 @@
                 <i class="fas fa-clipboard-list me-2 text-primary"></i>
                 <span class="fw-semibold small">Board Progress</span>
             </div>
-            <div class="card-body p-3" style="max-height:220px; overflow-y:auto;">
+            <div class="card-body p-3 chart-scroll-v" style="max-height:300px;">
                 {% if chart_boards %}
                 {% for b in chart_boards %}
                 {% with bp_color=forloop.counter0|divisibleby:1 %}
                 <div class="mb-2">
                     <div class="d-flex justify-content-between align-items-center mb-1">
-                        <span class="small fw-semibold text-truncate d-flex align-items-center gap-1" style="max-width:145px;" title="{{ b.name }}">
-                            <span style="width:9px;height:9px;border-radius:50%;background:{% cycle '#3b82f6' '#8b5cf6' '#f59e0b' '#10b981' '#ec4899' '#6366f1' as bp_dot %};flex-shrink:0;display:inline-block;"></span>
-                            <span class="text-truncate">{{ b.name }}</span>
+                        <span class="small fw-semibold d-flex align-items-start gap-1" style="max-width:145px;" title="{{ b.name }}">
+                            <span style="width:9px;height:9px;border-radius:50%;background:{% cycle '#3b82f6' '#8b5cf6' '#f59e0b' '#10b981' '#ec4899' '#6366f1' as bp_dot %};flex-shrink:0;display:inline-block;margin-top:3px;"></span>
+                            <span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.25;">{{ b.name }}</span>
                         </span>
                         <span class="small text-muted fw-bold">{{ b.completion_pct }}%</span>
                     </div>
@@ -1953,7 +2158,7 @@
                     <i class="fas fa-info-circle text-muted" style="font-size:0.75rem; cursor:help;"></i>
                 </span>
             </div>
-            <div class="card-body p-3" style="height:220px; overflow-y:auto;">
+            <div class="card-body p-3 chart-scroll-v" style="max-height:300px;">
                 {% if scope_creep_data.has_data %}
                 {# ── Headline summary ── #}
                 <div class="d-flex align-items-center gap-2 mb-3 p-2 rounded"
@@ -2061,6 +2266,9 @@
                     <a href="{% url 'board_list' %}" class="btn btn-sm btn-outline-primary" style="font-size:0.72rem;"><i class="fas fa-columns me-1"></i>Open Boards</a>
                 </div>
             </div>
+            <div id="spi-offender-note" class="card-footer d-none py-1 px-2 text-center" style="background:#fff7ed;border-top:1px solid #fed7aa;">
+                <span style="font-size:0.68rem;color:#9a3412;"><i class="fas fa-arrow-down me-1"></i>Dragged by <a id="spi-offender-link" href="#" class="fw-semibold" style="color:#c2410c;text-decoration:underline;"></a></span>
+            </div>
         </div>
     </div>
     {% endif %}
@@ -2085,6 +2293,9 @@
                     <a href="{% url 'time_tracking_dashboard' %}" class="btn btn-sm btn-outline-success" style="font-size:0.72rem;"><i class="fas fa-clock me-1"></i>Time Tracking</a>
                 </div>
             </div>
+            <div id="cpi-offender-note" class="card-footer d-none py-1 px-2 text-center" style="background:#f0fdf4;border-top:1px solid #bbf7d0;">
+                <span style="font-size:0.68rem;color:#166534;"><i class="fas fa-arrow-down me-1"></i>Dragged by <a id="cpi-offender-link" href="#" class="fw-semibold" style="color:#15803d;text-decoration:underline;"></a></span>
+            </div>
         </div>
     </div>
     {% endif %}
@@ -2101,54 +2312,72 @@
                 {% if risk_heatmap_data.has_data %}
                 <div class="row g-0 mb-2">
                     <div class="col-12">
-                        <div class="d-flex justify-content-between text-center mb-1">
-                            <div style="width:28px;"></div>
-                            <div class="flex-fill text-muted" style="font-size:0.62rem; font-weight:700;">LOW<br>IMPACT</div>
-                            <div class="flex-fill text-muted" style="font-size:0.62rem; font-weight:700;">MED<br>IMPACT</div>
-                            <div class="flex-fill text-muted" style="font-size:0.62rem; font-weight:700;">HIGH<br>IMPACT</div>
+                        <!-- Column headers: spacer = 22px (LIKELIHOOD label) + 4px (gap) + 52px (row labels) = 78px -->
+                        <div class="d-flex text-center mb-1" style="gap:4px;">
+                            <div style="width:78px; flex-shrink:0;"></div>
+                            <div class="flex-fill" style="font-size:0.72rem; font-weight:800; color:#495057; letter-spacing:0.03em;">LOW<br>IMPACT</div>
+                            <div class="flex-fill" style="font-size:0.72rem; font-weight:800; color:#495057; letter-spacing:0.03em;">MED<br>IMPACT</div>
+                            <div class="flex-fill" style="font-size:0.72rem; font-weight:800; color:#495057; letter-spacing:0.03em;">HIGH<br>IMPACT</div>
                         </div>
-                        <!-- Row: High Likelihood -->
-                        <div class="d-flex align-items-center mb-1 gap-1">
-                            <div style="width:28px; font-size:0.6rem; font-weight:700; color:#6c757d; text-align:right; padding-right:4px; line-height:1.1;">HIGH<br>LIKE</div>
-                            <div class="flex-fill risk-heatmap-cell rhc-3-1" title="High Likelihood × Low Impact: {{ risk_heatmap_data.matrix.2.0 }} tasks">
-                                <span class="cell-count">{{ risk_heatmap_data.matrix.2.0 }}</span>
+                        <!-- Data area: LIKELIHOOD Y-axis title + row labels + cells -->
+                        <div class="d-flex align-items-stretch" style="gap:4px;">
+                            <!-- LIKELIHOOD vertical Y-axis label spanning all rows -->
+                            <div style="width:22px; flex-shrink:0; display:flex; align-items:center; justify-content:center;">
+                                <span style="writing-mode:vertical-rl; transform:rotate(180deg); font-size:0.72rem; font-weight:800; color:#495057; letter-spacing:0.1em; text-transform:uppercase; white-space:nowrap;">Likelihood</span>
                             </div>
-                            <div class="flex-fill risk-heatmap-cell rhc-3-2" title="High Likelihood × Medium Impact: {{ risk_heatmap_data.matrix.2.1 }} tasks">
-                                <span class="cell-count">{{ risk_heatmap_data.matrix.2.1 }}</span>
-                            </div>
-                            <div class="flex-fill risk-heatmap-cell rhc-3-3" title="High Likelihood × High Impact: {{ risk_heatmap_data.matrix.2.2 }} tasks">
-                                <span class="cell-count">{{ risk_heatmap_data.matrix.2.2 }}</span>
-                            </div>
-                        </div>
-                        <!-- Row: Medium Likelihood -->
-                        <div class="d-flex align-items-center mb-1 gap-1">
-                            <div style="width:28px; font-size:0.6rem; font-weight:700; color:#6c757d; text-align:right; padding-right:4px; line-height:1.1;">MED<br>LIKE</div>
-                            <div class="flex-fill risk-heatmap-cell rhc-2-1" title="Med Likelihood × Low Impact: {{ risk_heatmap_data.matrix.1.0 }} tasks">
-                                <span class="cell-count">{{ risk_heatmap_data.matrix.1.0 }}</span>
-                            </div>
-                            <div class="flex-fill risk-heatmap-cell rhc-2-2" title="Med Likelihood × Med Impact: {{ risk_heatmap_data.matrix.1.1 }} tasks">
-                                <span class="cell-count">{{ risk_heatmap_data.matrix.1.1 }}</span>
-                            </div>
-                            <div class="flex-fill risk-heatmap-cell rhc-2-3" title="Med Likelihood × High Impact: {{ risk_heatmap_data.matrix.1.2 }} tasks">
-                                <span class="cell-count">{{ risk_heatmap_data.matrix.1.2 }}</span>
-                            </div>
-                        </div>
-                        <!-- Row: Low Likelihood -->
-                        <div class="d-flex align-items-center gap-1">
-                            <div style="width:28px; font-size:0.6rem; font-weight:700; color:#6c757d; text-align:right; padding-right:4px; line-height:1.1;">LOW<br>LIKE</div>
-                            <div class="flex-fill risk-heatmap-cell rhc-1-1" title="Low Likelihood × Low Impact: {{ risk_heatmap_data.matrix.0.0 }} tasks">
-                                <span class="cell-count">{{ risk_heatmap_data.matrix.0.0 }}</span>
-                            </div>
-                            <div class="flex-fill risk-heatmap-cell rhc-1-2" title="Low Likelihood × Med Impact: {{ risk_heatmap_data.matrix.0.1 }} tasks">
-                                <span class="cell-count">{{ risk_heatmap_data.matrix.0.1 }}</span>
-                            </div>
-                            <div class="flex-fill risk-heatmap-cell rhc-1-3" title="Low Likelihood × High Impact: {{ risk_heatmap_data.matrix.0.2 }} tasks">
-                                <span class="cell-count">{{ risk_heatmap_data.matrix.0.2 }}</span>
+                            <!-- Grid rows (row labels + cells) -->
+                            <div class="d-flex flex-column flex-fill" style="gap:4px;">
+                                <!-- Row: High Likelihood -->
+                                <div class="d-flex align-items-center" style="gap:4px;">
+                                    <div style="width:52px; flex-shrink:0; display:flex; align-items:center; justify-content:flex-end; padding-right:8px;">
+                                        <span style="font-size:0.72rem; font-weight:800; color:#495057; text-transform:uppercase; letter-spacing:0.03em;">High</span>
+                                    </div>
+                                    <div class="flex-fill risk-heatmap-cell rhc-3-1" role="button" tabindex="0" data-lik-idx="2" data-imp-idx="0" data-lik-label="High" data-imp-label="Low" title="High Likelihood × Low Impact: {{ risk_heatmap_data.matrix.2.0 }} tasks">
+                                        <span class="cell-count">{{ risk_heatmap_data.matrix.2.0 }}</span>
+                                    </div>
+                                    <div class="flex-fill risk-heatmap-cell rhc-3-2" role="button" tabindex="0" data-lik-idx="2" data-imp-idx="1" data-lik-label="High" data-imp-label="Medium" title="High Likelihood × Medium Impact: {{ risk_heatmap_data.matrix.2.1 }} tasks">
+                                        <span class="cell-count">{{ risk_heatmap_data.matrix.2.1 }}</span>
+                                    </div>
+                                    <div class="flex-fill risk-heatmap-cell rhc-3-3" role="button" tabindex="0" data-lik-idx="2" data-imp-idx="2" data-lik-label="High" data-imp-label="High" title="High Likelihood × High Impact: {{ risk_heatmap_data.matrix.2.2 }} tasks">
+                                        <span class="cell-count">{{ risk_heatmap_data.matrix.2.2 }}</span>
+                                    </div>
+                                </div>
+                                <!-- Row: Medium Likelihood -->
+                                <div class="d-flex align-items-center" style="gap:4px;">
+                                    <div style="width:52px; flex-shrink:0; display:flex; align-items:center; justify-content:flex-end; padding-right:8px;">
+                                        <span style="font-size:0.72rem; font-weight:800; color:#495057; text-transform:uppercase; letter-spacing:0.03em;">Med</span>
+                                    </div>
+                                    <div class="flex-fill risk-heatmap-cell rhc-2-1" role="button" tabindex="0" data-lik-idx="1" data-imp-idx="0" data-lik-label="Medium" data-imp-label="Low" title="Med Likelihood × Low Impact: {{ risk_heatmap_data.matrix.1.0 }} tasks">
+                                        <span class="cell-count">{{ risk_heatmap_data.matrix.1.0 }}</span>
+                                    </div>
+                                    <div class="flex-fill risk-heatmap-cell rhc-2-2" role="button" tabindex="0" data-lik-idx="1" data-imp-idx="1" data-lik-label="Medium" data-imp-label="Medium" title="Med Likelihood × Med Impact: {{ risk_heatmap_data.matrix.1.1 }} tasks">
+                                        <span class="cell-count">{{ risk_heatmap_data.matrix.1.1 }}</span>
+                                    </div>
+                                    <div class="flex-fill risk-heatmap-cell rhc-2-3" role="button" tabindex="0" data-lik-idx="1" data-imp-idx="2" data-lik-label="Medium" data-imp-label="High" title="Med Likelihood × High Impact: {{ risk_heatmap_data.matrix.1.2 }} tasks">
+                                        <span class="cell-count">{{ risk_heatmap_data.matrix.1.2 }}</span>
+                                    </div>
+                                </div>
+                                <!-- Row: Low Likelihood -->
+                                <div class="d-flex align-items-center" style="gap:4px;">
+                                    <div style="width:52px; flex-shrink:0; display:flex; align-items:center; justify-content:flex-end; padding-right:8px;">
+                                        <span style="font-size:0.72rem; font-weight:800; color:#495057; text-transform:uppercase; letter-spacing:0.03em;">Low</span>
+                                    </div>
+                                    <div class="flex-fill risk-heatmap-cell rhc-1-1" role="button" tabindex="0" data-lik-idx="0" data-imp-idx="0" data-lik-label="Low" data-imp-label="Low" title="Low Likelihood × Low Impact: {{ risk_heatmap_data.matrix.0.0 }} tasks">
+                                        <span class="cell-count">{{ risk_heatmap_data.matrix.0.0 }}</span>
+                                    </div>
+                                    <div class="flex-fill risk-heatmap-cell rhc-1-2" role="button" tabindex="0" data-lik-idx="0" data-imp-idx="1" data-lik-label="Low" data-imp-label="Medium" title="Low Likelihood × Med Impact: {{ risk_heatmap_data.matrix.0.1 }} tasks">
+                                        <span class="cell-count">{{ risk_heatmap_data.matrix.0.1 }}</span>
+                                    </div>
+                                    <div class="flex-fill risk-heatmap-cell rhc-1-3" role="button" tabindex="0" data-lik-idx="0" data-imp-idx="2" data-lik-label="Low" data-imp-label="High" title="Low Likelihood × High Impact: {{ risk_heatmap_data.matrix.0.2 }} tasks">
+                                        <span class="cell-count">{{ risk_heatmap_data.matrix.0.2 }}</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
                 <p class="text-muted small mb-0 mt-1"><i class="fas fa-info-circle me-1"></i>{{ risk_heatmap_data.total }} task{{ risk_heatmap_data.total|pluralize }} with risk assessments</p>
+                {{ risk_heatmap_data.cell_tasks|json_script:"riskHeatmapCellTasks" }}
                 {% else %}
                 <div class="d-flex align-items-center justify-content-center h-100 text-muted small py-3">
                     <div class="text-center">
@@ -2168,12 +2397,100 @@
 </div><!-- /card-body -->
 </div><!-- /collapse analyticsZone3 -->
 </div><!-- /card -->
+{% endif %}{# /features.show_full_analytics #}
+
+<!-- Risk Heatmap Cell Tasks Modal -->
+<div class="modal fade" id="riskHeatmapCellModal" tabindex="-1" aria-labelledby="riskHeatmapCellModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="riskHeatmapCellModalLabel">
+                    <i class="fas fa-fire me-2"></i><span id="riskHeatmapCellModalTitle">Risk Tasks</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="riskHeatmapCellModalBody"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var dataEl = document.getElementById('riskHeatmapCellTasks');
+    if (!dataEl) return;
+    var cellTasks = JSON.parse(dataEl.textContent);
+    var modalEl = document.getElementById('riskHeatmapCellModal');
+    if (!modalEl || typeof bootstrap === 'undefined') return;
+    var modal = new bootstrap.Modal(modalEl);
+    var titleEl = document.getElementById('riskHeatmapCellModalTitle');
+    var bodyEl = document.getElementById('riskHeatmapCellModalBody');
+    var taskUrlTemplate = '{% url "task_detail" 999999999 %}';
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function renderCell(likIdx, impIdx, likLabel, impLabel) {
+        var tasks = (cellTasks[likIdx] && cellTasks[likIdx][impIdx]) || [];
+        titleEl.textContent = likLabel + ' Likelihood × ' + impLabel + ' Impact (' + tasks.length + ')';
+        if (!tasks.length) {
+            bodyEl.innerHTML = '<div class="text-center text-muted py-4">No tasks in this cell.</div>';
+            return;
+        }
+        var rows = tasks.map(function (t) {
+            var due = t.due_date ? escapeHtml(t.due_date) : '<span class="text-muted">—</span>';
+            var assignee = t.assigned_to ? escapeHtml(t.assigned_to) : 'Unassigned';
+            var riskBadgeClass = { low: 'bg-success', medium: 'bg-warning text-dark', high: 'bg-danger' }[t.risk_level] || 'bg-secondary';
+            var riskBadge = t.risk_level
+                ? '<span class="badge ' + riskBadgeClass + '">' + escapeHtml(t.risk_level.charAt(0).toUpperCase() + t.risk_level.slice(1)) + '</span>'
+                : '<span class="text-muted">—</span>';
+            return '<tr>' +
+                '<td>' + escapeHtml(t.title) + '</td>' +
+                '<td>' + escapeHtml(t.board) + '</td>' +
+                '<td>' + riskBadge + '</td>' +
+                '<td>' + due + '</td>' +
+                '<td><span class="badge priority-' + escapeHtml(t.priority) + '">' + escapeHtml((t.priority || '').charAt(0).toUpperCase() + (t.priority || '').slice(1)) + '</span></td>' +
+                '<td>' + assignee + '</td>' +
+                '<td><a href="' + taskUrlTemplate.replace('999999999', t.id) + '" class="btn btn-sm btn-outline-primary">View</a></td>' +
+                '</tr>';
+        }).join('');
+        bodyEl.innerHTML = '<table class="table table-striped table-hover">' +
+            '<thead><tr><th>Title</th><th>Board</th><th>Risk Level</th><th>Due Date</th><th>Priority</th><th>Assigned To</th><th></th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table>';
+    }
+
+    document.querySelectorAll('.risk-heatmap-cell[data-lik-idx]').forEach(function (cell) {
+        function open() {
+            renderCell(
+                parseInt(cell.dataset.likIdx, 10),
+                parseInt(cell.dataset.impIdx, 10),
+                cell.dataset.likLabel,
+                cell.dataset.impLabel
+            );
+            modal.show();
+        }
+        cell.addEventListener('click', open);
+        cell.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                open();
+            }
+        });
+    });
+});
+</script>
 
 <!-- Standalone Boards (not linked to any strategy) -->
 {% if standalone_boards %}
 <div class="row">
     <div class="col-12">
-        <div class="card shadow mb-4">
+        <div class="card prizm-surface mb-4">
             <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                 <h6 class="m-0 font-weight-bold text-secondary">
                     <i class="fas fa-clipboard-list me-2"></i>Standalone Boards
@@ -2595,6 +2912,7 @@
 </div>
 
 <!-- High Risk Tasks Modal -->
+{% if features.show_full_analytics %}
 <div class="modal fade" id="highRiskModal" tabindex="-1" aria-labelledby="highRiskModalLabel"
     aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -2666,6 +2984,7 @@
         </div>
     </div>
 </div>
+{% endif %}{# /features.show_full_analytics — highRiskModal #}
 
 <!-- Due Soon Tasks Modal -->
 <div class="modal fade" id="dueSoonTasksModal" tabindex="-1" aria-labelledby="dueSoonTasksModalLabel"
@@ -2891,33 +3210,20 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // ── Decision Center widget loader ─────────────────────────
+        // ── Focus Today widget: keep the action count fresh (rows are server-rendered) ──
         (function loadDCWidget() {
             fetch("{% url 'decision_center:decision_center_widget' %}")
                 .then(r => r.json())
                 .then(data => {
-                    document.getElementById('dc-widget-loading').style.display = 'none';
-                    if (data.total_count === 0) {
-                        document.getElementById('dc-widget-empty').style.display = '';
-                    } else {
-                        document.getElementById('dc-widget-content').style.display = '';
-                        document.getElementById('dc-action-count').textContent = data.action_required_count;
-                        document.getElementById('dc-awareness-count').textContent = data.awareness_count;
-                        document.getElementById('dc-quickwin-count').textContent = data.quick_win_count;
-                        if (data.headline) {
-                            document.getElementById('dc-widget-headline').textContent = '"' + data.headline + '"';
-                        }
-                        var meta = 'Est. review: ' + data.estimated_minutes + ' min';
-                        if (data.last_cleared_at) {
-                            var d = new Date(data.last_cleared_at);
-                            meta += '  ·  Last cleared: ' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-                        }
-                        document.getElementById('dc-widget-meta').textContent = meta;
-                    }
+                    // Update both places the action count appears; null-guard each.
+                    var n = data.action_required_count;
+                    ['dc-action-count', 'dc-action-count-2'].forEach(function(id) {
+                        var el = document.getElementById(id);
+                        if (el) el.textContent = n;
+                    });
                 })
                 .catch(function() {
-                    document.getElementById('dc-widget-loading').style.display = 'none';
-                    document.getElementById('dc-widget-empty').style.display = '';
+                    // On error, keep server-rendered state as-is
                 });
         })();
 
@@ -3032,54 +3338,6 @@
         }, 300);
     }
 
-    // Toggle Demo Credentials Banner
-    function toggleDemoBanner() {
-        const banner = document.getElementById('demoCredentialsBanner');
-        banner.classList.toggle('expanded');
-
-        // Save state to localStorage
-        const isExpanded = banner.classList.contains('expanded');
-        localStorage.setItem('demoBannerExpanded', isExpanded);
-    }
-
-    // Reset Demo Data Function
-    function resetDemoData() {
-        if (confirm('Reset Demo Environment?\n\nThis will:\n• Delete all boards, tasks, and data you created\n• Restore all original demo data to its initial state\n• Fix any demo data you modified\n\nThis cannot be undone.')) {
-            // Show loading indicator
-            const btn = event.target.closest('button');
-            const originalHtml = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resetting...';
-            btn.disabled = true;
-            
-            // Make AJAX request to reset
-            fetch('/demo/reset/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRFToken': getCookie('csrftoken'),
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    alert('✅ Demo reset successfully!\n\nAll demo data has been restored to its original state.');
-                    location.reload();
-                } else {
-                    alert('Failed to reset demo: ' + (data.message || 'Unknown error'));
-                    btn.innerHTML = originalHtml;
-                    btn.disabled = false;
-                }
-            })
-            .catch(error => {
-                console.error('Error resetting demo:', error);
-                alert('Failed to reset demo. Please try again.');
-                btn.innerHTML = originalHtml;
-                btn.disabled = false;
-            });
-        }
-    }
-    
     // Helper function to get CSRF token
     function getCookie(name) {
         let cookieValue = null;
@@ -3096,16 +3354,8 @@
         return cookieValue;
     }
 
-    // Restore demo banner state on page load
+    // Reset demo via modal confirm button
     document.addEventListener('DOMContentLoaded', function () {
-        const banner = document.getElementById('demoCredentialsBanner');
-        if (banner) {
-            const wasExpanded = localStorage.getItem('demoBannerExpanded') === 'true';
-            if (wasExpanded) {
-                banner.classList.add('expanded');
-            }
-        }
-        
         // Handle pagination clicks within modals
         handleModalPagination();
     });
@@ -3168,6 +3418,156 @@
             });
         });
     }
+
+    /* ==========================================================
+       HIERARCHY NAVIGATOR — Tab filtering & inline expansion
+       ========================================================== */
+    (function() {
+        var _hnFilter = null;  // { tabId, attr, value, label }
+
+        /**
+         * Show/hide cards within a tab pane based on a data-attribute filter.
+         * If attr is null, all cards are shown.
+         */
+        function _filterCards(paneId, attr, value) {
+            var pane = document.getElementById(paneId);
+            if (!pane) return;
+            pane.querySelectorAll('.hn-card').forEach(function(card) {
+                if (!attr || card.dataset[attr] === String(value)) {
+                    card.classList.remove('hn-hidden');
+                } else {
+                    card.classList.add('hn-hidden');
+                }
+            });
+        }
+
+        /** Switch to a tab and apply an optional filter. */
+        window.hnDrillDown = function(targetPaneId, filterAttr, filterValue, label) {
+            // Activate the target tab
+            var tabBtnId = targetPaneId.replace('hn-pane-', 'hn-tab-');
+            var tabBtn = document.getElementById(tabBtnId);
+            if (tabBtn && typeof bootstrap !== 'undefined') {
+                bootstrap.Tab.getOrCreateInstance(tabBtn).show();
+            }
+            // Apply the filter
+            _filterCards(targetPaneId, filterAttr, filterValue);
+            // Show filter banner
+            var bar = document.getElementById('hn-filter-bar');
+            var lbl = document.getElementById('hn-filter-label');
+            if (bar && lbl) {
+                lbl.textContent = label;
+                bar.classList.remove('d-none');
+                bar.classList.add('d-flex');
+            }
+            _hnFilter = { tabId: targetPaneId, attr: filterAttr, value: filterValue, label: label };
+            // Close any open preview slots and clear active highlights
+            document.querySelectorAll('.hn-preview-slot').forEach(function(s) { s.remove(); });
+            document.querySelectorAll('.hn-item--active').forEach(function(c) {
+                c.classList.remove('hn-item--active');
+            });
+        };
+
+        /** Clear the active filter — show all cards in the currently-filtered tab. */
+        window.hnClearFilter = function() {
+            if (_hnFilter) {
+                _filterCards(_hnFilter.tabId, null, null);
+            }
+            var bar = document.getElementById('hn-filter-bar');
+            if (bar) { bar.classList.add('d-none'); bar.classList.remove('d-flex'); }
+            _hnFilter = null;
+        };
+
+        /**
+         * Toggle expansion for a card.
+         * Clones the expansion content into a full-width preview slot
+         * below the cards grid so it never gets clipped by other cards.
+         */
+        window.hnToggleExpand = function(level, id) {
+            var panel = document.getElementById('hn-expand-' + level + '-' + id);
+            if (!panel) return;
+
+            // Find the tab pane containing this card
+            var tabPane = panel.closest('.tab-pane');
+            if (!tabPane) return;
+
+            // Check if this card's preview is already showing
+            var existingSlot = tabPane.querySelector('.hn-preview-slot');
+            var isAlreadyShowing = existingSlot &&
+                existingSlot.dataset.panelId === (level + '-' + id);
+
+            // Clear active highlights
+            tabPane.querySelectorAll('.hn-item--active').forEach(function(el) {
+                el.classList.remove('hn-item--active');
+            });
+
+            // Remove existing preview slot
+            if (existingSlot) existingSlot.remove();
+
+            // If toggling off the same card, just close
+            if (isAlreadyShowing) return;
+
+            // Highlight the clicked card
+            var sourceCol = panel.closest('.hn-card');
+            if (sourceCol) {
+                var cardEl = sourceCol.querySelector('.hn-item');
+                if (cardEl) cardEl.classList.add('hn-item--active');
+            }
+
+            // Build the full-width preview slot below the grid
+            var grid = tabPane.querySelector('.hn-cards-grid');
+            if (!grid) return;
+
+            var slot = document.createElement('div');
+            slot.className = 'hn-preview-slot';
+            slot.dataset.panelId = level + '-' + id;
+
+            // Close button + cloned expansion content
+            var inner = panel.querySelector('.card');
+            slot.innerHTML =
+                '<div class="hn-preview-header">' +
+                '  <button class="hn-preview-close" onclick="hnClosePreview()" title="Close preview">' +
+                '    <i class="fas fa-times me-1"></i>Close' +
+                '  </button>' +
+                '</div>' +
+                (inner ? inner.outerHTML : '');
+
+            grid.after(slot);
+
+            // Scroll preview into view
+            setTimeout(function() {
+                slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 60);
+        };
+
+        /** Close the currently-open preview slot. */
+        window.hnClosePreview = function() {
+            document.querySelectorAll('.hn-preview-slot').forEach(function(s) { s.remove(); });
+            document.querySelectorAll('.hn-item--active').forEach(function(c) {
+                c.classList.remove('hn-item--active');
+            });
+        };
+
+        // When switching tabs, clear the filter if the user manually clicks a different tab
+        var tabContainer = document.getElementById('hierarchyTabs');
+        if (tabContainer) {
+            tabContainer.addEventListener('shown.bs.tab', function(e) {
+                var newPaneId = e.target.getAttribute('data-bs-target');
+                if (newPaneId) newPaneId = newPaneId.replace('#', '');
+                // If the user switched away from the filtered tab, clear filter
+                if (_hnFilter && _hnFilter.tabId !== newPaneId) {
+                    _filterCards(_hnFilter.tabId, null, null);
+                    var bar = document.getElementById('hn-filter-bar');
+                    if (bar) { bar.classList.add('d-none'); bar.classList.remove('d-flex'); }
+                    _hnFilter = null;
+                }
+                // Close preview slots and clear active highlights
+                document.querySelectorAll('.hn-preview-slot').forEach(function(s) { s.remove(); });
+                document.querySelectorAll('.hn-item--active').forEach(function(c) {
+                    c.classList.remove('hn-item--active');
+                });
+            });
+        }
+    })();
 
     /* ==========================================================
        MISSION OVERVIEW — AI summary AJAX (strategy toggle removed)
@@ -3397,7 +3797,7 @@
             btn.disabled = true;
             if (!btn.querySelector('.btn-spinner')) {
                 var spinner = document.createElement('span');
-                spinner.className = 'btn-spinner spinner-border spinner-border-sm me-1';
+                spinner.className = 'btn-spinner prizm-spinner prizm-spinner--sm me-1';
                 spinner.setAttribute('role', 'status');
                 btn.prepend(spinner);
             }
@@ -3462,18 +3862,38 @@
         var chartData;
         try { chartData = JSON.parse(el.textContent); } catch(e) { return; }
 
+        // Theme-aware chart colors — read the active theme at init time so axis
+        // text, gridlines and legends are legible in both light and dark mode.
+        var _isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
         var COLORS = {
             done:     'rgba(28, 200, 138, 0.85)',
-            remaining:'rgba(78, 115, 223, 0.3)',
+            remaining: _isDark ? 'rgba(120, 145, 230, 0.40)' : 'rgba(78, 115, 223, 0.3)',
             highRisk: 'rgba(231, 74, 59, 0.75)',
-            gridLine: 'rgba(0,0,0,0.05)',
+            gridLine: _isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.05)',
+            axis:     _isDark ? '#c7ccdd' : '#444',
+            axisTitle:_isDark ? '#e8e9f3' : '#333',
         };
+        // Default text color (legend labels, tooltips fallback) follows the theme.
+        if (typeof Chart !== 'undefined') {
+            Chart.defaults.color = COLORS.axis;
+            Chart.defaults.borderColor = COLORS.gridLine;
+        }
 
         // --- Mission grouped bar chart (completion % + high-risk count) ---
         var mCanvas = document.getElementById('missionChart');
         if (mCanvas && chartData.missions && chartData.missions.length) {
             if (_metricsMissionChart) { _metricsMissionChart.destroy(); }
             var mLabels = chartData.missions.map(function(m){ return m.name; });
+            // Horizontal scroll: 72px per bar group min, so bars stay readable at any scale
+            var mWrap = mCanvas.parentElement;
+            var mMinW = Math.max(mWrap.clientWidth || 400, mLabels.length * 72);
+            var mH    = (mWrap.clientHeight || 300) - 2;
+            mCanvas.style.width  = mMinW + 'px';
+            mCanvas.style.height = mH + 'px';
+            mCanvas.width  = mMinW;
+            mCanvas.height = mH;
+            var mCountBadge = document.getElementById('missionChartCount');
+            if (mCountBadge) mCountBadge.textContent = mLabels.length + ' mission' + (mLabels.length !== 1 ? 's' : '');
             _metricsMissionChart = new Chart(mCanvas, {
                 type: 'bar',
                 data: {
@@ -3497,31 +3917,37 @@
                     ],
                 },
                 options: {
-                    responsive: true,
+                    responsive: false,
                     maintainAspectRatio: false,
+                    devicePixelRatio: window.devicePixelRatio || 1,
+                    layout: { padding: { right: 16 } },
                     plugins: {
                         legend: { display: true, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12, padding: 6 } },
                         tooltip: { mode: 'index', intersect: false },
                     },
                     scales: {
-                        x: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 10 }, maxRotation: 30 } },
+                        x: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, maxRotation: 30, color: COLORS.axis } },
                         yPct: {
                             type: 'linear', position: 'left',
                             min: 0, max: 100,
                             grid: { color: COLORS.gridLine },
-                            ticks: { font: { size: 9 }, callback: function(v){ return v + '%'; } },
-                            title: { display: true, text: 'Done %', font: { size: 9 } },
+                            ticks: { font: { size: 11, weight: '600' }, color: COLORS.axis, callback: function(v){ return v + '%'; } },
+                            title: { display: true, text: 'Done %', font: { size: 11, weight: '700' }, color: COLORS.axisTitle },
                         },
                         yRisk: {
                             type: 'linear', position: 'right',
                             min: 0,
                             grid: { drawOnChartArea: false },
-                            ticks: { font: { size: 9 }, precision: 0 },
-                            title: { display: true, text: 'High Risk', font: { size: 9 } },
+                            ticks: { font: { size: 11, weight: '600' }, color: COLORS.axis, precision: 0 },
+                            title: { display: true, text: 'High Risk', font: { size: 11, weight: '700' }, color: COLORS.axisTitle },
                         },
                     },
                 },
             });
+            // Recolor axis/legend text on light/dark toggle — otherwise colors
+            // baked in at init time (e.g. dark-mode light-grey text) stay stuck
+            // when the user switches modes without reloading the page.
+            if (window.PrizmCharts) PrizmCharts.register(_metricsMissionChart);
         }
 
         // --- Strategy horizontal bar chart ---
@@ -3531,9 +3957,28 @@
             var sLabels = chartData.strategies.map(function(s){ return s.name; });
             var sDone   = chartData.strategies.map(function(s){ return s.completion_pct; });
             var sRem    = chartData.strategies.map(function(s){ return +(100 - s.completion_pct).toFixed(1); });
-            // Adjust canvas height (container .panel-chart-wrap has height: 180px by default)
-            var sHeight = Math.max(120, Math.min(350, chartData.strategies.length * 40));
-            sCanvas.parentElement.style.height = sHeight + 'px';
+            // When nothing has been completed yet, a stacked "Remaining %" of 100 paints a
+            // full-width bar that misreads as full progress. Show an explicit empty state instead.
+            var sTotalDone = sDone.reduce(function(a, b){ return a + b; }, 0);
+            if (sTotalDone === 0) {
+                var sBody = sCanvas.parentElement;
+                sBody.innerHTML = '<div class="d-flex align-items-center justify-content-center h-100 text-muted small">'
+                    + '<div class="text-center"><i class="fas fa-chess-knight fa-2x mb-2 d-block" style="opacity:0.2;"></i>'
+                    + 'No progress yet across ' + sLabels.length + ' strateg' + (sLabels.length !== 1 ? 'ies' : 'y') + '.<br>'
+                    + '<small>Complete tasks to see Done vs Remaining here.</small></div></div>';
+                var sCountBadge0 = document.getElementById('strategyChartCount');
+                if (sCountBadge0) sCountBadge0.textContent = sLabels.length + ' strateg' + (sLabels.length !== 1 ? 'ies' : 'y');
+            } else {
+            // Vertical scroll: 44px per row, uncapped — outer container scrolls
+            var sWrap  = sCanvas.parentElement;
+            var sMinH  = Math.max(sWrap.clientHeight || 120, sLabels.length * 44);
+            var sW     = sWrap.clientWidth || 400;
+            sCanvas.style.width  = sW + 'px';
+            sCanvas.style.height = sMinH + 'px';
+            sCanvas.width  = sW;
+            sCanvas.height = sMinH;
+            var sCountBadge = document.getElementById('strategyChartCount');
+            if (sCountBadge) sCountBadge.textContent = sLabels.length + ' strateg' + (sLabels.length !== 1 ? 'ies' : 'y');
             _metricsStrategyChart = new Chart(sCanvas, {
                 type: 'bar',
                 data: {
@@ -3545,34 +3990,34 @@
                 },
                 options: {
                     indexAxis: 'y',
-                    responsive: true,
+                    responsive: false,
                     maintainAspectRatio: false,
+                    devicePixelRatio: window.devicePixelRatio || 1,
                     plugins: {
                         legend: { display: true, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12, padding: 6 } },
                         tooltip: { callbacks: { label: function(ctx){ return ctx.dataset.label + ': ' + ctx.parsed.x + '%'; } } },
                     },
                     scales: {
-                        x: { stacked: true, min: 0, max: 100, grid: { color: COLORS.gridLine }, ticks: { font: { size: 9 }, callback: function(v){ return v + '%'; } } },
-                        y: { stacked: true, grid: { display: false }, ticks: { font: { size: 10 } } },
+                        x: { stacked: true, min: 0, max: 100, grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: COLORS.axis, callback: function(v){ return v + '%'; } } },
+                        y: { stacked: true, grid: { display: false }, ticks: { font: { size: 11, weight: '600' }, color: COLORS.axis } },
                     },
                 },
             });
+            if (window.PrizmCharts) PrizmCharts.register(_metricsStrategyChart);
+            }
         }
         // --- Velocity sparkline (weekly task completions) ---
         var vCanvas = document.getElementById('velocityChart');
-        if (vCanvas && chartData.spi_cpi && chartData.spi_cpi.length) {
+        if (vCanvas && chartData.velocity_weeks && chartData.velocity_weeks.length) {
             var weekLabels = ['6w ago','5w ago','4w ago','3w ago','2w ago','Last week','This week'];
-            // Build a rough completion trend from spi_cpi completion percentages as a proxy sparkline
-            var avgCompletion = chartData.spi_cpi.reduce(function(a,b){ return a + b.completion_pct; }, 0) / chartData.spi_cpi.length;
-            // Show a flat sparkline at the current completion level (real time-series data can replace this later)
-            var sparkData = weekLabels.map(function(_, i){ return +(avgCompletion * (0.4 + i * 0.1)).toFixed(1); });
-            sparkData[6] = +avgCompletion.toFixed(1);
-            new Chart(vCanvas, {
+            var sparkData = chartData.velocity_weeks;
+            var maxVal = Math.max.apply(null, sparkData);
+            var _velocityChart = new Chart(vCanvas, {
                 type: 'line',
                 data: {
                     labels: weekLabels,
                     datasets: [{
-                        label: 'Avg Completion %',
+                        label: 'Tasks Completed',
                         data: sparkData,
                         borderColor: 'rgba(28,200,138,0.9)',
                         backgroundColor: 'rgba(28,200,138,0.12)',
@@ -3587,14 +4032,15 @@
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false },
-                        tooltip: { callbacks: { label: function(ctx){ return 'Completion: ' + ctx.parsed.y + '%'; } } },
+                        tooltip: { callbacks: { label: function(ctx){ return ctx.parsed.y + ' tasks'; } } },
                     },
                     scales: {
-                        x: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 9 } } },
-                        y: { min: 0, max: 100, grid: { color: COLORS.gridLine }, ticks: { font: { size: 9 }, callback: function(v){ return v + '%'; } } },
+                        x: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: COLORS.axis } },
+                        y: { min: 0, max: maxVal > 0 ? undefined : 10, grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: COLORS.axis, stepSize: 1 } },
                     },
                 },
             });
+            if (window.PrizmCharts) PrizmCharts.register(_velocityChart);
         }
 
         // --- SPI / CPI Gauge half-donuts ---
@@ -3605,14 +4051,32 @@
             var MAX_GAUGE = 1.0;
             var capped = Math.min(Math.max(value, 0), MAX_GAUGE);
             var remaining = Math.max(0, MAX_GAUGE - capped);
-            var color = value >= 1.0 ? 'rgba(28,200,138,0.85)' : value >= 0.8 ? 'rgba(245,158,11,0.85)' : 'rgba(231,74,59,0.85)';
-            new Chart(canvas, {
+            var rgb = value >= 1.0 ? [28,200,138] : value >= 0.8 ? [245,158,11] : [231,74,59];
+            var color = 'rgba(' + rgb.join(',') + ',0.85)';
+            // The unfilled track was a flat near-transparent black — invisible on a
+            // dark card. Pull a theme-aware track tint from chart-theme.js and keep
+            // it live-updated when the user toggles light/dark without reloading.
+            var trackColor = (window.getChartTheme && window.getChartTheme().isDark)
+                ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.07)';
+
+            var chart = new Chart(canvas, {
                 type: 'doughnut',
                 data: {
                     datasets: [{
                         data: [capped, remaining],
-                        backgroundColor: [color, 'rgba(0,0,0,0.07)'],
+                        // Gradient + rounded caps for a smoother, less "flat" arc.
+                        backgroundColor: function (ctx) {
+                            if (ctx.dataIndex === 1) return trackColor;
+                            var area = ctx.chart.chartArea;
+                            if (!area) return color;
+                            var g = ctx.chart.ctx.createLinearGradient(area.left, area.top, area.right, area.top);
+                            g.addColorStop(0, 'rgba(' + rgb.join(',') + ',0.6)');
+                            g.addColorStop(1, 'rgba(' + rgb.join(',') + ',0.95)');
+                            return g;
+                        },
                         borderWidth: 0,
+                        borderRadius: 6,
+                        spacing: 1,
                     }],
                 },
                 options: {
@@ -3624,6 +4088,14 @@
                     plugins: { legend: { display: false }, tooltip: { enabled: false } },
                 },
             });
+            if (window.PrizmCharts) {
+                PrizmCharts.register(chart);
+                window.addEventListener('displayModeChanged', function () {
+                    trackColor = (window.getChartTheme && window.getChartTheme().isDark)
+                        ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.07)';
+                    chart.update('none');
+                });
+            }
             // Update overlay labels
             var valEl  = document.getElementById(valueTextId);
             var subEl  = document.getElementById(subTextId);
@@ -3645,6 +4117,24 @@
                 var spiEmpty = document.getElementById('spi-empty-state');
                 // Use classList so Bootstrap's d-flex !important is properly overridden
                 if (spiEmpty) { spiEmpty.classList.remove('d-flex'); spiEmpty.classList.add('d-none'); }
+                // Show worst-offender board if SPI below threshold
+                if (avgSpi < 0.8 && spiVals.length >= 1) {
+                    var worstSpi = null;
+                    chartData.spi_cpi.forEach(function(b) {
+                        if (b.spi !== null && b.spi !== undefined) {
+                            if (worstSpi === null || b.spi < worstSpi.spi) worstSpi = b;
+                        }
+                    });
+                    if (worstSpi) {
+                        var spiNote = document.getElementById('spi-offender-note');
+                        var spiLink = document.getElementById('spi-offender-link');
+                        if (spiNote && spiLink) {
+                            spiLink.textContent = worstSpi.name + ' (SPI ' + worstSpi.spi.toFixed(2) + ')';
+                            spiLink.href = '/boards/' + worstSpi.board_id + '/';
+                            spiNote.classList.remove('d-none');
+                        }
+                    }
+                }
             } else {
                 var spiCanvas = document.getElementById('spiGauge');
                 if (spiCanvas) spiCanvas.style.display = 'none';
@@ -3656,6 +4146,24 @@
                 var cpiEmpty = document.getElementById('cpi-empty-state');
                 // Use classList so Bootstrap's d-flex !important is properly overridden
                 if (cpiEmpty) { cpiEmpty.classList.remove('d-flex'); cpiEmpty.classList.add('d-none'); }
+                // Show worst-offender board if CPI below threshold
+                if (avgCpi < 0.8 && cpiVals.length >= 1) {
+                    var worstCpi = null;
+                    chartData.spi_cpi.forEach(function(b) {
+                        if (b.cpi !== null && b.cpi !== undefined) {
+                            if (worstCpi === null || b.cpi < worstCpi.cpi) worstCpi = b;
+                        }
+                    });
+                    if (worstCpi) {
+                        var cpiNote = document.getElementById('cpi-offender-note');
+                        var cpiLink = document.getElementById('cpi-offender-link');
+                        if (cpiNote && cpiLink) {
+                            cpiLink.textContent = worstCpi.name + ' (CPI ' + worstCpi.cpi.toFixed(2) + ')';
+                            cpiLink.href = '/boards/' + worstCpi.board_id + '/';
+                            cpiNote.classList.remove('d-none');
+                        }
+                    }
+                }
             } else {
                 var cpiCanvas = document.getElementById('cpiGauge');
                 if (cpiCanvas) cpiCanvas.style.display = 'none';

@@ -5,6 +5,7 @@ Automatically fires webhooks when specific events occur
 from django.db.models.signals import post_save, post_delete, pre_save, pre_delete
 from django.dispatch import receiver
 from django.contrib.auth.models import User
+from django.db import transaction
 from kanban.models import Task, Comment, Board
 from webhooks.models import Webhook, WebhookDelivery, WebhookEvent
 from webhooks.tasks import deliver_webhook
@@ -54,8 +55,10 @@ def trigger_webhooks(event_type, board, object_id, data, triggered_by=None):
             status='pending'
         )
         
-        # Queue delivery task (async)
-        deliver_webhook.delay(delivery.id)
+        # Queue delivery task only after the current transaction commits so the
+        # Celery worker is guaranteed to find the delivery record in the DB.
+        delivery_id = delivery.id
+        transaction.on_commit(lambda did=delivery_id: deliver_webhook.delay(did))
         triggered_count += 1
     
     # Update event log
@@ -124,8 +127,8 @@ def task_saved(sender, instance, created, **kwargs):
             triggered_by=task.created_by  # Could track who updated in the future
         )
         
-        # Check if task was completed (progress = 100)
-        if task.progress == 100:
+        # Check if task was JUST completed (transitioned to Done), not merely re-saved at 100%
+        if getattr(instance, '_just_completed', False):
             trigger_webhooks(
                 event_type='task.completed',
                 board=board,
@@ -213,7 +216,7 @@ def task_assigned(sender, instance, created, **kwargs):
     """
     Triggered when a task is assigned to a user
     """
-    if not created and hasattr(instance, '_assignment_changed'):
+    if not created and getattr(instance, '_assignment_changed', False):
         task = instance
         board = task.column.board
         

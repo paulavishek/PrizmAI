@@ -21,6 +21,7 @@ def refresh_pm_metrics_task():
     Refresh PMMetrics for all active boards/PM combinations.
     Runs daily to keep PM performance profiles current for coaching.
     """
+    from django.contrib.auth.models import User
     from kanban.models import Board
     from kanban.utils.feedback_learning import FeedbackLearningSystem
     
@@ -36,7 +37,7 @@ def refresh_pm_metrics_task():
             if board.created_by:
                 pm_users.add(board.created_by)
             # Also include members (they may receive coaching suggestions)
-            for member in board.members.all():
+            for member in User.objects.filter(board_memberships__board=board):
                 pm_users.add(member)
             
             for pm_user in pm_users:
@@ -443,50 +444,49 @@ def analyze_feedback_text_task():
 @shared_task(name='kanban.aggregate_org_learning')
 def aggregate_org_learning_task():
     """
-    Aggregate coaching insights across all boards in each organization
-    to build OrganizationLearningProfile entries.
-    
+    Aggregate coaching insights across all boards in each workspace
+    to build per-workspace learning profile entries.
+
     Enables:
-    - Cross-board collective intelligence
+    - Cross-board collective intelligence (within a workspace)
     - Cold-start bootstrapping for new boards
-    - Organization-wide effectiveness metrics
+    - Workspace-wide effectiveness metrics
     """
-    from accounts.models import Organization
-    from kanban.models import Board
+    from kanban.models import Board, Workspace
     from kanban.coach_models import CoachingSuggestion, OrganizationLearningProfile
     from django.db.models import Count, Q, Avg
     from decimal import Decimal
-    
+
     orgs_processed = 0
     profiles_updated = 0
-    
+
     try:
-        organizations = Organization.objects.all()
-        
-        for org in organizations:
+        workspaces = Workspace.objects.all()
+
+        for ws in workspaces:
             try:
-                # Get all boards in this organization
+                # Get all boards in this workspace
                 org_boards = Board.objects.filter(
-                    organization=org,
+                    workspace=ws,
                     is_archived=False,
                 )
-                
+
                 if not org_boards.exists():
                     continue
-                
+
                 board_ids = list(org_boards.values_list('id', flat=True))
-                
-                # Get all suggestions across org boards with feedback
+
+                # Get all suggestions across workspace boards with feedback
                 org_suggestions = CoachingSuggestion.objects.filter(
                     board_id__in=board_ids,
                     was_helpful__isnull=False,
                 )
-                
+
                 if org_suggestions.count() < 5:
                     continue
-                
+
                 orgs_processed += 1
-                
+
                 # Aggregate by suggestion_type
                 type_stats = org_suggestions.values('suggestion_type').annotate(
                     total=Count('id'),
@@ -529,7 +529,7 @@ def aggregate_org_learning_task():
                             )
                     
                     OrganizationLearningProfile.objects.update_or_create(
-                        organization=org,
+                        workspace=ws,
                         suggestion_type=stype,
                         defaults={
                             'total_suggestions': total,
@@ -545,12 +545,12 @@ def aggregate_org_learning_task():
                     )
                     profiles_updated += 1
                     
-            except Exception as org_err:
-                logger.error(f"Error aggregating for org {org.name}: {org_err}")
-        
+            except Exception as ws_err:
+                logger.error(f"Error aggregating for workspace {ws.name}: {ws_err}")
+
         result = (
-            f"Org learning aggregation: {profiles_updated} profiles updated "
-            f"across {orgs_processed} organizations"
+            f"Workspace learning aggregation: {profiles_updated} profiles updated "
+            f"across {orgs_processed} workspaces"
         )
         logger.info(result)
         return result
@@ -565,12 +565,11 @@ def run_ab_experiments_task():
     """
     Run A/B experiment analysis comparing AI generation methods.
     Calculates effectiveness metrics for rule-based vs AI vs hybrid suggestions
-    at board and organization level. Runs weekly.
+    at board and workspace level. Runs weekly.
     """
-    from kanban.models import Board
+    from kanban.models import Board, Workspace
     from kanban.coach_models import AIExperimentResult
-    from accounts.models import Organization
-    
+
     experiments_calculated = 0
     errors = 0
     
@@ -589,17 +588,17 @@ def run_ab_experiments_task():
                 )
                 errors += 1
         
-        # Organization-level experiments
-        orgs = Organization.objects.all()
-        for org in orgs:
+        # Workspace-level experiments
+        workspaces = Workspace.objects.all()
+        for ws in workspaces:
             try:
                 results = AIExperimentResult.calculate_experiment_results(
-                    organization=org, days=30
+                    workspace=ws, days=30
                 )
                 experiments_calculated += len(results)
-            except Exception as org_err:
+            except Exception as ws_err:
                 logger.error(
-                    f"A/B experiment error for org {org.name}: {org_err}"
+                    f"A/B experiment error for workspace {ws.name}: {ws_err}"
                 )
                 errors += 1
         

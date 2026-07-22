@@ -1,0 +1,7 @@
+{% load avatar_tags %}
+<div class="prizm-avatar-stack">
+  {% for u in shown %}{% user_avatar u size=size %}{% endfor %}
+  {% if overflow > 0 %}
+    <span class="prizm-avatar prizm-avatar--{{ size }} prizm-avatar--overflow">+{{ overflow }}</span>
+  {% endif %}
+</div>

@@ -10,6 +10,8 @@ from colorfield.fields import ColorField
 from accounts.models import Organization
 from django.core.validators import MinValueValidator, MaxValueValidator
 
+from kanban import column_semantics
+
 # Import coach models
 from kanban.coach_models import CoachingSuggestion, CoachingFeedback, PMMetrics, CoachingInsight
 
@@ -42,6 +44,57 @@ from kanban.commitment_models import (
     NegotiationSession,
     UserCredibilityScore,
 )
+
+# Import Workspace Preset models
+from kanban.preset_models import WorkspacePreset, BoardPreset, build_feature_flags
+
+# Import PrizmBrief models
+from kanban.prizmbrief_models import SavedBrief
+
+# Import PrizmDiscovery models
+from kanban.discovery_models import DiscoveryIdea, IdeaComment, IdeaPromotion
+
+
+# ---------------------------------------------------------------------------
+# WORKSPACE — the isolation boundary for multi-workspace support.
+# Each workspace contains its own Goal → Mission → Strategy → Board → Task
+# hierarchy.  Users switch between workspaces via a context switcher.
+# The demo sandbox is modelled as a special workspace with is_demo=True.
+# ---------------------------------------------------------------------------
+class Workspace(models.Model):
+    name = models.CharField(
+        max_length=200,
+        help_text="Display name of this workspace (e.g., 'Acme Corp Launch').",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='workspaces',
+        help_text="The organization this workspace belongs to.",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_workspaces',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_demo = models.BooleanField(
+        default=False,
+        help_text="True for the demo/sandbox workspace. Only one per organization.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Soft-delete flag. Inactive workspaces are hidden from the switcher.",
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Workspace'
+        verbose_name_plural = 'Workspaces'
+
+    def __str__(self):
+        return self.name
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +162,16 @@ class OrganizationGoal(models.Model):
     is_demo = models.BooleanField(default=False)
     is_seed_demo_data = models.BooleanField(default=False)
 
+    # Workspace isolation
+    workspace = models.ForeignKey(
+        'Workspace',
+        on_delete=models.CASCADE,
+        related_name='goals',
+        null=True,
+        blank=True,
+        help_text="The workspace this goal belongs to.",
+    )
+
     # AI Summary (bubble-up from Mission summaries)
     ai_summary = models.TextField(
         blank=True,
@@ -119,6 +182,20 @@ class OrganizationGoal(models.Model):
         blank=True,
         null=True,
         help_text="When the AI summary was last generated.",
+    )
+
+    # Portfolio Narrative (Goal-Aware Analytics — data storytelling)
+    portfolio_narrative = models.TextField(
+        null=True, blank=True,
+        help_text="Gemini-generated narrative summarising health of all linked boards in Goal context."
+    )
+    portfolio_narrative_generated_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the portfolio narrative was last generated."
+    )
+    portfolio_narrative_metric_snapshot = models.JSONField(
+        null=True, blank=True,
+        help_text="Metric snapshot at time of portfolio narrative generation."
     )
 
     class Meta:
@@ -203,8 +280,30 @@ class Mission(models.Model):
         help_text="When the AI summary was last generated."
     )
 
+    # Portfolio Narrative (Goal-Aware Analytics — data storytelling)
+    portfolio_narrative = models.TextField(
+        null=True, blank=True,
+        help_text="Gemini-generated narrative summarising health of all linked boards in Mission context."
+    )
+    portfolio_narrative_generated_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the portfolio narrative was last generated."
+    )
+    portfolio_narrative_metric_snapshot = models.JSONField(
+        null=True, blank=True,
+        help_text="Metric snapshot at time of portfolio narrative generation."
+    )
+
     # Workspace FK stub — reserved for future Workspace layer (currently unused)
     # workspace = models.ForeignKey('Workspace', null=True, blank=True, ...)
+    workspace = models.ForeignKey(
+        'Workspace',
+        on_delete=models.CASCADE,
+        related_name='missions',
+        null=True,
+        blank=True,
+        help_text="The workspace this mission belongs to.",
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -267,6 +366,16 @@ class Strategy(models.Model):
     # Demo support
     is_seed_demo_data = models.BooleanField(default=False)
 
+    # Workspace isolation
+    workspace = models.ForeignKey(
+        'Workspace',
+        on_delete=models.CASCADE,
+        related_name='strategies',
+        null=True,
+        blank=True,
+        help_text="The workspace this strategy belongs to.",
+    )
+
     # AI Summary (bubble-up from boards)
     ai_summary = models.TextField(
         blank=True,
@@ -277,6 +386,20 @@ class Strategy(models.Model):
         blank=True,
         null=True,
         help_text="When the AI summary was last generated."
+    )
+
+    # Portfolio Narrative (Goal-Aware Analytics — data storytelling)
+    portfolio_narrative = models.TextField(
+        null=True, blank=True,
+        help_text="Gemini-generated narrative summarising health of all linked boards in Strategy context."
+    )
+    portfolio_narrative_generated_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the portfolio narrative was last generated."
+    )
+    portfolio_narrative_metric_snapshot = models.JSONField(
+        null=True, blank=True,
+        help_text="Metric snapshot at time of portfolio narrative generation."
     )
 
     class Meta:
@@ -386,6 +509,33 @@ class StrategyVersion(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# GOAL PROXY METRICS — outcome indicators suggested by Spectra
+# Proxy Metrics measure real-world outcomes (not task outputs) to track
+# whether a Goal is actually being achieved.
+# ---------------------------------------------------------------------------
+class GoalProxyMetric(models.Model):
+    goal = models.ForeignKey(
+        OrganizationGoal,
+        on_delete=models.CASCADE,
+        related_name='proxy_metrics',
+    )
+    name = models.CharField(max_length=200)
+    why_it_matters = models.TextField()
+    how_to_measure = models.TextField()
+    current_value = models.CharField(max_length=200, null=True, blank=True)
+    previous_value = models.CharField(max_length=200, null=True, blank=True)
+    last_updated = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    display_order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['display_order']
+
+    def __str__(self):
+        return f"{self.name} — {self.goal.name}"
+
+
+# ---------------------------------------------------------------------------
 # STRATEGIC UPDATES — structured status check-ins at Goal / Mission / Strategy
 # Uses Django's ContentType framework for polymorphism.
 # ---------------------------------------------------------------------------
@@ -421,32 +571,6 @@ class StrategicUpdate(models.Model):
 
 
 # ---------------------------------------------------------------------------
-# MILESTONE — concrete checkpoints unique to the Strategy level
-# ---------------------------------------------------------------------------
-class Milestone(models.Model):
-    STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('complete', 'Complete'),
-        ('missed', 'Missed'),
-    ]
-
-    strategy = models.ForeignKey(
-        Strategy, on_delete=models.CASCADE, related_name='milestones'
-    )
-    name = models.CharField(max_length=255)
-    due_date = models.DateField()
-    status = models.CharField(
-        max_length=10, choices=STATUS_CHOICES, default='pending'
-    )
-
-    class Meta:
-        ordering = ['due_date']
-
-    def __str__(self):
-        return f"{self.name} ({self.get_status_display()}) — {self.due_date}"
-
-
-# ---------------------------------------------------------------------------
 # STRATEGIC FOLLOWER — polymorphic follower (Goal / Mission / Strategy)
 # ---------------------------------------------------------------------------
 class StrategicFollower(models.Model):
@@ -478,6 +602,7 @@ class UserFavorite(models.Model):
         ('board', 'Board'),
         ('goal', 'Goal'),
         ('mission', 'Mission'),
+        ('strategy', 'Strategy'),
         ('wiki_page', 'Wiki Page'),
         ('task', 'Task'),
         ('retrospective', 'Retrospective'),
@@ -491,6 +616,7 @@ class UserFavorite(models.Model):
         'board': 'fas fa-columns',
         'goal': 'fas fa-trophy',
         'mission': 'fas fa-bullseye',
+        'strategy': 'fas fa-chess',
         'wiki_page': 'fas fa-book-open',
         'task': 'fas fa-check-square',
         'retrospective': 'fas fa-history',
@@ -543,8 +669,10 @@ class UserFavorite(models.Model):
                 return reverse('goal_detail', args=[obj.pk])
             elif self.favorite_type == 'mission':
                 return reverse('mission_detail', args=[obj.pk])
+            elif self.favorite_type == 'strategy':
+                return reverse('strategy_detail', kwargs={'mission_id': obj.mission_id, 'strategy_id': obj.pk})
             elif self.favorite_type == 'wiki_page':
-                return reverse('wiki:wiki_page_detail', args=[obj.pk])
+                return reverse('wiki:page_detail', kwargs={'slug': obj.slug})
             elif self.favorite_type == 'task':
                 return reverse('board_detail', args=[obj.column.board.pk])
             elif self.favorite_type == 'retrospective':
@@ -575,8 +703,15 @@ class Board(models.Model):
         help_text="Organization (optional - MVP mode does not require organization)"
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_boards')
-    members = models.ManyToManyField(User, related_name='member_boards', blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_boards')
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='owned_boards',
+        help_text="Board owner — full edit, delete, invite rights. Access flows down to all children."
+    )
     
     # Scope baseline tracking
     baseline_task_count = models.IntegerField(null=True, blank=True, 
@@ -588,6 +723,16 @@ class Board(models.Model):
     baseline_set_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
                                        related_name='baseline_boards',
                                        help_text="User who set the baseline")
+
+    # Workspace isolation (denormalized from strategy→mission→goal for query efficiency)
+    workspace = models.ForeignKey(
+        'Workspace',
+        on_delete=models.CASCADE,
+        related_name='boards',
+        null=True,
+        blank=True,
+        help_text="The workspace this board belongs to.",
+    )
     
     # Demo Mode Support
     is_official_demo_board = models.BooleanField(
@@ -604,6 +749,19 @@ class Board(models.Model):
         default=False,
         help_text="True if this is original seed demo data (not user-created)."
     )
+    is_sandbox_copy = models.BooleanField(
+        default=False,
+        help_text="True if this board was created by sandbox provisioning (personal demo copy)."
+    )
+    is_imported = models.BooleanField(
+        default=False,
+        help_text="True if this board was created via file import (Jira, Monday.com, Trello, etc.)."
+    )
+    cloned_from = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='sandbox_clones',
+        help_text="Template board this sandbox copy was cloned from."
+    )
 
     # Phase Configuration for Gantt Chart
     num_phases = models.PositiveIntegerField(
@@ -618,6 +776,19 @@ class Board(models.Model):
         help_text="Target completion date for the project (Time constraint). Set from the Triple Constraint dashboard."
     )
 
+    # Task Aging / Stalling Detection — board-level defaults
+    aging_enabled = models.BooleanField(
+        default=True,
+        help_text="Show task-aging badges on this board (per-column overrides still apply)."
+    )
+    aging_warning_days = models.PositiveSmallIntegerField(
+        default=7,
+        help_text="Days a task can sit in a column before its aging badge turns amber (warning)."
+    )
+    aging_critical_days = models.PositiveSmallIntegerField(
+        default=14,
+        help_text="Days a task can sit in a column before its aging badge turns red (critical)."
+    )
     # Hierarchy: Mission → Strategy → Board
     strategy = models.ForeignKey(
         'Strategy',
@@ -663,6 +834,43 @@ class Board(models.Model):
         help_text="Short prefix for task IDs in Gantt chart (e.g. 'PRZ'). Auto-derived from board name if left blank."
     )
 
+    # --------------- Goal-Aware Analytics (project type classification) ---------------
+    PROJECT_TYPE_CHOICES = [
+        ('product_tech', 'Product / Tech'),
+        ('marketing_campaign', 'Marketing / Campaign'),
+        ('operations', 'Operations'),
+    ]
+    project_type = models.CharField(
+        max_length=30,
+        choices=PROJECT_TYPE_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Gemini-classified project type. Controls which analytics are promoted."
+    )
+    project_type_confirmed = models.BooleanField(
+        default=False,
+        help_text="True once user has confirmed or manually set the project type."
+    )
+    project_type_confidence = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Gemini confidence score at time of classification (0.0 to 1.0)."
+    )
+
+    # AI Narrative Summary (Goal-Aware Analytics — data storytelling)
+    analytics_narrative = models.TextField(
+        null=True, blank=True,
+        help_text="Gemini-generated 2-sentence narrative explaining what board metrics mean for the linked Goal."
+    )
+    analytics_narrative_generated_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the analytics narrative was last generated."
+    )
+    analytics_narrative_metric_snapshot = models.JSONField(
+        null=True, blank=True,
+        help_text="Metric values at time of narrative generation — used for staleness detection."
+    )
+
     def __str__(self):
         return self.name
 
@@ -682,6 +890,13 @@ class Board(models.Model):
         """Return count of tasks with progress == 100 on this board."""
         return Task.objects.filter(column__board=self, item_type='task', progress=100).count()
 
+    @property
+    def has_epics(self):
+        """True if this board has at least one Epic. Used by view templates to
+        conditionally render the Epics tab in the board navigation — boards
+        without epics hide the tab entirely so the nav stays clean."""
+        return Task.objects.filter(column__board=self, item_type='epic').exists()
+
     def create_scope_snapshot(self, user=None, snapshot_type='manual', is_baseline=False, notes=None):
         """
         Create a scope snapshot for this board
@@ -699,17 +914,11 @@ class Board(models.Model):
         high_priority = tasks.filter(priority='high').count()
         urgent_priority = tasks.filter(priority='urgent').count()
         
-        # Task status breakdown (approximate based on column names)
-        todo_tasks = tasks.filter(column__name__icontains='to do').count() + \
-                    tasks.filter(column__name__icontains='backlog').count()
-        in_progress_tasks = tasks.filter(
-            Q(column__name__icontains='in progress') | 
-            Q(column__name__icontains='doing')
-        ).count()
-        completed_tasks = tasks.filter(
-            Q(column__name__icontains='done') | 
-            Q(column__name__icontains='complete')
-        ).count()
+        # Task status breakdown by the column's resolved type (structural
+        # column_type marker, else name heuristic — single source of truth).
+        todo_tasks = tasks.filter(column_semantics.column_type_q('todo')).count()
+        in_progress_tasks = tasks.filter(column_semantics.column_type_q('in_progress')).count()
+        completed_tasks = tasks.filter(column_semantics.column_type_q('done')).count()
         
         # Get baseline for comparison
         baseline = None
@@ -807,19 +1016,73 @@ class Board(models.Model):
         
         return (False, None, status['scope_change_percentage'])
 
+# Column names that should have task-aging badges disabled by default (Done/Backlog-style
+# columns). Matched as case-insensitive substrings of the column name. Shared by the migration
+# backfill and the create_column view so the two can't drift.
+AGING_DISABLED_NAME_KEYWORDS = (
+    'done', 'complete', 'closed', 'backlog', 'archive',
+    'shipped', 'deployed', 'released', 'cancelled', 'canceled',
+)
+
+
+def column_name_disables_aging(name):
+    """Return True if a column with this name should default to aging disabled."""
+    low = (name or '').lower()
+    return any(kw in low for kw in AGING_DISABLED_NAME_KEYWORDS)
+
+
 class Column(models.Model):
+    COLOR_CHOICES = [
+        ('green', 'Green'),
+        ('blue', 'Blue'),
+        ('purple', 'Purple'),
+        ('orange', 'Orange'),
+        ('red', 'Red'),
+        ('yellow', 'Yellow'),
+        ('teal', 'Teal'),
+        ('gray', 'Gray'),
+    ]
+
+    AGING_MODE_CHOICES = [
+        ('inherit', 'Use board defaults'),
+        ('custom', 'Custom for this column'),
+        ('disabled', 'Disabled'),
+    ]
+
     name = models.CharField(max_length=100)
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='columns')
     position = models.IntegerField(default=0)
+    color = models.CharField(max_length=20, choices=COLOR_CHOICES, default='blue')
+    # Structural status marker. '' == "auto" (derive from name via the keyword
+    # heuristic). Set explicitly so a column can be named anything and still be
+    # recognised as Done/To Do/etc. See kanban/column_semantics.py.
+    column_type = models.CharField(
+        max_length=20, choices=column_semantics.COLUMN_TYPE_CHOICES, blank=True, default='',
+        help_text="Semantic type of this column. Leave on Auto to detect from the name.",
+    )
     wip_limit = models.PositiveIntegerField(null=True, blank=True, default=None,
                                             help_text="Maximum number of tasks allowed in this column. Leave blank for no limit.")
-    
+
+    # Task Aging / Stalling Detection — per-column override
+    aging_mode = models.CharField(
+        max_length=10, choices=AGING_MODE_CHOICES, default='inherit',
+        help_text="How aging badges behave for this column: inherit board defaults, custom thresholds, or disabled."
+    )
+    aging_warning_days = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Custom warning (amber) threshold in days; used only when aging_mode='custom'."
+    )
+    aging_critical_days = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Custom critical (red) threshold in days; used only when aging_mode='custom'."
+    )
+
     class Meta:
         ordering = ['position']
-    
+
     def __str__(self):
         return f"{self.name} - {self.board.name}"
-    
+
     def is_wip_exceeded(self, task_count=None):
         """Return True if the column has exceeded its WIP limit."""
         if self.wip_limit is None:
@@ -828,17 +1091,71 @@ class Column(models.Model):
             task_count = self.task_set.filter(item_type='task').count()
         return task_count > self.wip_limit
 
+    # ── Status semantics (single source of truth: kanban/column_semantics.py) ──
+    # Prefer the explicit column_type marker; fall back to the name heuristic
+    # when it's left on "auto" (empty). Never re-implement substring checks
+    # inline — use these so renaming "Done" -> "Finished"/"Achieved" is safe.
+    def resolved_type(self):
+        return self.column_type or column_semantics.classify_column_name(self.name)
+
+    def is_done(self):
+        return self.resolved_type() == column_semantics.DONE
+
+    def is_in_progress(self):
+        return self.resolved_type() == column_semantics.IN_PROGRESS
+
+    def is_todo(self):
+        return self.resolved_type() == column_semantics.TODO
+
+    def is_review(self):
+        return self.resolved_type() == column_semantics.REVIEW
+
+    def is_blocked(self):
+        return self.resolved_type() == column_semantics.BLOCKED
+
+    def effective_aging(self):
+        """Resolve the effective aging config for this column.
+
+        Returns a dict: {'enabled': bool, 'warning': int, 'critical': int, 'show': int}.
+        Single source of truth used by the board view, the column popover subtitle, the save
+        endpoint, and the downstream Focus Today / Spectra integrations.
+
+        The 'show' threshold (when the neutral grey pill first appears) is DERIVED, not
+        user-configured: show = max(1, ceil(warning / 2)).
+        """
+        import math
+        board = self.board
+        if self.aging_mode == 'disabled' or not board.aging_enabled:
+            return {'enabled': False, 'warning': 0, 'critical': 0, 'show': 0}
+        if self.aging_mode == 'custom' and self.aging_warning_days and self.aging_critical_days:
+            warning = self.aging_warning_days
+            critical = self.aging_critical_days
+        else:  # 'inherit' (or custom with missing values → fall back to board defaults)
+            warning = board.aging_warning_days
+            critical = board.aging_critical_days
+        show = max(1, math.ceil(warning / 2))
+        return {'enabled': True, 'warning': warning, 'critical': critical, 'show': show}
+
 class TaskLabel(models.Model):
     CATEGORY_CHOICES = [
         ('regular', 'Regular'),
         ('lean', 'Lean Six Sigma'),
     ]
-    
+
+    PRESET_LABELS = [
+        {'name': 'Bug',           'color': '#dc3545'},
+        {'name': 'Feature',       'color': '#0d6efd'},
+        {'name': 'Enhancement',   'color': '#6f42c1'},
+        {'name': 'Needs Review',  'color': '#fd7e14'},
+        {'name': 'Documentation', 'color': '#20c997'},
+        {'name': 'In Progress',   'color': '#ffc107'},
+    ]
+
     name = models.CharField(max_length=50)
     color = ColorField(default='#FF5733')
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='labels')
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='regular')
-    
+
     def __str__(self):
         return self.name
 
@@ -1120,16 +1437,17 @@ class Task(models.Model):
         help_text="Timestamp when the task last entered its current column (used for WIP age calculation)"
     )
 
-    # Item Type (task vs milestone)
+    # Item Type (task vs milestone vs epic)
     ITEM_TYPE_CHOICES = [
         ('task', 'Task'),
         ('milestone', 'Milestone'),
+        ('epic', 'Epic'),
     ]
     item_type = models.CharField(
         max_length=20,
         choices=ITEM_TYPE_CHOICES,
         default='task',
-        help_text="Whether this item is a regular task or a milestone marker"
+        help_text="Whether this item is a regular task, a milestone marker, or an epic container"
     )
 
     MILESTONE_STATUS_CHOICES = [
@@ -1152,6 +1470,14 @@ class Task(models.Model):
         help_text="For milestones: which task this milestone appears after in the Gantt chart rows"
     )
 
+    # Google Calendar sync
+    google_calendar_event_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Google Calendar event ID if this task has been synced to a user's calendar.",
+    )
+
     class Meta:
         ordering = ['position']
         indexes = [
@@ -1165,6 +1491,161 @@ class Task(models.Model):
     
     def __str__(self):
         return self.title
+
+    @property
+    def is_epic(self):
+        """Convenience check for epic item type."""
+        return self.item_type == 'epic'
+
+    @property
+    def checklist_progress(self):
+        """Return checklist completion dict {completed, total} or None if no items."""
+        items = self.checklist_items.all()
+        total = items.count()
+        if total == 0:
+            return None
+        completed = items.filter(is_completed=True).count()
+        return {'completed': completed, 'total': total}
+
+    @property
+    def checklist_percentage(self):
+        """Return checklist completion percentage (0-100) or None if no items."""
+        progress = self.checklist_progress
+        if progress is None:
+            return None
+        if progress['total'] == 0:
+            return 0
+        return int((progress['completed'] / progress['total']) * 100)
+
+    # ------------------------------------------------------------------
+    # Task Aging / Stalling — SINGLE SOURCE OF TRUTH
+    # ------------------------------------------------------------------
+    # aging_state() is the one server-side definition of a task's column-dwell
+    # tier. It deliberately mirrors the card badge math in static/js/kanban_aging.js
+    # (daysSince + recalc) and Column.effective_aging() so Spectra, Focus Today and
+    # the Decision Center always report numbers identical to the badge on the board.
+    # Do NOT re-derive "stalled" from created_at / updated_at in any consumer.
+    def aging_state(self, now=None):
+        """Resolve this task's aging tier from column dwell time + column thresholds.
+
+        Returns a dict::
+
+            {'enabled': bool, 'days': int|None,
+             'tier': 'fresh'|'show'|'warning'|'critical',
+             'warning': int, 'critical': int}
+
+        ``tier == 'fresh'`` means below the grey 'show' threshold (no badge).
+        Disabled columns, completed tasks (progress 100 / milestone done) and tasks
+        with no ``column_entered_at`` resolve to ``enabled=False, tier='fresh'``.
+        """
+        cfg = self.column.effective_aging() if self.column_id else {
+            'enabled': False, 'warning': 0, 'critical': 0, 'show': 0,
+        }
+        completed = (self.progress or 0) >= 100 or self.milestone_status == 'completed'
+        if not cfg['enabled'] or completed or self.column_entered_at is None:
+            return {'enabled': False, 'days': None, 'tier': 'fresh',
+                    'warning': cfg['warning'], 'critical': cfg['critical']}
+
+        if now is None:
+            now = timezone.now()
+        # Whole 24h periods elapsed, floored — matches kanban_aging.js daysSince().
+        delta = now - self.column_entered_at
+        days = delta.days if delta.days > 0 else 0
+
+        warning, critical, show = cfg['warning'], cfg['critical'], cfg['show']
+        if critical and days >= critical:
+            tier = 'critical'
+        elif warning and days >= warning:
+            tier = 'warning'
+        elif days >= show:
+            tier = 'show'
+        else:
+            tier = 'fresh'
+        return {'enabled': True, 'days': days, 'tier': tier,
+                'warning': warning, 'critical': critical}
+
+    # Tier ordering for "at least this stalled" comparisons.
+    _AGING_TIER_RANK = {'fresh': 0, 'show': 1, 'warning': 2, 'critical': 3}
+
+    @classmethod
+    def stalled_for_boards(cls, board_ids, tier='warning', now=None):
+        """Return non-complete tasks whose aging tier is >= ``tier``, each annotated
+        with a ``days_in_column`` attribute, ordered oldest-first (most stalled).
+
+        ``tier`` is 'warning' (amber+) or 'critical' (red only). Shared by Focus
+        Today and the Decision Center so "stalled" means the same thing everywhere.
+        """
+        if now is None:
+            now = timezone.now()
+        floor_rank = cls._AGING_TIER_RANK.get(tier, 2)
+        qs = (
+            cls.objects
+            .filter(column__board_id__in=board_ids, item_type='task')
+            .exclude(progress=100)
+            .select_related('column__board', 'assigned_to')
+        )
+        out = []
+        for task in qs:
+            state = task.aging_state(now=now)
+            if not state['enabled']:
+                continue
+            if cls._AGING_TIER_RANK[state['tier']] < floor_rank:
+                continue
+            task.days_in_column = state['days']
+            task.aging_tier = state['tier']
+            out.append(task)
+        out.sort(key=lambda t: t.days_in_column, reverse=True)
+        return out
+
+    @staticmethod
+    def compute_progress_status(progress, due_date, start_date, now=None):
+        """Pure computation of the schedule-status badge from raw field values.
+
+        Kept free of ``self`` so the automation engine can compute the *old*
+        status from a pre-save snapshot and compare it to the new one (see
+        ``schedule_status_changed`` in kanban/signals.py) — the trigger must only
+        fire when the badge actually transitions, not on every field save.
+
+        Returns 'late' | 'at_risk' | 'on_track' | None. See ``progress_status``
+        for the rule description.
+        """
+        if not due_date:
+            return None
+        progress = progress or 0
+        if progress >= 100:
+            return 'on_track'
+
+        if now is None:
+            now = timezone.now()
+        # Normalise due_date to an aware datetime
+        due = due_date
+        if timezone.is_naive(due):
+            due = timezone.make_aware(due)
+
+        if due < now:
+            return 'late'
+
+        # At-risk calculation
+        if start_date:
+            # Convert start_date (date) to aware datetime at midday
+            import datetime as _dt
+            start_dt = timezone.make_aware(
+                _dt.datetime.combine(start_date, _dt.time(12, 0))
+            )
+            total_seconds = (due - start_dt).total_seconds()
+            if total_seconds > 0:
+                elapsed_seconds = (now - start_dt).total_seconds()
+                if elapsed_seconds > 0:
+                    expected_pct = min((elapsed_seconds / total_seconds) * 100, 100)
+                    if (expected_pct - progress) > 15:
+                        return 'at_risk'
+        else:
+            # Fallback: warn if due within 3 days and progress is below 80 %
+            days_remaining = (due - now).total_seconds() / 86400
+            if days_remaining <= 3 and progress < 80:
+                return 'at_risk'
+
+        return 'on_track'
 
     @property
     def progress_status(self):
@@ -1187,41 +1668,9 @@ class Task(models.Model):
         4. If no start_date but due in ≤ 3 days and progress < 80 → 'at_risk'
         5. Otherwise → 'on_track'
         """
-        if not self.due_date:
-            return None
-        if self.progress >= 100:
-            return 'on_track'
-
-        now = timezone.now()
-        # Normalise due_date to an aware datetime
-        due = self.due_date
-        if timezone.is_naive(due):
-            due = timezone.make_aware(due)
-
-        if due < now:
-            return 'late'
-
-        # At-risk calculation
-        if self.start_date:
-            # Convert start_date (date) to aware datetime at midnight
-            import datetime as _dt
-            start_dt = timezone.make_aware(
-                _dt.datetime.combine(self.start_date, _dt.time(12, 0))
-            )
-            total_seconds = (due - start_dt).total_seconds()
-            if total_seconds > 0:
-                elapsed_seconds = (now - start_dt).total_seconds()
-                if elapsed_seconds > 0:
-                    expected_pct = min((elapsed_seconds / total_seconds) * 100, 100)
-                    if (expected_pct - self.progress) > 15:
-                        return 'at_risk'
-        else:
-            # Fallback: warn if due within 3 days and progress is below 80 %
-            days_remaining = (due - now).total_seconds() / 86400
-            if days_remaining <= 3 and self.progress < 80:
-                return 'at_risk'
-
-        return 'on_track'
+        return self.compute_progress_status(
+            self.progress, self.due_date, self.start_date
+        )
 
     def duration_days(self):
         """Calculate task duration in days"""
@@ -1237,6 +1686,98 @@ class Task(models.Model):
         for subtask in subtasks:
             subtasks.extend(subtask.get_all_subtasks())
         return subtasks
+
+    def get_epic_rollup(self):
+        """Aggregate child-task stats for an Epic detail/list view.
+
+        Single source of truth shared by the Epics list view (``board_epics``)
+        and the Epic detail page so the two can never diverge. Only direct
+        children of ``item_type='task'`` are counted (nested epics excluded).
+
+        The "done" rule mirrors ``board_epics``: ``progress >= 100`` OR
+        ``completed_at`` is set.
+
+        Returns a dict with:
+          children              - list of direct child Tasks
+          total / completed     - counts
+          progress_pct          - rounded completion percentage (0 when no children)
+          contributors          - distinct assignees across children
+          total_estimated_hours - sum of child TaskCost.estimated_hours (float)
+          total_estimated_cost  - sum of child TaskCost.estimated_cost (float)
+          risk_breakdown        - {'critical','high','medium','low','none': count}
+          deadline_conflicts    - children whose due_date is after the Epic's
+          blocking_children     - children that block other tasks (have dependents)
+        """
+        children = list(self.subtasks.filter(item_type='task'))
+        total = len(children)
+        completed = sum(1 for c in children if (c.progress or 0) >= 100 or c.completed_at)
+        progress_pct = round((completed / total) * 100) if total else 0
+
+        # Distinct contributors (child assignees), preserving first-seen order.
+        contributors = []
+        seen_contributor_ids = set()
+        for c in children:
+            user = c.assigned_to
+            if user and user.id not in seen_contributor_ids:
+                seen_contributor_ids.add(user.id)
+                contributors.append(user)
+
+        total_estimated_hours = 0.0
+        total_estimated_cost = 0.0
+        risk_breakdown = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0, 'none': 0}
+        deadline_conflicts = []
+        blocking_children = []
+        complexity_values = []
+        start_dates = []
+        due_dates = []
+
+        for c in children:
+            # Budget/hours from the OneToOne TaskCost record (may not exist).
+            try:
+                cost = c.cost
+            except Exception:
+                cost = None
+            if cost:
+                total_estimated_hours += float(cost.estimated_hours or 0)
+                total_estimated_cost += float(cost.estimated_cost or 0)
+
+            risk_breakdown[c.risk_level if c.risk_level in risk_breakdown else 'none'] += 1
+
+            if c.complexity_score:
+                complexity_values.append(c.complexity_score)
+            if c.start_date:
+                start_dates.append(c.start_date)
+            if c.due_date:
+                due_dates.append(c.due_date)
+
+            # A child due AFTER the Epic's own due date is a rollup conflict.
+            if self.due_date and c.due_date and c.due_date > self.due_date:
+                deadline_conflicts.append(c)
+
+            # A child that other tasks depend on is blocking work.
+            if c.dependent_tasks.exists():
+                blocking_children.append(c)
+
+        avg_complexity = round(sum(complexity_values) / len(complexity_values), 1) if complexity_values else None
+        max_complexity = max(complexity_values) if complexity_values else None
+
+        return {
+            'children': children,
+            'total': total,
+            'completed': completed,
+            'progress_pct': progress_pct,
+            'contributors': contributors,
+            'total_estimated_hours': total_estimated_hours,
+            'total_estimated_cost': total_estimated_cost,
+            'risk_breakdown': risk_breakdown,
+            'deadline_conflicts': deadline_conflicts,
+            'blocking_children': blocking_children,
+            'avg_complexity': avg_complexity,
+            'max_complexity': max_complexity,
+            # Derived schedule span across children (earliest start, latest due).
+            'earliest_start': min(start_dates) if start_dates else None,
+            'latest_due': max(due_dates) if due_dates else None,
+        }
     
     def get_all_parent_tasks(self):
         """Get all parent tasks up the hierarchy"""
@@ -1274,8 +1815,37 @@ class Task(models.Model):
         self.dependency_chain = chain
         self.save()
     
+    def clean(self):
+        """Validate that the assignee actually has access to the task's board.
+
+        A task must not be assigned to someone who is not a member of (and has
+        no access to) the board — otherwise they would be treated as an
+        affected user for conflicts and receive notifications for a board they
+        cannot see. This runs for any code path that calls ``full_clean()``
+        (ModelForms, DRF serializers configured to validate, admin). Direct
+        ``.save()`` calls (seed scripts, sandbox duplication) are intentionally
+        not blocked here — those assign known board members.
+        """
+        super().clean()
+        if self.assigned_to_id and self.column_id:
+            from kanban.simple_access import can_be_assigned_to_board
+            board = self.column.board
+            if not can_be_assigned_to_board(self.assigned_to, board):
+                from django.core.exceptions import ValidationError
+                raise ValidationError({
+                    'assigned_to': (
+                        "This user is not a member of the board and cannot be "
+                        "assigned to its tasks."
+                    )
+                })
+
     def save(self, *args, **kwargs):
         """Override save to track completion and update predictions"""
+        # Sanitize rich-text HTML description to prevent XSS before persisting
+        if self.description:
+            from kanban.utils.sanitize import sanitize_html
+            self.description = sanitize_html(self.description)
+
         # Track completion timestamp
         if self.progress == 100 and not self.completed_at:
             self.completed_at = timezone.now()
@@ -1300,15 +1870,23 @@ class Task(models.Model):
         """Calculate team member's velocity factor based on historical data"""
         if not self.assigned_to:
             return 1.0
-        
+
+        # Workspace is the tenant-isolation key (Board.organization is legacy/nullable).
+        # Without scoping, this would pull the user's completed tasks across every
+        # workspace they appear in. No workspace => no reliable peer set.
+        ws = self.column.board.workspace
+        if ws is None:
+            return 1.0
+
         from django.db.models import Avg
-        
-        # Get completed tasks by this user with similar complexity
+
+        # Get completed tasks by this user with similar complexity (within workspace)
         completed_tasks = Task.objects.filter(
             assigned_to=self.assigned_to,
             progress=100,
             actual_duration_days__isnull=False,
-            complexity_score__range=(max(1, self.complexity_score - 2), 
+            column__board__workspace=ws,
+            complexity_score__range=(max(1, self.complexity_score - 2),
                                     min(10, self.complexity_score + 2))
         ).exclude(id=self.id)
         
@@ -1322,6 +1900,44 @@ class Task(models.Model):
             return avg_duration / baseline
         
         return 1.0
+
+class ChecklistItem(models.Model):
+    """Individual checklist item within a task — used for AI-generated sub-task breakdowns."""
+    PRIORITY_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('urgent', 'Urgent'),
+    ]
+    SOURCE_CHOICES = [
+        ('manual', 'Manual'),
+        ('ai_generated', 'AI Generated'),
+    ]
+
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='checklist_items')
+    title = models.CharField(max_length=300)
+    description = models.TextField(blank=True, null=True)
+    is_completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    completed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, blank=True, null=True, related_name='completed_checklist_items'
+    )
+    position = models.IntegerField(default=0)
+    estimated_effort = models.CharField(max_length=50, blank=True, help_text="e.g. '2.5 hrs', '1 day'")
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='manual')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['position', 'created_at']
+        indexes = [
+            models.Index(fields=['task', 'position']),
+        ]
+
+    def __str__(self):
+        status = '✓' if self.is_completed else '○'
+        return f"[{status}] {self.title}"
+
 
 class Comment(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='comments')
@@ -1348,6 +1964,7 @@ class TaskActivity(models.Model):
         ('commented', 'Commented'),
         ('label_added', 'Label Added'),
         ('label_removed', 'Label Removed'),
+        ('custom_field', 'Custom Field Changed'),
     ]
     
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='activities')
@@ -1666,7 +2283,7 @@ class TeamSkillProfile(models.Model):
         """Calculate team utilization"""
         if self.total_capacity_hours == 0:
             return 0
-        return min(100, (self.utilized_capacity_hours / self.total_capacity_hours) * 100)
+        return (self.utilized_capacity_hours / self.total_capacity_hours) * 100
     
     @property
     def available_skills(self):
@@ -2076,7 +2693,122 @@ from .scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
 
 # Import security and permission models to register them with Django
 from .audit_models import SystemAuditLog, SecurityEvent, DataAccessLog
-from .permission_models import Role, BoardMembership, PermissionOverride, ColumnPermission
+
+# Legacy permission_models.py deleted in RBAC Phase 1.
+# PermissionAuditLog and ColumnPermission deferred to Phase 3.
+
+
+class BoardMembership(models.Model):
+    """
+    RBAC board membership — replaces the legacy Board.members M2M and the
+    deleted legacy Role-FK-based BoardMembership from permission_models.py.
+    Role is a simple CharField (owner / member / viewer).
+    """
+    ROLE_CHOICES = [
+        ('owner', 'Owner'),
+        ('member', 'Member'),
+        ('viewer', 'Viewer'),
+    ]
+
+    board = models.ForeignKey(
+        Board, on_delete=models.CASCADE, related_name='memberships'
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='board_memberships'
+    )
+    role = models.CharField(
+        max_length=10,
+        choices=ROLE_CHOICES,
+        default='member',
+        help_text="Owner: full control. Member: create/edit tasks. Viewer: read-only."
+    )
+    added_at = models.DateTimeField(auto_now_add=True)
+    added_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='added_board_members'
+    )
+
+    class Meta:
+        unique_together = ('board', 'user')
+        ordering = ['board', '-added_at']
+        indexes = [
+            models.Index(fields=['board', 'user']),
+            models.Index(fields=['user', 'role']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} — {self.board.name} ({self.get_role_display()})"
+
+
+class StrategicMembership(models.Model):
+    """
+    Generic-FK membership for Goal / Mission / Strategy level access.
+    One model covers all three strategic levels.
+    """
+    ROLE_CHOICES = [
+        ('owner', 'Owner'),
+        ('member', 'Member'),
+        ('viewer', 'Viewer'),
+    ]
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='strategic_memberships'
+    )
+    role = models.CharField(
+        max_length=10,
+        choices=ROLE_CHOICES,
+        default='member',
+        help_text="Owner: full control + invite. Member: contribute. Viewer: read-only."
+    )
+
+    class Meta:
+        unique_together = ('content_type', 'object_id', 'user')
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+            models.Index(fields=['user', 'role']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} — {self.content_type.model} #{self.object_id} ({self.get_role_display()})"
+
+
+class DemoSandbox(models.Model):
+    """
+    Personal demo sandbox — private copy of all demo template boards for a user.
+    OneToOneField enforces one sandbox per user at the DB level.
+
+    Persistent model: the sandbox lives as long as the user's account.
+    Users switch between Demo Workspace and My Workspace freely.
+    The only control is a Reset button to wipe back to template state.
+    """
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name='demo_sandbox'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_reset_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the user last reset their demo. NULL on first provision."
+    )
+    last_accessed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text=(
+            "When the user last entered demo mode / (re)provisioned. Used by the "
+            "stale-sandbox garbage collector to reclaim storage for abandoned demos."
+        ),
+    )
+    reassigned_tasks = models.JSONField(
+        default=dict, blank=True,
+        help_text=(
+            "Maps task IDs (str) to original assignee user IDs. "
+            "Used to restore assignments when user leaves demo mode."
+        ),
+    )
+
+    def __str__(self):
+        return f"Sandbox for {self.user.username} (created {self.created_at})"
 
 
 class BoardInvitation(models.Model):
@@ -2141,10 +2873,128 @@ class BoardInvitation(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# WORKSPACE MEMBERSHIP — Workspace-level member management with RBAC
+# ---------------------------------------------------------------------------
+
+class WorkspaceMembership(models.Model):
+    """
+    Workspace-level membership with a single RBAC role that propagates
+    to all boards within the workspace (current and future).
+    """
+    ROLE_CHOICES = [
+        ('owner', 'Owner'),
+        ('member', 'Member'),
+        ('viewer', 'Viewer'),
+    ]
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name='memberships'
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='workspace_memberships'
+    )
+    role = models.CharField(
+        max_length=10,
+        choices=ROLE_CHOICES,
+        default='member',
+        help_text="Owner: full control. Member: create/edit tasks. Viewer: read-only.",
+    )
+    added_at = models.DateTimeField(auto_now_add=True)
+    added_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='added_workspace_members',
+    )
+
+    class Meta:
+        unique_together = ('workspace', 'user')
+        ordering = ['workspace', '-added_at']
+        indexes = [
+            models.Index(fields=['workspace', 'user']),
+            models.Index(fields=['user', 'role']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} — {self.workspace.name} ({self.get_role_display()})"
+
+
+class WorkspaceInvitation(models.Model):
+    """Email-based invitation to join a workspace with a specific role."""
+
+    STATUS_PENDING = 'pending'
+    STATUS_ACCEPTED = 'accepted'
+    STATUS_EXPIRED = 'expired'
+    STATUS_REVOKED = 'revoked'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_ACCEPTED, 'Accepted'),
+        (STATUS_EXPIRED, 'Expired'),
+        (STATUS_REVOKED, 'Revoked'),
+    ]
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name='invitations',
+    )
+    invited_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='sent_workspace_invitations',
+    )
+    email = models.EmailField()
+    role = models.CharField(
+        max_length=10,
+        choices=WorkspaceMembership.ROLE_CHOICES,
+        default='member',
+    )
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    accepted_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='accepted_workspace_invitations',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Workspace invite to {self.workspace.name} for {self.email} ({self.status})"
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(hours=48)
+        super().save(*args, **kwargs)
+
+    def is_valid(self):
+        if self.status != self.STATUS_PENDING:
+            return False
+        if timezone.now() > self.expires_at:
+            self.status = self.STATUS_EXPIRED
+            self.save(update_fields=['status'])
+            return False
+        return True
+
+    def mark_accepted(self, user):
+        self.status = self.STATUS_ACCEPTED
+        self.accepted_at = timezone.now()
+        self.accepted_by = user
+        self.save()
+
+
+# ---------------------------------------------------------------------------
 # SHADOW BOARD MODELS — Parallel Universe Simulator
 # ---------------------------------------------------------------------------
 # Import at the end to ensure all dependencies are loaded
 from .shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog  # noqa: E402
+from .access_request_models import AccessRequest  # noqa: E402
+from .project_signals_models import ProjectSignal, ProjectConfidenceScore  # noqa: E402
+from .custom_field_models import (  # noqa: E402
+    CustomFieldDefinition,
+    CustomFieldOption,
+    TaskCustomFieldValue,
+)
 
 
 class CalendarEvent(models.Model):
@@ -2159,6 +3009,8 @@ class CalendarEvent(models.Model):
 
     visibility controls who sees the event on the calendar:
       team    (default) — teammates see you're blocked (but not the private reason)
+      public            — full details (title, notes, participants) visible to
+                           every board member; only reachable via event_type='team_event'
       private           — only you see it; completely hidden from others
     """
     EVENT_TYPE_CHOICES = [
@@ -2170,6 +3022,7 @@ class CalendarEvent(models.Model):
 
     VISIBILITY_CHOICES = [
         ('team',    "Team can see I'm busy"),
+        ('public',  'Public (visible to entire board)'),
         ('private', 'Private (only me)'),
     ]
 
@@ -2193,6 +3046,13 @@ class CalendarEvent(models.Model):
     location = models.CharField(max_length=255, blank=True, null=True,
                                 help_text="Optional physical or virtual meeting location")
 
+    # Workspace-mode discriminator, mirroring DecisionCenterBriefing.is_demo.
+    # Board-linked events can infer demo-ness from board.is_sandbox_copy, but a
+    # board-less event (board is optional) has no such anchor, so without this
+    # flag it silently vanished from the calendar on next fetch after creation
+    # in demo mode (_event_workspace_scope had nothing to match it against).
+    is_demo = models.BooleanField(default=False, db_index=True)
+
     # Optional board association
     board = models.ForeignKey(
         Board,
@@ -2210,6 +3070,19 @@ class CalendarEvent(models.Model):
         help_text="Link to a task to give teammates context (e.g. 'busy on Auth System')",
     )
 
+    # Lineage back to the shared demo template event this sandbox clone was
+    # cloned from (mirrors Board.cloned_from). Lets the calendar feed
+    # recognize when a viewer independently matches both the template
+    # original and its own sandbox clone (e.g. a demo persona who is a
+    # genuine participant on both) and suppress the shadowed original.
+    cloned_from = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='sandbox_clones',
+        help_text='Template-board event this sandbox clone was cloned from.',
+    )
+
     created_by = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -2217,6 +3090,7 @@ class CalendarEvent(models.Model):
     )
     participants = models.ManyToManyField(
         User,
+        through='CalendarEventParticipant',
         blank=True,
         related_name='calendar_events',
         help_text="Users invited to this event (for Meetings and Team Events only)",
@@ -2252,3 +3126,74 @@ class CalendarEvent(models.Model):
     def is_solo_type(self):
         """True for event types that don't make sense to invite participants to."""
         return self.event_type in self.SOLO_TYPES
+
+
+class CalendarEventParticipant(models.Model):
+    """Through-model for CalendarEvent.participants, carrying RSVP status.
+
+    Being added as a participant is an *invitation*, not attendance — the
+    invitee must accept before they're a confirmed attendee (mirrors Google
+    Calendar / Outlook). Defaults to 'pending' so ``.add()``/``.set()`` calls
+    without ``through_defaults`` still work; call sites that add someone who
+    is already confirmed (demo seed data, sandbox clones, an organizer adding
+    themselves) pass ``through_defaults={'status': ACCEPTED}``.
+    """
+    PENDING = 'pending'
+    ACCEPTED = 'accepted'
+    DECLINED = 'declined'
+    STATUS_CHOICES = [
+        (PENDING, 'Pending'),
+        (ACCEPTED, 'Accepted'),
+        (DECLINED, 'Declined'),
+    ]
+
+    event = models.ForeignKey(CalendarEvent, on_delete=models.CASCADE, related_name='participant_links')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='calendar_event_links')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('event', 'user')
+
+    def __str__(self):
+        return f"{self.user.username} — {self.event.title} ({self.status})"
+
+
+# ---------------------------------------------------------------------------
+# BOARD STATUS REPORT HISTORY — persists the last N AI-generated reports
+# ---------------------------------------------------------------------------
+
+class BoardStatusReport(models.Model):
+    """Stores a single AI-generated status report snapshot for a board."""
+
+    RAG_CHOICES = [
+        ('green', 'Green'),
+        ('amber', 'Amber'),
+        ('red',   'Red'),
+    ]
+
+    board = models.ForeignKey(
+        Board, on_delete=models.CASCADE, related_name='status_reports',
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='generated_status_reports',
+    )
+    report_text = models.TextField()
+    report_html = models.TextField()
+    rag_status = models.CharField(max_length=10, choices=RAG_CHOICES, default='amber')
+    rag_reasoning = models.TextField(blank=True)
+    confidence_score = models.FloatField(default=0.5)
+    data_completeness = models.FloatField(default=0.5)
+    key_data_drivers = models.JSONField(default=list, blank=True)
+    provider_name = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['board', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"Status report for {self.board.name} at {self.created_at:%Y-%m-%d %H:%M}"

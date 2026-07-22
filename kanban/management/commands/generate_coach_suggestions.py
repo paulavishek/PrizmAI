@@ -68,7 +68,7 @@ class Command(BaseCommand):
         boards_processed = 0
         
         for board in boards:
-            self.stdout.write(f"\n📊 Analyzing: {board.name}")
+            self.stdout.write(f"\n Analyzing: {board.name}")
             
             # Check if we recently generated for this board
             if not force:
@@ -80,7 +80,7 @@ class Command(BaseCommand):
                 if recent_generation:
                     self.stdout.write(
                         self.style.WARNING(
-                            "  ⏭️  Skipped (generated within last 6 hours)"
+                            "  [SKIP] Skipped (generated within last 6 hours)"
                         )
                     )
                     continue
@@ -92,7 +92,7 @@ class Command(BaseCommand):
                 
                 if not suggestions_data:
                     self.stdout.write(
-                        self.style.SUCCESS("  ✅ No issues detected - board looks good!")
+                        self.style.SUCCESS("  [OK] No issues detected - board looks good!")
                     )
                     boards_processed += 1
                     continue
@@ -100,8 +100,9 @@ class Command(BaseCommand):
                 # Build context for AI
                 from kanban.models import Task
                 context = {
+                    'board_id': board.id,
                     'board_name': board.name,
-                    'team_size': board.members.count(),
+                    'team_size': board.memberships.count(),
                     'active_tasks': Task.objects.filter(
                         column__board=board,
                         progress__lt=100
@@ -153,11 +154,13 @@ class Command(BaseCommand):
                     
                     duplicate = CoachingSuggestion.objects.filter(
                         board=board,
-                        suggestion_type=suggestion_data['suggestion_type']
                     ).filter(
-                        Q(status='active', created_at__gte=timezone.now() - timedelta(days=3)) |
-                        Q(status='acknowledged', created_at__gte=timezone.now() - timedelta(days=3)) |
-                        Q(status='in_progress', created_at__gte=timezone.now() - timedelta(days=7)) |
+                        Q(suggestion_type=suggestion_data['suggestion_type']) |
+                        Q(title=suggestion_data.get('title', ''))
+                    ).filter(
+                        Q(status='active', created_at__gte=timezone.now() - timedelta(days=7)) |
+                        Q(status='acknowledged', created_at__gte=timezone.now() - timedelta(days=7)) |
+                        Q(status='in_progress', created_at__gte=timezone.now() - timedelta(days=14)) |
                         Q(status='resolved', created_at__gte=timezone.now() - timedelta(days=30))
                     ).exists()
                     
@@ -181,7 +184,7 @@ class Command(BaseCommand):
                 
                 self.stdout.write(
                     self.style.SUCCESS(
-                        f"  ✅ Generated {board_generated} suggestions "
+                        f"  [OK] Generated {board_generated} suggestions "
                         f"(skipped {board_skipped})"
                     )
                 )
@@ -194,7 +197,7 @@ class Command(BaseCommand):
                 
             except Exception as e:
                 self.stdout.write(
-                    self.style.ERROR(f"  ❌ Error: {str(e)}")
+                    self.style.ERROR(f"  [FAIL] Error: {str(e)}")
                 )
                 logger.error(f"Error processing board {board.id}: {e}")
                 continue
@@ -203,7 +206,7 @@ class Command(BaseCommand):
         self.stdout.write("\n" + "="*50)
         self.stdout.write(
             self.style.SUCCESS(
-                f"✅ Complete! Processed {boards_processed} boards"
+                f"[OK] Complete! Processed {boards_processed} boards"
             )
         )
         self.stdout.write(f"   Generated: {total_generated} suggestions")
@@ -211,5 +214,5 @@ class Command(BaseCommand):
         
         if total_generated > 0:
             self.stdout.write(
-                "\n💡 Tip: View suggestions at /board/{board_id}/coach/"
+                "\n Tip: View suggestions at /board/{board_id}/coach/"
             )

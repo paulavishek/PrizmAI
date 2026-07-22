@@ -3,12 +3,14 @@ AI-Powered Retrospective Generator
 Analyzes project data and generates retrospective insights using Gemini AI
 """
 
+import hashlib
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
 from django.db.models import Avg, Count, Sum, Q, F, Max, Min
+from django.contrib.auth import get_user_model
 from django.utils import timezone
-from ai_assistant.utils.ai_clients import GeminiClient
+from ai_assistant.utils.ai_router import AIRouter, AIProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -18,19 +20,22 @@ class RetrospectiveGenerator:
     Generate AI-powered retrospectives from project data
     """
     
-    def __init__(self, board, period_start, period_end):
+    def __init__(self, board, period_start, period_end, user=None):
         """
         Initialize retrospective generator
-        
+
         Args:
             board: Board instance
             period_start: Start date of retrospective period
             period_end: End date of retrospective period
+            user: (optional) the requesting user, used to apply their persisted
+                AI response-style profile to the generated insights.
         """
         self.board = board
         self.period_start = period_start
         self.period_end = period_end
-        self.gemini_client = GeminiClient()
+        self.user = user
+        self.router = AIRouter()
     
     def collect_metrics(self):
         """
@@ -58,11 +63,13 @@ class RetrospectiveGenerator:
             completed_at__lt=period_start_dt
         )
         
-        # Detect "done"-type columns by name (case-insensitive) — tasks here count as completed
+        # Detect "done"-type columns via the column's resolved type (structural
+        # column_type marker, else name heuristic — single source of truth).
         from kanban.models import Column as KanbanColumn
+        from kanban import column_semantics
         done_column_ids = list(KanbanColumn.objects.filter(
+            column_semantics.column_type_q('done', field=''),
             board=self.board,
-            name__iregex=r'(done|completed?|finished|closed)'
         ).values_list('id', flat=True))
 
         # Get completed tasks: progress=100 OR task is in a done-type column
@@ -155,8 +162,97 @@ class RetrospectiveGenerator:
             )
         else:
             metrics['scope_change_percentage'] = 0
-        
+
+        # Custom-field breakdowns — only surface patterns backed by at least
+        # 5 tasks per value bucket. Below that threshold the comparison is
+        # statistically meaningless and risks misleading the PM (e.g. "tasks
+        # tagged External Dependency took 1.8x longer" on n=2 vs n=38).
+        try:
+            metrics['custom_field_breakdowns'] = self._custom_field_breakdowns(
+                tasks, completed_tasks,
+            )
+        except Exception as exc:
+            logger.warning("Custom-field breakdown failed: %s", exc)
+            metrics['custom_field_breakdowns'] = []
+
         return metrics
+
+    # Minimum sample size per value bucket. Below this we suppress the
+    # comparison silently — see issue raised during plan review.
+    CUSTOM_FIELD_MIN_SAMPLES = 5
+
+    def _custom_field_breakdowns(self, tasks, completed_tasks):
+        """
+        Compute per-custom-field comparisons for the retrospective period.
+
+        For each value of a List or Boolean custom field, report:
+          - tasks with that value
+          - completion rate
+          - avg completion time (days)
+        Suppressed when fewer than CUSTOM_FIELD_MIN_SAMPLES tasks share the
+        value. Excludes fields with exclude_from_ai=True so sensitive fields
+        never leak into the retrospective prompt.
+        """
+        from kanban.custom_field_models import (
+            CustomFieldDefinition,
+            FIELD_TYPE_BOOLEAN,
+            FIELD_TYPE_LIST,
+            TaskCustomFieldValue,
+        )
+
+        workspace_id = getattr(self.board, 'workspace_id', None)
+        if not workspace_id:
+            return []
+
+        from kanban.custom_field_scoping import custom_field_scope_q_for_board
+
+        fields = list(
+            CustomFieldDefinition.objects
+            .filter(custom_field_scope_q_for_board(self.board))
+            .filter(
+                workspace_id=workspace_id,
+                is_active=True,
+                applies_to_tasks=True,
+                exclude_from_ai=False,
+                field_type__in=[FIELD_TYPE_BOOLEAN, FIELD_TYPE_LIST],
+            )
+        )
+        if not fields:
+            return []
+
+        task_ids = set(tasks.values_list('id', flat=True))
+        completed_ids = set(completed_tasks.values_list('id', flat=True))
+
+        out = []
+        for fdef in fields:
+            # Bucket task IDs by value for this field.
+            buckets = {}  # value_label -> list of task_ids
+            values = (
+                TaskCustomFieldValue.objects
+                .filter(field=fdef, task_id__in=task_ids)
+                .prefetch_related('selected_options')
+            )
+            for v in values:
+                if fdef.field_type == FIELD_TYPE_BOOLEAN:
+                    label = 'Yes' if v.value_boolean else 'No'
+                    buckets.setdefault(label, []).append(v.task_id)
+                else:  # list
+                    for opt in v.selected_options.all():
+                        buckets.setdefault(opt.value, []).append(v.task_id)
+
+            for label, ids in buckets.items():
+                if len(ids) < self.CUSTOM_FIELD_MIN_SAMPLES:
+                    continue  # statistical-significance threshold
+                bucket_completed = [tid for tid in ids if tid in completed_ids]
+                completion_rate = round(100 * len(bucket_completed) / len(ids), 1)
+                out.append({
+                    'field': fdef.name,
+                    'value': label,
+                    'task_count': len(ids),
+                    'completed_count': len(bucket_completed),
+                    'completion_rate': completion_rate,
+                })
+        return out
     
     def _calculate_avg_completion_time(self, completed_tasks):
         """Calculate average completion time; try actual_duration_days first, fallback to date diff."""
@@ -183,7 +279,8 @@ class RetrospectiveGenerator:
         """Return a list of board members with their current open-task count."""
         from kanban.models import Task
         members = []
-        board_users = list(self.board.members.all())
+        User = get_user_model()
+        board_users = list(User.objects.filter(board_memberships__board=self.board))
         # Always include the board creator
         creator = self.board.created_by
         if not any(u.id == creator.id for u in board_users):
@@ -332,36 +429,58 @@ class RetrospectiveGenerator:
 
         # Build comprehensive prompt
         prompt = self._build_retrospective_prompt(metrics, patterns, board_members)
-        
-        # Create context ID for caching based on board and period
-        context_id = f"board_{self.board.id}:{self.period_start.isoformat()}:{self.period_end.isoformat()}"
+
+        # User response-style profile (persisted custom instructions). Empty
+        # unless the requesting user set non-default prefs.
+        from accounts.style_profile import directive_for_user
+        style_directive = directive_for_user(self.user)
+
+        # Create context ID for caching based on board and period. Fold a short
+        # fingerprint of the style directive in so two users with different
+        # style prefs don't share a cached (differently-styled) retrospective.
+        style_fp = hashlib.md5(style_directive.encode('utf-8')).hexdigest()[:8] if style_directive else 'none'
+        context_id = f"board_{self.board.id}:{self.period_start.isoformat()}:{self.period_end.isoformat()}:style_{style_fp}"
         
         # Try cache first
         ai_cache = self._get_ai_cache()
         if ai_cache:
             cached = ai_cache.get(prompt, 'retrospective', context_id)
             if cached:
-                logger.debug("Retrospective AI cache HIT")
-                return cached
+                # Discard stale entries produced by the old (broken) parser
+                # — they had empty lists for every structured section.
+                if (cached.get('lessons_learned') or cached.get('improvement_recommendations')):
+                    logger.debug("Retrospective AI cache HIT")
+                    return cached
+                else:
+                    logger.debug("Retrospective AI cache HIT but empty sections — discarding stale entry")
+                    ai_cache.invalidate(prompt, 'retrospective', context_id)
         
-        # Get AI response with complex task routing
-        response = self.gemini_client.get_response(
-            prompt=prompt,
-            system_prompt="You are an expert agile coach and project management consultant specializing in retrospectives and continuous improvement.",
-            task_complexity='complex'
-        )
-        
-        if response.get('error'):
-            logger.error(f"Error generating AI insights: {response['error']}")
+        # Get AI response with complex task routing.
+        # AIRouter raises AIProviderError on failure (it never returns an error
+        # dict), so the failure path must be a try/except to fall back gracefully.
+        try:
+            system_prompt = "You are an expert agile coach and project management consultant specializing in retrospectives and continuous improvement."
+            if style_directive:
+                system_prompt += "\n\n" + style_directive
+            response = self.router.complete(
+                prompt=prompt,
+                user=None,
+                system_prompt=system_prompt,
+                complexity='complex',
+            )
+        except AIProviderError as exc:
+            logger.error(f"Error generating AI insights: {exc}")
             return self._generate_fallback_insights(metrics, patterns)
-        
+
         # Parse AI response
-        ai_content = response.get('content', '')
-        
+        ai_content = response.get('text', '')
+
         # Extract structured insights from AI response
         insights = self._parse_ai_response(ai_content, metrics, patterns)
-        insights['ai_model_used'] = response.get('model_used', 'gemini-2.0-flash-exp')
-        insights['tokens_used'] = response.get('tokens', 0)
+        # AIRouter normalises every response to keys 'model' and 'tokens_used';
+        # record the model that actually answered so the provider is accurate.
+        insights['ai_model_used'] = response.get('model') or 'unknown'
+        insights['tokens_used'] = response.get('tokens_used', 0)
         
         # Cache the result
         if ai_cache and insights:
@@ -400,7 +519,7 @@ Generate a comprehensive retrospective analysis for a project sprint/period.
 - Team Velocity: {metrics.get('avg_velocity', 'N/A')} tasks/period
 - Velocity Trend: {metrics.get('velocity_trend', 'unknown')}
 - Scope Change: {metrics.get('scope_change_percentage', 0):.1f}%
-
+{self._format_custom_field_breakdowns(metrics.get('custom_field_breakdowns', []))}
 **Board Team Members & Current Workload:**
 {members_text}
 
@@ -456,6 +575,20 @@ Format the response with clear sections using the headers above.
 """
         return prompt
     
+    def _format_custom_field_breakdowns(self, breakdowns):
+        """Render workspace custom-field comparisons for the prompt.
+        Only buckets with n >= CUSTOM_FIELD_MIN_SAMPLES reach this method
+        (filtering happens in `_custom_field_breakdowns`). Returns '' if none."""
+        if not breakdowns:
+            return ''
+        lines = ["\n**Custom Field Breakdowns** (workspace-defined attributes, n>=5 only):"]
+        for b in breakdowns:
+            lines.append(
+                f"- {b['field']} = {b['value']}: {b['task_count']} tasks, "
+                f"{b['completion_rate']:.1f}% completion rate"
+            )
+        return '\n'.join(lines) + '\n'
+
     def _format_members_for_prompt(self, members):
         """Format board members list for AI prompt injection."""
         if not members:
@@ -481,19 +614,14 @@ Format the response with clear sections using the headers above.
     
     def _parse_ai_response(self, ai_content, metrics, patterns):
         """
-        Parse AI-generated response into structured format
-        
-        Args:
-            ai_content: Raw AI response text
-            metrics: Original metrics
-            patterns: Original patterns
-            
-        Returns:
-            dict: Structured insights
+        Parse AI-generated response into structured format.
+        Handles both bold-header format (**SECTION**) and markdown-heading
+        format (### SECTION or ### N. SECTION) as well as JSON wrapped in
+        ```json ... ``` code fences.
         """
         import json
         import re
-        
+
         insights = {
             'what_went_well': '',
             'what_needs_improvement': '',
@@ -506,64 +634,105 @@ Format the response with clear sections using the headers above.
             'performance_trend': 'stable',
             'raw_analysis': ai_content
         }
-        
+
+        # ── helpers ──────────────────────────────────────────────────────
+        def _sec(name):
+            """Return a pattern that matches a section regardless of whether
+            the AI used **NAME** or ### [N. ]NAME as the heading.
+            Captures everything up to the next heading or end of string."""
+            escaped = re.escape(name)
+            bold    = r'\*\*' + escaped + r'\*\*'
+            heading = r'#{1,3}\s*(?:\d+\.\s*)?' + escaped + r'[^\n]*'
+            return r'(?:' + bold + r'|' + heading + r')\s*(.*?)(?=(?:#{1,3}\s|\*\*[A-Z])|\Z)'
+
+        def _extract_json(text):
+            """Extract a JSON array from text, stripping code fences."""
+            # 1. Extract raw content inside ```json ... ``` or ``` ... ```
+            fence = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
+            if fence:
+                try:
+                    data = json.loads(fence.group(1).strip())
+                    if isinstance(data, list):
+                        return data
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            # 2. Fall back: find outermost [...] array (greedy — captures all nested brackets)
+            bare = re.search(r'\[[\s\S]*\]', text)
+            if bare:
+                try:
+                    return json.loads(bare.group(0))
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            return None
+
+        def _inline_value(name, text):
+            """Extract an inline value from headings like
+            ### OVERALL SENTIMENT SCORE: 0.4  or  **OVERALL SENTIMENT SCORE** 0.4"""
+            escaped = re.escape(name)
+            pat = r'(?:\*\*' + escaped + r'\*\*|#{1,3}\s*(?:\d+\.\s*)?' + escaped + r')[:\s]+([^\n]+)'
+            m = re.search(pat, text, re.IGNORECASE)
+            return m.group(1).strip() if m else None
+
+        # ── content sections ─────────────────────────────────────────────
+        text_sections = {
+            'what_went_well':        'WHAT WENT WELL',
+            'what_needs_improvement':'WHAT NEEDS IMPROVEMENT',
+        }
+        json_sections = {
+            'lessons_learned':           'LESSONS LEARNED',
+            'key_achievements':          'KEY ACHIEVEMENTS',
+            'challenges_faced':          'CHALLENGES FACED',
+            'improvement_recommendations':'IMPROVEMENT RECOMMENDATIONS',
+        }
+
         try:
-            # Extract sections using regex
-            sections = {
-                'what_went_well': r'\*\*WHAT WENT WELL\*\*\s*(.*?)(?=\*\*|$)',
-                'what_needs_improvement': r'\*\*WHAT NEEDS IMPROVEMENT\*\*\s*(.*?)(?=\*\*|$)',
-                'lessons_learned': r'\*\*LESSONS LEARNED\*\*\s*(.*?)(?=\*\*|$)',
-                'key_achievements': r'\*\*KEY ACHIEVEMENTS\*\*\s*(.*?)(?=\*\*|$)',
-                'challenges_faced': r'\*\*CHALLENGES FACED\*\*\s*(.*?)(?=\*\*|$)',
-                'improvement_recommendations': r'\*\*IMPROVEMENT RECOMMENDATIONS\*\*\s*(.*?)(?=\*\*|$)',
-                'sentiment': r'\*\*OVERALL SENTIMENT SCORE\*\*\s*([0-9.]+)',
-                'morale': r'\*\*TEAM MORALE INDICATOR\*\*\s*(\w+)',
-                'trend': r'\*\*PERFORMANCE TREND\*\*\s*(\w+)',
-            }
-            
-            for key, pattern in sections.items():
-                match = re.search(pattern, ai_content, re.DOTALL | re.IGNORECASE)
-                if match:
-                    content = match.group(1).strip()
-                    
-                    if key in ['lessons_learned', 'key_achievements', 'challenges_faced', 'improvement_recommendations']:
-                        # Try to parse as JSON
-                        try:
-                            # Find JSON array in content
-                            json_match = re.search(r'\[.*\]', content, re.DOTALL)
-                            if json_match:
-                                insights[key] = json.loads(json_match.group(0))
-                            else:
-                                # Parse as bullet points
-                                insights[key] = self._parse_bullet_points(content, key)
-                        except json.JSONDecodeError:
-                            # Fallback to bullet point parsing
+            for key, name in text_sections.items():
+                m = re.search(_sec(name), ai_content, re.DOTALL | re.IGNORECASE)
+                if m:
+                    insights[key] = m.group(1).strip()
+
+            for key, name in json_sections.items():
+                m = re.search(_sec(name), ai_content, re.DOTALL | re.IGNORECASE)
+                if m:
+                    content = m.group(1).strip()
+                    try:
+                        parsed = _extract_json(content)
+                        if parsed is not None:
+                            insights[key] = parsed
+                        else:
                             insights[key] = self._parse_bullet_points(content, key)
-                    elif key == 'sentiment':
-                        try:
-                            insights['overall_sentiment_score'] = float(content)
-                        except ValueError:
-                            pass
-                    elif key == 'morale':
-                        insights['team_morale_indicator'] = content.lower()
-                    elif key == 'trend':
-                        insights['performance_trend'] = content.lower()
-                    else:
-                        insights[key] = content
-            
-            # Ensure we have at least some data
+                    except (json.JSONDecodeError, ValueError):
+                        insights[key] = self._parse_bullet_points(content, key)
+
+            # ── scalar fields ─────────────────────────────────────────────
+            sentiment_raw = _inline_value('OVERALL SENTIMENT SCORE', ai_content)
+            if sentiment_raw:
+                try:
+                    insights['overall_sentiment_score'] = float(
+                        re.search(r'[0-9.]+', sentiment_raw).group(0)
+                    )
+                except (AttributeError, ValueError):
+                    pass
+
+            morale_raw = _inline_value('TEAM MORALE INDICATOR', ai_content)
+            if morale_raw:
+                insights['team_morale_indicator'] = morale_raw.split()[0].lower()
+
+            trend_raw = _inline_value('PERFORMANCE TREND', ai_content)
+            if trend_raw:
+                insights['performance_trend'] = trend_raw.split()[0].lower()
+
+            # ── guarantees ───────────────────────────────────────────────
             if not insights['what_went_well']:
                 insights['what_went_well'] = self._generate_default_positives(metrics, patterns)
-            
             if not insights['what_needs_improvement']:
                 insights['what_needs_improvement'] = self._generate_default_improvements(metrics, patterns)
-            
+
         except Exception as e:
             logger.error(f"Error parsing AI response: {e}")
-            # Fall back to basic parsing
             insights['what_went_well'] = self._generate_default_positives(metrics, patterns)
             insights['what_needs_improvement'] = self._generate_default_improvements(metrics, patterns)
-        
+
         return insights
     
     def _parse_bullet_points(self, content, section_type):
@@ -851,7 +1020,11 @@ Format the response with clear sections using the headers above.
                     retrospective=retrospective,
                     board=self.board,
                     title=lesson.get('title', lesson.get('description', 'Untitled')[:100]),
-                    description=lesson.get('description', ''),
+                    description=self._clean_lesson_description(
+                        lesson.get('description', ''),
+                        lesson.get('title', ''),
+                        lesson.get('evidence', '')
+                    ),
                     category=lesson.get('category', 'other'),
                     priority=lesson.get('priority', 'medium'),
                     recommended_action=lesson.get('recommended_action', 'Review and implement'),
@@ -861,6 +1034,20 @@ Format the response with clear sections using the headers above.
             except Exception as e:
                 logger.error(f"Error creating lesson learned: {e}")
     
+    @staticmethod
+    def _clean_lesson_description(description, title, evidence=''):
+        """Avoid storing placeholder-like or title-duplicate descriptions."""
+        desc = (description or '').strip()
+        title_clean = (title or '').strip()
+        # Detect placeholder patterns
+        if (not desc
+                or desc == title_clean
+                or desc.startswith('Detailed insight about')
+                or desc.startswith('No additional details')):
+            # Fall back to evidence if available
+            return (evidence or '').strip()
+        return desc
+
     def _create_action_items(self, retrospective, recommendations_data):
         """Create RetrospectiveActionItem records from recommendations"""
         from kanban.retrospective_models import RetrospectiveActionItem

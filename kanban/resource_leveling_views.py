@@ -4,6 +4,7 @@ API endpoints for AI-powered resource optimization and workload balancing
 """
 import json
 import logging
+import re
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
@@ -18,6 +19,7 @@ from kanban.resource_leveling_models import (
     ResourceLevelingSuggestion,
     TaskAssignmentHistory
 )
+from kanban.simple_access import can_modify_board_content, can_access_board
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,8 @@ def analyze_task_assignment(request, task_id):
             return JsonResponse({
                 'error': 'Task is not associated with a board'
             }, status=400)
+        if not can_access_board(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Initialize service
         service = ResourceLevelingService()
@@ -90,6 +94,8 @@ def create_leveling_suggestion(request, task_id):
             return JsonResponse({
                 'error': 'Task is not associated with a board'
             }, status=400)
+        if not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Initialize service
         service = ResourceLevelingService()
@@ -141,7 +147,14 @@ def accept_suggestion(request, suggestion_id):
     """
     try:
         suggestion = get_object_or_404(ResourceLevelingSuggestion, id=suggestion_id)
-        
+
+        # Tenant isolation: this endpoint is keyed on suggestion_id, which the
+        # BoardAccessEnforcementMiddleware does NOT cover. Accepting reassigns the
+        # task, so require content-modify access on the suggestion's board.
+        board = suggestion.task.column.board if suggestion.task.column_id else None
+        if board is None or not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
+
         # Accept suggestion
         success = suggestion.accept(request.user)
         
@@ -174,7 +187,13 @@ def reject_suggestion(request, suggestion_id):
     """
     try:
         suggestion = get_object_or_404(ResourceLevelingSuggestion, id=suggestion_id)
-        
+
+        # Tenant isolation: suggestion_id is not covered by the board-access
+        # middleware; require modify access on the suggestion's board.
+        board = suggestion.task.column.board if suggestion.task.column_id else None
+        if board is None or not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
+
         suggestion.reject(request.user)
         
         return JsonResponse({
@@ -186,6 +205,56 @@ def reject_suggestion(request, suggestion_id):
         return JsonResponse({'error': 'Suggestion not found'}, status=404)
     except Exception as e:
         logger.error(f"Error rejecting suggestion: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def accept_all_suggestions(request, board_id):
+    """
+    Accept all pending resource leveling suggestions for a board
+
+    POST /api/resource-leveling/boards/{board_id}/accept-all/
+
+    Returns:
+        {
+            "success": true,
+            "accepted": 4,
+            "failed": 0,
+            "message": "4 suggestion(s) accepted successfully"
+        }
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+        if not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
+
+        suggestions = ResourceLevelingSuggestion.objects.filter(
+            task__column__board=board,
+            status='pending'
+        )
+
+        accepted = 0
+        failed = 0
+
+        for suggestion in suggestions:
+            success = suggestion.accept(request.user)
+            if success:
+                accepted += 1
+            else:
+                failed += 1
+
+        return JsonResponse({
+            'success': True,
+            'accepted': accepted,
+            'failed': failed,
+            'message': f'{accepted} suggestion(s) accepted successfully'
+        })
+
+    except Board.DoesNotExist:
+        return JsonResponse({'error': 'Board not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Error accepting all suggestions: {e}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
 
@@ -217,15 +286,18 @@ def get_board_suggestions(request, board_id):
     """
     try:
         board = get_object_or_404(Board, id=board_id)
+        if not can_access_board(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Initialize service
         service = ResourceLevelingService()
         
         # Check if there are enough qualified candidates on this board
-        # to produce meaningful suggestions
+        # to produce meaningful suggestions. Pass board so utilization is
+        # computed from board-specific workload, not cross-workspace totals.
         qualified_count = 0
-        for member in board.members.all():
-            profile = service.get_or_create_profile(member)
+        for member in User.objects.filter(board_memberships__board=board):
+            profile = service.get_or_create_profile(member, board=board)
             if service._is_qualified_candidate(profile):
                 qualified_count += 1
         
@@ -237,6 +309,36 @@ def get_board_suggestions(request, board_id):
         total_savings = 0
         
         for s in suggestions:
+            # Detect negative time savings: stored as 0 but reasoning mentions actual negative %
+            reasoning_text = s.reasoning or ''
+            is_speed_regression = bool(
+                re.search(r'-\d+%\s+time savings', reasoning_text, re.IGNORECASE)
+            )
+            # Detect data-quality fallback usage by scanning for the sentinel phrases
+            # written into reasoning when create_suggestion couldn't find a time log,
+            # due date, or peer history. The frontend uses these to render a
+            # "Limited data" warning banner on the card so users know which inputs
+            # would tighten the recommendation.
+            limited_data_flags = []
+            if 'no time log entries' in reasoning_text or 'board-average hours per task' in reasoning_text:
+                limited_data_flags.append('time_log')
+            if 'No due date set' in reasoning_text:
+                limited_data_flags.append('due_date')
+            if 'No other team member has completed tasks' in reasoning_text:
+                limited_data_flags.append('peer_history')
+            # A suggestion only represents a *real* time saving when there is
+            # actual time-tracking data anchoring the per-person completion
+            # estimates. Without a time log, the displayed "% savings" is purely
+            # the context-switching model (1 + tasks×0.08) — i.e. "a less-busy
+            # person finishes sooner", not a measured speedup. Flag these (plus
+            # 0% and speed-regression cases) so the UI leads with the workload
+            # framing instead of a headline "16% Time Savings" the footer then
+            # contradicts with "these reassignments do NOT speed up the task".
+            is_workload_balance_only = (
+                'time_log' in limited_data_flags
+                or is_speed_regression
+                or s.time_savings_percentage == 0
+            )
             suggestion_list.append({
                 'id': s.id,
                 'task_id': s.task.id,
@@ -252,20 +354,55 @@ def get_board_suggestions(request, board_id):
                 'reasoning': s.reasoning,
                 'projected_completion': s.suggested_projected_date.isoformat() if s.suggested_projected_date else None,
                 'expires_at': s.expires_at.isoformat(),
-                'status': s.status
+                'created_at': s.created_at.isoformat(),
+                'status': s.status,
+                'is_speed_regression': is_speed_regression,
+                'is_workload_balance_only': is_workload_balance_only,
+                'limited_data_flags': limited_data_flags,
             })
             total_savings += s.time_savings_hours
         
-        # If no suggestions and insufficient qualified members, tell the UI why
-        insufficient_data = (len(suggestion_list) == 0 and qualified_count < 2)
+        # Check if any team members are overloaded (>90% utilization)
+        # so the UI doesn't claim "well balanced" when people are clearly overworked.
+        # Compute this BEFORE the insufficient_data flag so we can defer to it.
+        overloaded_members = []
+        try:
+            report = service.get_team_workload_report(board, requesting_user=request.user)
+            for member in report.get('members', []):
+                if member.get('utilization', 0) > 90:
+                    overloaded_members.append({
+                        'name': member['name'],
+                        'utilization': round(member['utilization']),
+                    })
+        except Exception:
+            pass  # Don't fail suggestions if workload report errors
+
+        # The "insufficient team data" empty state should NOT pre-empt the
+        # overloaded-members message. Per spec: if anyone is overloaded, we
+        # always want to surface that — even when we couldn't generate a
+        # suggestion. Only show the data-insufficient state on calm boards
+        # where no one is overworked.
+        insufficient_data = (
+            len(suggestion_list) == 0
+            and qualified_count < 2
+            and not overloaded_members
+        )
         
-        return JsonResponse({
+        response = JsonResponse({
             'suggestions': suggestion_list,
             'total_suggestions': len(suggestion_list),
             'total_potential_savings_hours': round(total_savings, 1),
-            'insufficient_team_data': insufficient_data
+            'insufficient_team_data': insufficient_data,
+            'overloaded_members': overloaded_members,
         })
-        
+        # Suggestions reflect live workload — never serve from cache. Without these
+        # headers a browser back/forward navigation or repeated modal-open within
+        # the same session can show suggestions generated against stale data.
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        return response
+
     except Board.DoesNotExist:
         return JsonResponse({'error': 'Board not found'}, status=404)
     except Exception as e:
@@ -304,6 +441,8 @@ def get_team_workload_report(request, board_id):
     """
     try:
         board = get_object_or_404(Board, id=board_id)
+        if not can_access_board(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Initialize service
         service = ResourceLevelingService()
@@ -350,6 +489,8 @@ def optimize_board_workload(request, board_id):
     """
     try:
         board = get_object_or_404(Board, id=board_id)
+        if not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Parse body
         try:
@@ -395,6 +536,8 @@ def balance_workload(request, board_id):
     """
     try:
         board = get_object_or_404(Board, id=board_id)
+        if not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Parse body
         try:
@@ -443,7 +586,20 @@ def get_user_performance_profile(request, user_id):
     """
     try:
         user = get_object_or_404(User, id=user_id)
-        
+
+        # Tenant isolation: user_id is not covered by the board-access middleware.
+        # A user may read their OWN profile, or another user's profile only when
+        # they share a board the requester can access — never an arbitrary user's
+        # velocity/skills/utilization across tenants.
+        if user_id != request.user.id:
+            from kanban.utils.demo_protection import get_user_boards
+            accessible_boards = get_user_boards(request.user)
+            shares_board = User.objects.filter(
+                id=user_id, board_memberships__board__in=accessible_boards
+            ).exists()
+            if not shares_board:
+                return JsonResponse({'error': 'Access denied'}, status=403)
+
         # Get or create performance profile - no organization needed
         profile, created = UserPerformanceProfile.objects.get_or_create(
             user=user,
@@ -499,6 +655,8 @@ def update_performance_profiles(request, board_id):
     """
     try:
         board = get_object_or_404(Board, id=board_id)
+        if not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Initialize service
         service = ResourceLevelingService()

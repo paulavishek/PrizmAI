@@ -1,0 +1,215 @@
+/* ==========================================================================
+   PrizmLoading — Centralized loading spinner & rotating message styles
+   ========================================================================== */
+
+/* ── Spinner ring ───────────────────────────────────────────────────────── */
+.prizm-spinner {
+    display: inline-block;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 3px solid rgba(79, 70, 229, 0.18);
+    border-top-color: #4f46e5;
+    border-radius: 50%;
+    animation: prizm-spin 0.75s linear infinite;
+}
+
+.prizm-spinner--sm {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-width: 2px;
+}
+
+.prizm-spinner--lg {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-width: 4px;
+}
+
+@keyframes prizm-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Subtle pulse on the container so it never looks "frozen" */
+.prizm-loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    animation: prizm-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes prizm-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.82; }
+}
+
+/* ── Message text ───────────────────────────────────────────────────────── */
+.prizm-loading-message {
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: #374151;
+    text-align: center;
+    transition: opacity 0.3s ease;
+    min-height: 1.4em;
+    line-height: 1.4;
+}
+
+/* ── Inline variant (replaces section content) ──────────────────────────── */
+.prizm-loading-inline {
+    padding: 2rem 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    animation: prizm-pulse 2.5s ease-in-out infinite;
+}
+
+/* ── Full overlay variant ───────────────────────────────────────────────── */
+.prizm-loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(2px);
+    animation: prizm-overlay-in 0.25s ease-out;
+}
+
+.prizm-loading-overlay .prizm-loading-container {
+    background: #ffffff;
+    padding: 2rem 2.5rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    min-width: 280px;
+    max-width: 400px;
+}
+
+@keyframes prizm-overlay-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* ── Dark mode overrides ────────────────────────────────────────────────── */
+body.dark-mode .prizm-spinner {
+    border-color: rgba(129, 140, 248, 0.2);
+    border-top-color: #818cf8;
+}
+
+body.dark-mode .prizm-loading-message {
+    color: #e5e7eb;
+}
+
+/* ── Scan overlay title (static header above rotating detail messages) ──── */
+.prizm-scan-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #1f2937;
+    text-align: center;
+    margin: 0;
+    line-height: 1.4;
+}
+
+body.dark-mode .prizm-scan-title {
+    color: #f3f4f6;
+}
+
+body.dark-mode .prizm-loading-overlay {
+    background: rgba(17, 17, 17, 0.85);
+}
+
+body.dark-mode .prizm-loading-overlay .prizm-loading-container {
+    background: #1e1e1e;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Existing spinner contrast fixes ────────────────────────────────────── */
+
+/* Ensure fa-spin animation is always defined */
+@keyframes fa-spin {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Make sure inline loading messages inside cards/modals are readable */
+.prizm-loading-message-inline {
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: #374151;
+    transition: opacity 0.3s ease;
+    min-height: 1.3em;
+}
+
+body.dark-mode .prizm-loading-message-inline {
+    color: #d1d5db;
+}
+
+/* ==========================================================================
+   Spectra loader — the canonical AI loading visual
+   (pulsing robot icon + cycling context messages + animated progress bar)
+   Colored via design tokens so it flips automatically in dark mode.
+   ========================================================================== */
+.prizm-spectra-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 1.25rem 1rem;
+    gap: 0.25rem;
+}
+
+.prizm-spectra-icon {
+    font-size: 2rem;
+    line-height: 1;
+    margin-bottom: 0.6rem;
+    color: var(--prizm-accent, #667eea);
+    animation: prizm-spectra-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes prizm-spectra-pulse {
+    0%, 100% { opacity: 1;    transform: scale(1); }
+    50%      { opacity: 0.55; transform: scale(1.12); }
+}
+
+.prizm-spectra-message {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary, #111827);
+    min-height: 2.4em;
+    line-height: 1.35;
+    transition: opacity 0.4s ease;
+}
+
+.prizm-spectra-subtitle {
+    font-size: 0.78rem;
+    color: var(--text-secondary, #6b7280);
+    margin-top: 0.2rem;
+}
+
+.prizm-spectra-progress {
+    width: 100%;
+    max-width: 320px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--track-bg, #eef0f6);
+    overflow: hidden;
+    margin-top: 0.85rem;
+}
+
+.prizm-spectra-progress__bar {
+    height: 100%;
+    width: 8%;
+    border-radius: 3px;
+    background: var(--prizm-accent-grad, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
+    transition: width 2.2s ease;
+}
+
+/* Reduced-motion: keep it readable, drop the pulsing/scaling. */
+@media (prefers-reduced-motion: reduce) {
+    .prizm-spectra-icon { animation: none; }
+    .prizm-spectra-progress__bar { transition: none; }
+}

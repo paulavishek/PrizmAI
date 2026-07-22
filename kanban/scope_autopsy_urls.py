@@ -24,4 +24,9 @@ urlpatterns = [
     path('scope-autopsy/<int:report_id>/export/',
          scope_autopsy_views.scope_autopsy_export,
          name='scope_autopsy_export'),
+
+    # Save scope change reason after task creation (POST) — Fix 2
+    path('tasks/<int:task_id>/scope-reason/',
+         scope_autopsy_views.save_scope_reason,
+         name='save_scope_reason'),
 ]

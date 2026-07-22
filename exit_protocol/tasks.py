@@ -25,7 +25,11 @@ def monitor_all_boards_health():
     from kanban.models import Board
 
     board_ids = list(
-        Board.objects.filter(is_archived=False).values_list('id', flat=True)
+        Board.objects.filter(
+            is_archived=False,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
+        ).values_list('id', flat=True)
     )
     logger.info(f"[ExitProtocol] Monitoring health for {len(board_ids)} boards")
 
@@ -34,10 +38,11 @@ def monitor_all_boards_health():
 
 
 @shared_task(name='exit_protocol.tasks.compute_board_health_score')
-def compute_board_health_score(board_id):
+def compute_board_health_score(board_id, force=False):
     """
     Computes hospice_risk_score for a single board.
     Applies minimum-data rules to avoid false positives.
+    Pass force=True to bypass age guard (used by manual recalculate).
     """
     from kanban.models import Board, Task
     from .models import ProjectHealthSignal, HospiceSession, HospiceDismissal
@@ -49,8 +54,8 @@ def compute_board_health_score(board_id):
 
     now = timezone.now()
 
-    # RULE: Skip boards with fewer than 7 days of activity
-    if board.created_at and (now - board.created_at).days < 7:
+    # RULE: Skip boards with fewer than 7 days of activity (bypassed on manual recalculate)
+    if not force and board.created_at and (now - board.created_at).days < 7:
         return
 
     # ── Collect metrics per dimension ──
@@ -135,14 +140,16 @@ def compute_board_health_score(board_id):
     activity_factor = min(days_inactive / 30, 1.0)
 
     # ── Count available dimensions ──
-    weights = {
-        'velocity': (0.30, velocity_factor),
-        'budget': (0.25, budget_factor),
-        'deadline': (0.25, deadline_factor),
-        'activity': (0.20, activity_factor),
+    # Keys MUST match exit_protocol.scoring.WEIGHTS so the live score here and
+    # the breakdown the dashboard rebuilds from the stored signal stay in sync.
+    candidate_factors = {
+        'velocity': velocity_factor,
+        'budget': budget_factor,
+        'deadlines': deadline_factor,
+        'activity': activity_factor,
     }
 
-    available = {k: v for k, v in weights.items() if v[1] is not None}
+    available = {k: v for k, v in candidate_factors.items() if v is not None}
     dimensions_available = len(available)
 
     # RULE: Need at least 2 dimensions for a valid score
@@ -163,12 +170,9 @@ def compute_board_health_score(board_id):
         )
         return
 
-    # ── Re-normalize weights and compute score ──
-    total_weight = sum(w for w, _ in available.values())
-    risk_score = sum(
-        (w / total_weight) * factor for w, factor in available.values()
-    )
-    risk_score = min(max(risk_score, 0.0), 1.0)
+    # ── Re-normalize weights and compute score (shared formula) ──
+    from .scoring import weighted_score
+    risk_score = weighted_score(available)
 
     # ── Should we trigger hospice? ──
     should_trigger = (
@@ -209,8 +213,7 @@ def trigger_hospice_notification(board_id):
     Creates a Notification (type ACTIVITY) for board managers.
     Does NOT auto-create HospiceSession — that requires manager action.
     """
-    from kanban.models import Board
-    from kanban.permission_models import BoardMembership
+    from kanban.models import Board, BoardMembership
     from messaging.models import Notification
     from django.contrib.auth.models import User
 
@@ -219,10 +222,10 @@ def trigger_hospice_notification(board_id):
     except Board.DoesNotExist:
         return
 
-    # Get all board members (managers or anyone with board.edit permission)
+    # Get all board members (owners/members who can edit)
     memberships = BoardMembership.objects.filter(
-        board=board, is_active=True
-    ).select_related('user', 'role')
+        board=board
+    ).select_related('user')
 
     # Use the first member or system as sender
     sender = None
@@ -230,7 +233,7 @@ def trigger_hospice_notification(board_id):
     for membership in memberships:
         if sender is None:
             sender = membership.user
-        if membership.has_permission('board.edit') or membership.has_permission('admin.full'):
+        if membership.role in ('owner', 'member'):
             recipients.append(membership.user)
 
     # Fallback: if no managers found, notify all members
@@ -393,9 +396,28 @@ def generate_knowledge_checklist(session_id):
 
         nodes = MemoryNode.objects.filter(board=board).order_by('-importance_score')
 
+        # Track seen scope-change percentages and titles to deduplicate
+        seen_scope_pcts = set()
+        seen_titles = set()
+
         for node in nodes:
             category = type_to_category.get(node.node_type)
             if category:
+                # Deduplicate by title across all node types
+                title_key = (node.title or '').strip().lower()
+                if title_key in seen_titles:
+                    continue
+                seen_titles.add(title_key)
+
+                # Also deduplicate scope_change nodes by percentage
+                if node.node_type == 'scope_change' and node.context_data:
+                    pct = node.context_data.get('scope_increase_pct')
+                    if pct is not None:
+                        pct_key = round(float(pct), 1)
+                        if pct_key in seen_scope_pcts:
+                            continue
+                        seen_scope_pcts.add(pct_key)
+
                 checklist[category].append({
                     'id': str(node.id),
                     'title': node.title,
@@ -407,6 +429,9 @@ def generate_knowledge_checklist(session_id):
                 })
     except Exception as e:
         logger.error(f"[ExitProtocol] Knowledge checklist failed for session {session_id}: {e}")
+
+    # Strip empty categories so template doesn't show blank headings (EXP-05)
+    checklist = {k: v for k, v in checklist.items() if v}
 
     session.knowledge_checklist = checklist
     session.save(update_fields=['knowledge_checklist'])
@@ -432,12 +457,12 @@ def generate_team_transition_memos(session_id):
     memos = {}
 
     try:
-        from kanban.permission_models import BoardMembership
+        from kanban.models import BoardMembership
         from kanban.models import Task
 
         memberships = BoardMembership.objects.filter(
-            board=board, is_active=True
-        ).select_related('user', 'role')
+            board=board
+        ).select_related('user')
 
         for membership in memberships:
             member = membership.user
@@ -447,7 +472,7 @@ def generate_team_transition_memos(session_id):
             ).values_list('title', flat=True)[:15]
 
             tasks_summary = ', '.join(member_tasks) if member_tasks else 'No specific task assignments recorded'
-            role_name = membership.role.name if membership.role else 'Team Member'
+            role_name = membership.role.capitalize() if membership.role else 'Team Member'
 
             try:
                 memo = ai_utils.generate_transition_memo(user, {
@@ -604,27 +629,27 @@ def scan_and_extract_organs(session_id):
 
     # 4. Role Definitions
     try:
-        from kanban.permission_models import BoardMembership
+        from kanban.models import BoardMembership
 
         memberships = BoardMembership.objects.filter(
-            board=board, is_active=True
-        ).select_related('role')
+            board=board
+        )
 
         roles_seen = set()
         for m in memberships:
-            if m.role and m.role.name not in roles_seen:
-                roles_seen.add(m.role.name)
+            if m.role and m.role not in roles_seen:
+                roles_seen.add(m.role)
                 payload = {
-                    'role_name': m.role.name,
-                    'description': m.role.description or '',
-                    'permissions': m.role.permissions if m.role.permissions else [],
+                    'role_name': m.role,
+                    'description': f'Board {m.role} role',
+                    'permissions': [],
                 }
                 organ = ProjectOrgan.objects.create(
                     source_board=board,
                     hospice_session=session,
                     organ_type='role_definition',
-                    name=f"Role: {m.role.name}",
-                    description=m.role.description or f"Role definition for {m.role.name}",
+                    name=f"Role: {m.role}",
+                    description=f"Role definition for {m.role}",
                     payload=payload,
                 )
                 organs_created.append(organ.id)
@@ -739,8 +764,9 @@ def perform_burial(session_id):
     board = session.board
     user = session.initiated_by
 
-    # Idempotency: skip if already buried
-    if CemeteryEntry.objects.filter(hospice_session=session).exists():
+    # Idempotency: skip only if the session is already marked buried (fully processed).
+    # A pre-created stub entry (burial_pending) should still be updated with AI content.
+    if session.status == 'buried':
         logger.info(f"[ExitProtocol] Session {session_id} already buried, skipping")
         return
 
@@ -752,10 +778,10 @@ def perform_burial(session_id):
 
     team_size = 0
     try:
-        from kanban.permission_models import BoardMembership
-        team_size = BoardMembership.objects.filter(board=board, is_active=True).count()
+        from kanban.models import BoardMembership
+        team_size = BoardMembership.objects.filter(board=board).count()
     except Exception:
-        team_size = board.members.count()
+        team_size = 0
 
     budget_allocated = None
     budget_spent = None
@@ -803,8 +829,8 @@ def perform_burial(session_id):
         # Team turnover
         team_turnover = 0
         try:
-            from kanban.permission_models import BoardMembership
-            team_turnover = BoardMembership.objects.filter(board=board, is_active=False).count()
+            # No is_active tracking in new model; turnover not available
+            team_turnover = 0
         except Exception:
             pass
 
@@ -920,38 +946,42 @@ def perform_burial(session_id):
             logger.debug(f"[ExitProtocol] Tag generation failed: {e}")
             tags = [cause, board.name.lower()]
 
-    # ── Create CemeteryEntry ──
-    entry = CemeteryEntry.objects.create(
-        board=board,
+    # ── Create or update CemeteryEntry ──
+    # A stub entry may already exist (created synchronously in the view on "Proceed to Burial"
+    # so the cemetery list shows it immediately). Update it with the full AI-generated data.
+    entry, _created = CemeteryEntry.objects.update_or_create(
         hospice_session=session,
-        project_name=board.name,
-        project_description=board.description or '',
-        board_id_snapshot=board.id,
-        team_size=team_size,
-        total_tasks=total_tasks,
-        completed_tasks=completed_tasks,
-        budget_allocated=budget_allocated,
-        budget_spent=budget_spent,
-        start_date=board.created_at.date() if board.created_at else None,
-        end_date=now.date(),
-        cause_of_death=cause,
-        ai_cause_rationale=cause_rationale,
-        contributing_factors=contributing_factors,
-        autopsy_report={
-            'cause_of_death': cause,
-            'rationale': cause_rationale,
-            'contributing_factors': contributing_factors,
-            'lessons_to_repeat': lessons_to_repeat,
-            'lessons_to_avoid': lessons_to_avoid,
-            'open_questions': open_questions,
-            'decline_timeline': decline_timeline,
-        },
-        autopsy_summary=autopsy_summary,
-        lessons_to_repeat=lessons_to_repeat,
-        lessons_to_avoid=lessons_to_avoid,
-        open_questions=open_questions,
-        decline_timeline=decline_timeline,
-        tags=tags,
+        defaults=dict(
+            board=board,
+            project_name=board.name,
+            project_description=board.description or '',
+            board_id_snapshot=board.id,
+            team_size=team_size,
+            total_tasks=total_tasks,
+            completed_tasks=completed_tasks,
+            budget_allocated=budget_allocated,
+            budget_spent=budget_spent,
+            start_date=board.created_at.date() if board.created_at else None,
+            end_date=now.date(),
+            cause_of_death=cause,
+            ai_cause_rationale=cause_rationale,
+            contributing_factors=contributing_factors,
+            autopsy_report={
+                'cause_of_death': cause,
+                'rationale': cause_rationale,
+                'contributing_factors': contributing_factors,
+                'lessons_to_repeat': lessons_to_repeat,
+                'lessons_to_avoid': lessons_to_avoid,
+                'open_questions': open_questions,
+                'decline_timeline': decline_timeline,
+            },
+            autopsy_summary=autopsy_summary,
+            lessons_to_repeat=lessons_to_repeat,
+            lessons_to_avoid=lessons_to_avoid,
+            open_questions=open_questions,
+            decline_timeline=decline_timeline,
+            tags=tags,
+        ),
     )
 
     # ── 7. Archive board ──
@@ -965,7 +995,8 @@ def perform_burial(session_id):
     session.save(update_fields=['status', 'buried_at'])
 
     # ── 9. Send closure notification ──
-    members = board.members.all()
+    from django.contrib.auth.models import User
+    members = User.objects.filter(board_memberships__board=board)
     sender = user if user else User.objects.filter(is_superuser=True).first()
     if sender:
         for member in members:
@@ -996,7 +1027,11 @@ def perform_burial(session_id):
 
 
 def _build_decline_timeline(board):
-    """Constructs chronological timeline of key negative events."""
+    """Constructs chronological timeline of key negative events.
+
+    Severity is on a 0–100 scale to match the autopsy chart's y-axis and the
+    PDF export's "Severity: n/100" label.
+    """
     timeline = []
 
     # From Knowledge Graph
@@ -1008,11 +1043,11 @@ def _build_decline_timeline(board):
         ).order_by('created_at')
 
         for event in events:
-            severity = 3  # default
+            severity = 50  # default (conflict_resolution)
             if event.node_type == 'risk_event':
-                severity = 4
+                severity = 80
             elif event.node_type == 'scope_change':
-                severity = 3
+                severity = 60
             timeline.append({
                 'date': event.created_at.strftime('%Y-%m-%d'),
                 'event': event.title,
@@ -1035,7 +1070,7 @@ def _build_decline_timeline(board):
                 timeline.append({
                     'date': snapshots[i].period_end.strftime('%Y-%m-%d'),
                     'event': f"Velocity dropped {round((prev - curr) / prev * 100)}%",
-                    'severity': 4,
+                    'severity': 80,
                     'source': 'Velocity Data',
                 })
     except Exception:
@@ -1052,7 +1087,7 @@ def _build_decline_timeline(board):
             timeline.append({
                 'date': se.event_date.strftime('%Y-%m-%d') if se.event_date else 'Unknown',
                 'event': se.description if hasattr(se, 'description') else f"Scope change: +{se.net_task_change} tasks",
-                'severity': min(abs(se.net_task_change or 0) // 3 + 2, 5),
+                'severity': min((abs(se.net_task_change or 0) // 3 + 2) * 20, 100),
                 'source': 'Scope Autopsy',
             })
     except Exception:

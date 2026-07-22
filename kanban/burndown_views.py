@@ -19,6 +19,7 @@ from kanban.burndown_models import (
     SprintMilestone
 )
 from kanban.utils.burndown_predictor import BurndownPredictor
+from kanban.simple_access import check_access_or_403, check_modify_or_403
 
 
 @login_required
@@ -27,7 +28,8 @@ def burndown_dashboard(request, board_id):
     Main burndown dashboard with predictions and confidence intervals
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     # Get or generate latest prediction
     predictor = BurndownPredictor()
     
@@ -64,7 +66,19 @@ def burndown_dashboard(request, board_id):
         board=board,
         status__in=['active', 'acknowledged']
     ).order_by('-severity', '-created_at')
-    
+
+    # Build display label for alert timestamp ("Just now" vs "X minutes ago")
+    first_alert = active_alerts.first()
+    if first_alert:
+        delta = timezone.now() - first_alert.created_at
+        if delta.total_seconds() < 60:
+            alerts_generated_label = "Just now"
+        else:
+            from django.utils.timesince import timesince as django_timesince
+            alerts_generated_label = django_timesince(first_alert.created_at) + " ago"
+    else:
+        alerts_generated_label = None
+
     context = {
         'board': board,
         'prediction': prediction,
@@ -73,6 +87,7 @@ def burndown_dashboard(request, board_id):
         'alerts': active_alerts,
         'critical_alerts': active_alerts.filter(severity='critical'),
         'warning_alerts': active_alerts.filter(severity='warning'),
+        'alerts_generated_label': alerts_generated_label,
     }
     
     return render(request, 'kanban/burndown_dashboard.html', context)
@@ -84,7 +99,8 @@ def generate_burndown_prediction(request, board_id):
     Generate a new burndown prediction
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_modify_or_403(request.user, board)
+
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST required'}, status=400)
     
@@ -143,10 +159,11 @@ def burndown_chart_data(request, board_id):
     API endpoint for burndown chart data with confidence bands
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     # Get latest prediction
     prediction = BurndownPrediction.objects.filter(board=board).first()
-    
+
     if not prediction:
         return JsonResponse({
             'success': False,
@@ -179,14 +196,20 @@ def burndown_chart_data(request, board_id):
 @login_required
 def velocity_chart_data(request, board_id):
     """
-    API endpoint for velocity history chart
+    API endpoint for velocity history chart.
+    Shows snapshots from the same window used for predictions (8 weeks).
     """
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
+
+    # Use the same 8-week window as the predictor for consistency
+    cutoff_date = timezone.now().date() - timedelta(weeks=8)
     
-    # Get velocity snapshots
+    # Get velocity snapshots within the prediction window
     snapshots = TeamVelocitySnapshot.objects.filter(
-        board=board
-    ).order_by('period_end')[:20]  # Last 20 periods
+        board=board,
+        period_end__gte=cutoff_date
+    ).order_by('period_end')
     
     velocity_data = {
         'labels': [s.period_end.isoformat() for s in snapshots],
@@ -214,8 +237,9 @@ def acknowledge_burndown_alert(request, board_id, alert_id):
     Acknowledge a burndown alert
     """
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     alert = get_object_or_404(BurndownAlert, id=alert_id, board=board)
-    
+
     if request.method == 'POST':
         alert.status = 'acknowledged'
         alert.acknowledged_by = request.user
@@ -237,8 +261,9 @@ def resolve_burndown_alert(request, board_id, alert_id):
     Resolve a burndown alert
     """
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     alert = get_object_or_404(BurndownAlert, id=alert_id, board=board)
-    
+
     if request.method == 'POST':
         alert.status = 'resolved'
         alert.resolved_at = timezone.now()
@@ -259,7 +284,8 @@ def prediction_history(request, board_id):
     View historical predictions and accuracy
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     predictions = BurndownPrediction.objects.filter(
         board=board
     ).order_by('-prediction_date')[:30]  # Last 30 predictions
@@ -278,10 +304,11 @@ def actionable_suggestions_api(request, board_id):
     Get actionable suggestions from latest prediction
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     # Get latest prediction
     prediction = BurndownPrediction.objects.filter(board=board).first()
-    
+
     if not prediction:
         return JsonResponse({
             'success': False,

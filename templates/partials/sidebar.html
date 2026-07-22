@@ -12,25 +12,162 @@
         </button>
     </div>
 
+    <!-- Workspace Switcher Dropdown -->
+    {% if user.is_authenticated and real_workspaces %}
+    <div class="sidebar-workspace-switcher" id="workspaceSwitcher">
+        <button class="sidebar-ws-btn" type="button" id="wsDropdownToggle" 
+                title="Switch workspace" aria-expanded="false" aria-haspopup="true">
+            <span class="sidebar-ws-icon">
+                {% if active_workspace and active_workspace.is_demo %}
+                <i class="fas fa-flask"></i>
+                {% else %}
+                <i class="fas fa-briefcase"></i>
+                {% endif %}
+            </span>
+            <span class="sidebar-label sidebar-ws-name" id="wsNameLabel">
+                {% if active_workspace %}{{ active_workspace.name|truncatechars:22 }}{% else %}Select Workspace{% endif %}
+            </span>
+            {% if can_rename_workspace and active_workspace and not active_workspace.is_demo %}
+            <i class="fas fa-pencil-alt sidebar-label sidebar-ws-edit" id="wsRenameBtn"
+               style="font-size:.55rem; color:var(--text-secondary,#9ca3af); cursor:pointer; margin-left:4px; opacity:.6;"
+               title="Rename workspace"
+               onclick="event.stopPropagation(); document.getElementById('wsRenameInput').classList.remove('d-none'); document.getElementById('wsRenameInput').querySelector('input').focus();"></i>
+            {% endif %}
+            <i class="fas fa-chevron-down sidebar-ws-arrow sidebar-label"></i>
+        </button>
+        {% if can_rename_workspace and active_workspace and not active_workspace.is_demo %}
+        <div class="d-none px-2 py-1" id="wsRenameInput" style="background:var(--sidebar-bg,#1e1b2e);">
+            <form id="wsRenameForm" class="d-flex gap-1 align-items-center">
+                {% csrf_token %}
+                <input type="text" name="name" class="form-control form-control-sm"
+                       value="{{ active_workspace.name }}"
+                       maxlength="60"
+                       style="font-size:.78rem; background:var(--card-bg,#fff); border-radius:4px;">
+                <button type="submit" class="btn btn-sm btn-primary" style="font-size:.7rem; padding:2px 8px;">
+                    <i class="fas fa-check"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:.7rem; padding:2px 8px;"
+                        onclick="document.getElementById('wsRenameInput').classList.add('d-none');">
+                    <i class="fas fa-times"></i>
+                </button>
+            </form>
+            <script>
+            document.getElementById('wsRenameForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                var form = this;
+                var nameInput = form.querySelector('input[name=name]');
+                var fd = new FormData();
+                fd.append('name', nameInput.value);
+                fd.append('csrfmiddlewaretoken', form.querySelector('[name=csrfmiddlewaretoken]').value);
+                fetch('{% url "rename_workspace" %}', {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                }).then(function(r) { return r.json(); })
+                  .then(function(data) {
+                    if (data.ok) {
+                        document.getElementById('wsNameLabel').textContent = data.name.length > 22 ? data.name.substring(0, 19) + '…' : data.name;
+                        document.getElementById('wsRenameInput').classList.add('d-none');
+                    } else {
+                        alert(data.error || 'Error renaming workspace');
+                    }
+                }).catch(function() { alert('Network error'); });
+            });
+            </script>
+        </div>
+        {% endif %}
+        <div class="sidebar-ws-dropdown" id="wsDropdownMenu" style="display:none;">
+            <div class="sidebar-ws-dropdown-header">
+                <small class="text-muted fw-semibold text-uppercase" style="font-size:0.65rem;letter-spacing:0.5px;">Your Workspaces</small>
+            </div>
+            {% for ws in real_workspaces %}
+            <form method="post" action="{% url 'switch_workspace' %}" class="d-inline w-100">
+                {% csrf_token %}
+                <input type="hidden" name="workspace_id" value="{{ ws.pk }}">
+                <button type="submit" class="sidebar-ws-option sidebar-ws-row {% if active_workspace.pk == ws.pk %}active{% endif %}">
+                    <span class="sidebar-ws-option-icon">
+                        <i class="fas fa-briefcase text-primary"></i>
+                    </span>
+                    <span class="sidebar-ws-option-name">{{ ws.name|truncatechars:28 }}</span>
+                    {% if active_workspace.pk == ws.pk %}
+                    <i class="fas fa-check text-success" style="font-size:0.7rem;"></i>
+                    {% endif %}
+                    {% if can_delete_workspace %}
+                    <span class="sidebar-ws-delete-btn"
+                          title="Delete workspace"
+                          onclick="event.preventDefault(); event.stopPropagation(); confirmDeleteWorkspace({{ ws.pk }}, '{{ ws.name|escapejs }}');">
+                        <i class="fas fa-trash-alt"></i>
+                    </span>
+                    {% endif %}
+                </button>
+            </form>
+            {% endfor %}
+            {% if can_setup_workspace|default:False %}
+            <div class="sidebar-ws-dropdown-divider"></div>
+            <a href="{% url 'onboarding_welcome' %}?from=sidebar" class="sidebar-ws-option sidebar-ws-create">
+                <i class="fas fa-plus me-2 text-muted"></i>
+                <span>Create New Workspace</span>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% if can_delete_workspace %}
+    <style>
+        .sidebar-ws-row .sidebar-ws-delete-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.62rem;
+            color: var(--text-secondary, #9ca3af);
+            opacity: 0;
+            transition: opacity 0.15s, color 0.15s;
+            margin-left: auto;
+            padding: 2px 4px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+        .sidebar-ws-row:hover .sidebar-ws-delete-btn { opacity: 0.65; }
+        .sidebar-ws-row .sidebar-ws-delete-btn:hover { opacity: 1; color: #ef4444; background: rgba(239,68,68,0.1); }
+    </style>
+    <script>
+    function confirmDeleteWorkspace(wsId, wsName) {
+        if (!confirm('Delete workspace "' + wsName + '"?\n\nThis will remove the workspace and all its boards, tasks, and data. This action cannot be undone.')) {
+            return;
+        }
+        var fd = new FormData();
+        fd.append('workspace_id', wsId);
+        fd.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        fetch('{% url "delete_workspace" %}', {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.ok) {
+                window.location.reload();
+            } else {
+                alert(data.error || 'Failed to delete workspace');
+            }
+        }).catch(function() {
+            alert('Network error');
+        });
+    }
+    </script>
+    {% endif %}
+    {% endif %}
+
     <!-- Primary Navigation -->
     <nav class="sidebar-nav">
         <ul class="sidebar-nav-list">
             <li class="sidebar-nav-item">
-                <a href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}" 
-                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'dashboard' or request.resolver_match.url_name == 'demo_dashboard' %}active{% endif %}"
+                <a href="{% url 'dashboard' %}" 
+                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"
                    title="Dashboard">
                     <i class="fas fa-th-large sidebar-nav-icon"></i>
                     <span class="sidebar-label">Dashboard</span>
                 </a>
             </li>
-            <li class="sidebar-nav-item">
-                <a href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'board_list' %}{% endif %}" 
-                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'board_list' %}active{% endif %}"
-                   title="Boards">
-                    <i class="fas fa-columns sidebar-nav-icon"></i>
-                    <span class="sidebar-label">Boards</span>
-                </a>
-            </li>
+            {% if features.show_goals_nav %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'goal_list' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'goal_list' %}active{% endif %}"
@@ -39,6 +176,8 @@
                     <span class="sidebar-label">Goals</span>
                 </a>
             </li>
+            {% endif %}
+            {% if features.show_missions_nav %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'mission_list' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'mission_list' %}active{% endif %}"
@@ -47,7 +186,38 @@
                     <span class="sidebar-label">Missions</span>
                 </a>
             </li>
-            {% if not request.session.is_demo_mode %}
+            {% endif %}
+            <li class="sidebar-nav-item">
+                <a href="{% url 'board_list' %}" 
+                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'board_list' %}active{% endif %}"
+                   title="Boards">
+                    <i class="fas fa-columns sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Boards</span>
+                </a>
+            </li>
+            {% if features.show_discovery %}
+            <li class="sidebar-nav-item">
+                <a href="{% url 'discovery_dashboard' %}"
+                   class="sidebar-nav-link {% if 'discovery' in request.path %}active{% endif %}"
+                   title="Discovery">
+                    <i class="fas fa-lightbulb sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Discovery</span>
+                    {% if sidebar_discovery_to_score %}
+                    <span class="sidebar-badge sidebar-badge-warning" title="{{ sidebar_discovery_to_score }} idea{{ sidebar_discovery_to_score|pluralize }} to score">{{ sidebar_discovery_to_score }}</span>
+                    {% endif %}
+                </a>
+            </li>
+            {% endif %}
+            {% if features.show_forms %}
+            <li class="sidebar-nav-item">
+                <a href="{% url 'form_list' %}"
+                   class="sidebar-nav-link {% if '/forms/' in request.path %}active{% endif %}"
+                   title="Forms">
+                    <i class="fas fa-file-alt sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Forms</span>
+                </a>
+            </li>
+            {% endif %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'unified_calendar' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'unified_calendar' %}active{% endif %}"
@@ -56,7 +226,6 @@
                     <span class="sidebar-label">Calendar</span>
                 </a>
             </li>
-            {% endif %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'wiki:knowledge_hub_home' %}" 
                    class="sidebar-nav-link {% if 'wiki' in request.path %}active{% endif %}"
@@ -74,6 +243,25 @@
                     <span class="sidebar-badge" id="sidebar-unread-badge" style="display:none;">
                         <span id="sidebar-unread-count">0</span>
                     </span>
+                </a>
+            </li>
+            <li class="sidebar-nav-item">
+                <a href="{% url 'conflict_dashboard' %}"
+                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'conflict_dashboard' %}active{% endif %}"
+                   title="Conflicts">
+                    <i class="fas fa-exclamation-triangle sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Conflicts</span>
+                    {% if active_conflict_count > 0 %}
+                    <span class="sidebar-badge sidebar-badge-danger">{{ active_conflict_count }}</span>
+                    {% endif %}
+                </a>
+            </li>
+            <li class="sidebar-nav-item">
+                <a href="{% url 'exit_protocol:cemetery' %}"
+                   class="sidebar-nav-link {% if 'exit_protocol' in request.path or 'cemetery' in request.path %}active{% endif %}"
+                   title="Project Cemetery">
+                    <i class="bi bi-moon-stars sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Project Cemetery</span>
                 </a>
             </li>
         </ul>
@@ -105,14 +293,26 @@
             {% endif %}
         </div>
 
-        <!-- More section (collapsible) -->
-        <div class="sidebar-more-section">
-            <button class="sidebar-more-toggle" type="button" id="sidebarMoreToggle" title="More" aria-expanded="false">
+    </nav>
+
+    <!-- Tools section (always visible, pinned below scrollable nav) -->
+    <div class="sidebar-more-section">
+            <div class="sidebar-more-header" title="Tools">
                 <i class="fas fa-ellipsis-h sidebar-nav-icon"></i>
-                <span class="sidebar-label">More</span>
-                <i class="fas fa-chevron-down sidebar-more-arrow"></i>
-            </button>
-            <ul class="sidebar-more-list" id="sidebarMoreList">
+                <span class="sidebar-label">Tools</span>
+            </div>
+            <ul class="sidebar-more-list show" id="sidebarMoreList">
+                {% if features.show_automations %}
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'workspace_automations' %}"
+                       class="sidebar-nav-link {% if request.resolver_match.url_name == 'workspace_automations' %}active{% endif %}"
+                       title="Automations">
+                        <i class="fas fa-bolt sidebar-nav-icon"></i>
+                        <span class="sidebar-label">Automations</span>
+                        <span class="sidebar-badge sidebar-badge-new sidebar-label">New</span>
+                    </a>
+                </li>
+                {% endif %}
                 <li class="sidebar-nav-item">
                     <a href="{% url 'time_tracking_dashboard' %}" class="sidebar-nav-link" title="Time Tracking">
                         <i class="fas fa-clock sidebar-nav-icon"></i>
@@ -120,9 +320,9 @@
                     </a>
                 </li>
                 <li class="sidebar-nav-item">
-                    <a href="{% url 'decision_center:decision_center' %}" class="sidebar-nav-link" title="Decision Center">
+                    <a href="{% url 'decision_center:decision_center' %}" class="sidebar-nav-link" title="Focus Today">
                         <i class="fas fa-bolt sidebar-nav-icon"></i>
-                        <span class="sidebar-label">Decisions</span>
+                        <span class="sidebar-label">Focus Today</span>
                         <span class="sidebar-badge sidebar-badge-warning" id="sidebar-dc-badge" style="display:none;">
                             <span id="sidebar-dc-count">0</span>
                         </span>
@@ -134,44 +334,8 @@
                         <span class="sidebar-label">Memory</span>
                     </a>
                 </li>
-                <li class="sidebar-nav-item">
-                    <a href="{% url 'conflict_dashboard' %}" class="sidebar-nav-link" title="Conflicts">
-                        <i class="fas fa-exclamation-triangle sidebar-nav-icon"></i>
-                        <span class="sidebar-label">Conflicts</span>
-                        {% if active_conflict_count > 0 %}
-                        <span class="sidebar-badge sidebar-badge-danger">{{ active_conflict_count }}</span>
-                        {% endif %}
-                    </a>
-                </li>
-                <li class="sidebar-nav-item">
-                    <a href="{% url 'messaging:notifications' %}" class="sidebar-nav-link" title="Notifications">
-                        <i class="fas fa-bell sidebar-nav-icon"></i>
-                        <span class="sidebar-label">Notifications</span>
-                        <span class="sidebar-badge" id="sidebar-notif-badge" style="display:none;">
-                            <span id="sidebar-notif-count">0</span>
-                        </span>
-                    </a>
-                </li>
-                <li class="sidebar-nav-item">
-                    <a href="{% url 'exit_protocol:cemetery' %}" class="sidebar-nav-link" title="Project Cemetery">
-                        <i class="bi bi-moon-stars sidebar-nav-icon"></i>
-                        <span class="sidebar-label">Project Cemetery</span>
-                    </a>
-                </li>
-                {% if not is_viewing_demo %}
-                <li class="sidebar-nav-item">
-                    <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline w-100">
-                        {% csrf_token %}
-                        <button type="submit" class="sidebar-nav-link w-100 border-0 bg-transparent text-start" title="Try Demo Mode">
-                            <i class="fas fa-play-circle sidebar-nav-icon"></i>
-                            <span class="sidebar-label">Try Demo Mode</span>
-                        </button>
-                    </form>
-                </li>
-                {% endif %}
             </ul>
-        </div>
-    </nav>
+    </div>
 
     <!-- Sidebar Bottom: Ask Spectra + User -->
     <div class="sidebar-bottom">
@@ -198,7 +362,15 @@
                 {% if not is_demo_account %}
                     {% if user.profile.is_admin %}
                     <li><a class="dropdown-item" href="{% url 'organization_members' %}"><i class="fas fa-building me-2"></i>Organization</a></li>
-                    <li><a class="dropdown-item" href="{% url 'manage_roles' %}"><i class="fas fa-user-shield me-2"></i>Manage Roles</a></li>
+                    {% if can_manage_ws_members %}
+                    <li><a class="dropdown-item" href="{% url 'manage_workspace_members' %}"><i class="fas fa-user-shield me-2"></i>Manage Roles</a></li>
+                    {% endif %}
+                    <li><a class="dropdown-item" href="{% url 'workspace_preset_settings' %}"><i class="fas fa-sliders-h me-2"></i>Workspace Settings</a></li>
+                    {% endif %}
+                    {% if can_rename_workspace and active_workspace %}
+                    <li><a class="dropdown-item" href="{% url 'custom_field_list' active_workspace.pk %}"><i class="fas fa-tags me-2"></i>Custom Fields</a></li>
+                    {% elif is_viewing_demo and demo_workspace %}
+                    <li><a class="dropdown-item" href="{% url 'custom_field_list' demo_workspace.pk %}"><i class="fas fa-tags me-2"></i>Custom Fields</a></li>
                     {% endif %}
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item" href="{% url 'ai_usage:dashboard' %}"><i class="fas fa-robot me-2"></i>AI Usage</a></li>

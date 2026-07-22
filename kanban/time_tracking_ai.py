@@ -27,17 +27,35 @@ class TimeTrackingAIService:
     RECOMMENDED_DAILY_MAX = Decimal('8.00')  # Recommended max hours per day
     SPLIT_TRIGGER_THRESHOLD = Decimal('10.00')  # Trigger split suggestion when this is exceeded
     
-    def __init__(self, user: User, board=None):
+    def __init__(self, user: User, board=None, boards=None):
         """
-        Initialize with user and optional board
+        Initialize with user and optional board(s)
         
         Args:
             user: User instance to analyze
-            board: Optional Board instance to filter by
+            board: Optional single Board instance to filter by
+            boards: Optional queryset/list of boards to scope to (used when no single board is set)
         """
         self.user = user
         self.board = board
-    
+        self.boards = boards
+
+    def _scope_entries(self, qs):
+        """Scope a TimeEntry queryset to the boards in the current context.
+
+        Single source of truth for board scoping across the service so that
+        anomaly alerts, reminders, suggestions and insights all aggregate over
+        exactly the same boards as the dashboard cards (no demo data leaking
+        into a real workspace, no entries from boards outside the current view).
+        When neither ``board`` nor ``boards`` is set (e.g. background digest
+        tasks) the queryset is returned unchanged.
+        """
+        if self.board:
+            return qs.filter(task__column__board=self.board)
+        if self.boards is not None:
+            return qs.filter(task__column__board__in=self.boards)
+        return qs
+
     def validate_time_entry(self, task, hours: Decimal, work_date: date) -> Dict:
         """
         Validate a proposed time entry and suggest splits if excessive.
@@ -264,29 +282,36 @@ class TimeTrackingAIService:
         from kanban.budget_models import TimeEntry
         
         alerts = []
-        today = timezone.now().date()
+        today = timezone.localdate()
         start_date = today - timedelta(days=days_back)
         
-        # Get entries for the period
-        entries_qs = TimeEntry.objects.filter(
+        # Get entries for the period, scoped to the boards in the current context
+        entries_qs = self._scope_entries(TimeEntry.objects.filter(
             user=self.user,
             work_date__gte=start_date,
             work_date__lte=today
-        )
-        
-        if self.board:
-            entries_qs = entries_qs.filter(task__column__board=self.board)
-        
+        ))
+
         # Check for high-hour days
         daily_totals = entries_qs.values('work_date').annotate(
             total_hours=Sum('hours_spent')
         ).order_by('-total_hours')
-        
+
+        # Track day totals + which dates already raised a day-level alert, so a
+        # single large entry that IS the whole day isn't flagged twice (once as a
+        # "long day" and again as a "large single entry").
+        day_total_map = {}
+        flagged_dates = set()
+
         for day_data in daily_totals:
             total = day_data['total_hours']
             total_rounded = round(float(total), 2)
             work_date = day_data['work_date']
-            
+            day_total_map[work_date] = total
+
+            if total >= self.HIGH_HOURS_THRESHOLD:
+                flagged_dates.add(work_date)
+
             if total >= self.CRITICAL_HOURS_THRESHOLD:
                 alerts.append({
                     'type': 'high_hours_critical',
@@ -326,14 +351,30 @@ class TimeTrackingAIService:
         ).select_related('task')
         
         for entry in large_entries:
+            # Skip when this entry is the sole contributor to a day that already
+            # raised a "long day" alert — the two would point at the same log and
+            # read as duplicates. When the day has other entries too, the per-entry
+            # alert still adds value by pinpointing the large one, so keep it.
+            if (entry.work_date in flagged_dates
+                    and entry.hours_spent == day_total_map.get(entry.work_date)):
+                continue
+
+            # Truncate gracefully so the task name isn't cut mid-word (e.g.
+            # "Role-Based Access Control (RBAC)" was being clipped to "...(RBA").
+            title = entry.task.title
+            display_title = title if len(title) <= 50 else title[:49].rstrip() + '…'
             alerts.append({
                 'type': 'large_entry',
                 'severity': 'warning',
                 'entry_id': entry.id,
-                'task_title': entry.task.title,
+                'task_title': title,
                 'hours': float(entry.hours_spent),
                 'date': entry.work_date,
-                'message': f'Single entry of {entry.hours_spent}h for "{entry.task.title[:30]}".',
+                # date_str is required by the Split Entry / acknowledge buttons in
+                # the template; without it the modal receives an empty date and
+                # shows "Invalid Date".
+                'date_str': entry.work_date.isoformat(),
+                'message': f'Single entry of {entry.hours_spent}h for "{display_title}".',
                 'suggestion': 'Consider breaking this into multiple smaller entries with descriptions.'
             })
         
@@ -368,19 +409,25 @@ class TimeTrackingAIService:
         from kanban.budget_models import TimeEntry
         
         suggestions = []
-        today = timezone.now().date()
+        today = timezone.localdate()
         
-        # Build base task queryset
-        task_qs = Task.objects.filter(assigned_to=self.user)
+        # Candidate pool for AI suggestions: tasks NOT already assigned to the
+        # user, scoped to boards in current context. This keeps the "AI Suggested"
+        # section conceptually distinct from "My Assigned Tasks" — it surfaces
+        # unassigned work the user could pick up, rather than re-ranking their own
+        # assignments. (The "last logged" heuristic below is the deliberate
+        # exception: continuing recent work is high-value even if assigned.)
+        unassigned_qs = Task.objects.filter(assigned_to__isnull=True)
         if self.board:
-            task_qs = task_qs.filter(column__board=self.board)
-        
-        task_qs = task_qs.select_related('column', 'column__board')
-        
-        # 1. Last logged task (most likely to continue working on)
-        last_entry = TimeEntry.objects.filter(
-            user=self.user
-        ).select_related('task').order_by('-created_at').first()
+            unassigned_qs = unassigned_qs.filter(column__board=self.board)
+        elif self.boards is not None:
+            unassigned_qs = unassigned_qs.filter(column__board__in=self.boards)
+
+        unassigned_qs = unassigned_qs.select_related('column', 'column__board')
+
+        # 1. Last logged task (most likely to continue working on) - scoped to boards in context
+        last_entry_qs = self._scope_entries(TimeEntry.objects.filter(user=self.user))
+        last_entry = last_entry_qs.select_related('task').order_by('-created_at').first()
         
         if last_entry and last_entry.task.progress < 100:
             suggestions.append({
@@ -391,7 +438,7 @@ class TimeTrackingAIService:
             })
         
         # 2. In-progress tasks (status in "Doing" or similar columns)
-        in_progress_tasks = task_qs.filter(
+        in_progress_tasks = unassigned_qs.filter(
             Q(column__name__icontains='doing') |
             Q(column__name__icontains='progress') |
             Q(column__name__icontains='working') |
@@ -410,7 +457,7 @@ class TimeTrackingAIService:
         
         # 3. Tasks with upcoming deadlines
         week_from_now = today + timedelta(days=7)
-        deadline_tasks = task_qs.filter(
+        deadline_tasks = unassigned_qs.filter(
             due_date__isnull=False,
             due_date__lte=week_from_now,
             progress__lt=100
@@ -419,7 +466,8 @@ class TimeTrackingAIService:
         ).order_by('due_date')[:2]
         
         for task in deadline_tasks:
-            days_left = (task.due_date - today).days
+            due = task.due_date.date() if hasattr(task.due_date, 'date') else task.due_date
+            days_left = (due - today).days
             suggestions.append({
                 'task': task,
                 'reason': 'deadline',
@@ -427,15 +475,17 @@ class TimeTrackingAIService:
                 'priority': 3
             })
         
-        # 4. Tasks with most recent time entries (frequently worked on)
-        frequent_task_ids = TimeEntry.objects.filter(
+        # 4. Tasks with most recent time entries (frequently worked on) -
+        # scoped to boards in context so IDs don't bleed across workspaces.
+        frequent_entry_qs = self._scope_entries(TimeEntry.objects.filter(
             user=self.user,
             work_date__gte=today - timedelta(days=7)
-        ).values('task_id').annotate(
+        ))
+        frequent_task_ids = frequent_entry_qs.values('task_id').annotate(
             entry_count=Count('id')
         ).order_by('-entry_count').values_list('task_id', flat=True)[:3]
-        
-        frequent_tasks = task_qs.filter(
+
+        frequent_tasks = unassigned_qs.filter(
             id__in=frequent_task_ids,
             progress__lt=100
         ).exclude(
@@ -463,28 +513,28 @@ class TimeTrackingAIService:
         """
         from kanban.budget_models import TimeEntry
         
-        today = timezone.now().date()
+        today = timezone.localdate()
         now = timezone.now()
         
         # Skip weekends
         if today.weekday() >= 5:
             return None
         
-        # Check if user has logged any time today
-        today_hours = TimeEntry.objects.filter(
+        # Check if user has logged any time today (scoped to current boards)
+        today_hours = self._scope_entries(TimeEntry.objects.filter(
             user=self.user,
             work_date=today
-        ).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
-        
+        )).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
+
         # If it's afternoon and no time logged, suggest reminder
         if now.hour >= 14 and today_hours == 0:
             # Get expected daily hours based on user's average
             week_start = today - timedelta(days=today.weekday())
-            avg_daily = TimeEntry.objects.filter(
+            avg_daily = self._scope_entries(TimeEntry.objects.filter(
                 user=self.user,
                 work_date__gte=week_start - timedelta(days=14),
                 work_date__lt=today
-            ).values('work_date').annotate(
+            )).values('work_date').annotate(
                 total=Sum('hours_spent')
             ).aggregate(avg=Avg('total'))['avg'] or Decimal('6.00')
             
@@ -506,14 +556,12 @@ class TimeTrackingAIService:
         """
         from kanban.budget_models import TimeEntry
         
-        today = timezone.now().date()
+        today = timezone.localdate()
         week_start = today - timedelta(days=today.weekday())
         month_start = today.replace(day=1)
         
-        entries_qs = TimeEntry.objects.filter(user=self.user)
-        if self.board:
-            entries_qs = entries_qs.filter(task__column__board=self.board)
-        
+        entries_qs = self._scope_entries(TimeEntry.objects.filter(user=self.user))
+
         # Weekly statistics
         week_entries = entries_qs.filter(work_date__gte=week_start, work_date__lte=today)
         week_total = week_entries.aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')

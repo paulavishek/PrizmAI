@@ -17,7 +17,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from accounts.models import Organization, UserProfile
-from kanban.models import Board, Column, Task
+from kanban.models import Board, Column, Task, BoardMembership
 from messaging.models import ChatRoom, ChatMessage, Notification, TaskThreadComment
 from ai_assistant.models import AIAssistantSession
 from wiki.models import WikiCategory, WikiPage
@@ -57,7 +57,8 @@ class TaskWorkflowIntegrationTests(TestCase):
             organization=self.org,
             created_by=self.user1
         )
-        self.board.members.add(self.user1, self.user2)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user1, defaults={'role': 'member'})
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user2, defaults={'role': 'member'})
         
         self.todo_col = Column.objects.create(
             name='To Do',

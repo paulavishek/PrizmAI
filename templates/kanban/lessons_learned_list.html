@@ -9,11 +9,11 @@
         cursor: pointer;
         transition: background-color 0.2s ease;
     }
-    
+
     .lessons-table tbody tr:hover {
-        background-color: #f8f9fa !important;
+        background-color: var(--bg-tertiary) !important;
     }
-    
+
     .lessons-table tbody tr.table-warning:hover {
         background-color: #fff3cd !important;
     }
@@ -31,8 +31,8 @@
             <a href="{% url 'retrospective_dashboard' board.id %}" class="btn btn-info">
                 <i class="fas fa-chart-line"></i> Dashboard
             </a>
-            <a href="{% url 'retrospective_dashboard' board.id %}" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            <a href="{% url 'retrospective_dashboard' board.id %}" class="btn-prizm-back">
+                <i class="fas fa-arrow-left"></i> Back to Retrospectives
             </a>
             {% if is_demo_mode %}
             <a href="{% url 'demo_board_detail' board.id %}" class="btn btn-outline-primary">
@@ -159,13 +159,13 @@
                 <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if priority_filter %}&priority={{ priority_filter }}{% endif %}">Previous</a>
             </li>
             {% endif %}
-            
+
             {% for num in page_obj.paginator.page_range %}
             <li class="page-item {% if page_obj.number == num %}active{% endif %}">
                 <a class="page-link" href="?page={{ num }}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if priority_filter %}&priority={{ priority_filter }}{% endif %}">{{ num }}</a>
             </li>
             {% endfor %}
-            
+
             {% if page_obj.has_next %}
             <li class="page-item">
                 <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if priority_filter %}&priority={{ priority_filter }}{% endif %}">Next</a>

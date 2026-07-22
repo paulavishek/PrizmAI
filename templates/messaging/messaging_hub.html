@@ -43,7 +43,7 @@
     }
 
     .board-card {
-        background: white;
+        background: var(--card-bg);
         border: 1px solid #ddd;
         border-radius: 8px;
         padding: 1.5rem;
@@ -58,7 +58,7 @@
     .board-name {
         font-size: 1.25rem;
         font-weight: 600;
-        color: #333;
+        color: var(--text-primary);
         margin-bottom: 0.5rem;
     }
 
@@ -103,7 +103,7 @@
     }
 
     .notifications-mini {
-        background: white;
+        background: var(--card-bg);
         border: 1px solid #ddd;
         border-radius: 8px;
         padding: 1.5rem;
@@ -143,7 +143,103 @@
 
     .help-box li {
         margin: 0.25rem 0;
-        color: #333;
+        color: var(--text-primary);
+    }
+
+    /* Workspace badge on board cards */
+    .workspace-badge {
+        display: inline-block;
+        font-size: 0.68rem;
+        font-weight: 500;
+        padding: 0.15rem 0.55rem;
+        border-radius: 20px;
+        vertical-align: middle;
+        margin-left: 0.4rem;
+        line-height: 1.6;
+        white-space: nowrap;
+    }
+    .workspace-badge-regular {
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+    }
+    .workspace-badge-demo {
+        background: #ede0fa;
+        color: #6a2da8;
+    }
+    .workspace-badge-sandbox {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    /* ---- Dark mode overrides (hardcoded light surfaces don't flip on their own) ---- */
+    [data-bs-theme="dark"] .board-card {
+        border-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .board-members {
+        color: var(--text-secondary);
+    }
+
+    [data-bs-theme="dark"] .empty-state {
+        background: var(--bg-tertiary);
+    }
+
+    [data-bs-theme="dark"] .notifications-mini {
+        border-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .notification-mini-item {
+        background: var(--bg-tertiary);
+    }
+
+    [data-bs-theme="dark"] .notification-mini-item.unread {
+        background: rgba(102, 126, 234, 0.2);
+    }
+
+    [data-bs-theme="dark"] .help-box {
+        background: rgba(33, 150, 243, 0.15);
+        border-left-color: #64b5f6;
+    }
+
+    [data-bs-theme="dark"] .help-box h4 {
+        color: #8fcaff;
+    }
+
+    [data-bs-theme="dark"] .workspace-badge-demo {
+        background: rgba(154, 92, 219, 0.25);
+        color: #d9b8ff;
+    }
+
+    [data-bs-theme="dark"] .workspace-badge-sandbox {
+        background: rgba(255, 193, 7, 0.2);
+        color: #fdd663;
+    }
+
+    [data-bs-theme="dark"] .demo-info-box {
+        background: linear-gradient(135deg, rgba(76, 175, 80, 0.18) 0%, rgba(76, 175, 80, 0.1) 100%) !important;
+        border-left-color: #81c995 !important;
+    }
+
+    [data-bs-theme="dark"] .demo-info-box h4,
+    [data-bs-theme="dark"] .demo-info-box h5,
+    [data-bs-theme="dark"] .demo-info-box strong[style*="#2e7d32"],
+    [data-bs-theme="dark"] .demo-info-box strong[style*="#f57f17"] {
+        color: #81c995 !important;
+    }
+
+    [data-bs-theme="dark"] .demo-info-box > div[style*="border: 2px solid"] {
+        background: var(--card-bg) !important;
+        border-color: var(--border-color) !important;
+    }
+
+    [data-bs-theme="dark"] .demo-info-box div[style*="background: #f1f8f4"] {
+        background: var(--bg-tertiary) !important;
+        border-color: var(--border-color) !important;
+    }
+
+    [data-bs-theme="dark"] .demo-info-box div[style*="background: #fff8e1"] {
+        background: rgba(253, 214, 99, 0.12) !important;
+        border-color: rgba(253, 214, 99, 0.3) !important;
     }
 </style>
 {% endblock %}
@@ -158,84 +254,72 @@
                 <p>Connect with your team in real-time</p>
             </div>
             <div>
-                <button onclick="goBack()" class="btn btn-light">
+                <a href="{% url 'dashboard' %}" class="btn-prizm-back">
                     <i class="fas fa-arrow-left me-2"></i>Back
-                </button>
+                </a>
             </div>
         </div>
     </div>
 
-    <!-- Demo Mode Info Box -->
-    {% if is_demo_mode %}
+    <!-- Demo Account Info Box -->
+    {% if is_demo_account %}
     <div class="demo-info-box" style="background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border-left: 4px solid #4caf50; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
         <h4 style="margin-top: 0; color: #2e7d32;">
             <i class="fas fa-key me-2"></i>Test Real-Time Messaging with Multiple Accounts
         </h4>
-        <p style="margin-bottom: 1rem; color: #333;">
+        <p style="margin-bottom: 1rem; color: var(--text-primary);">
             To experience real message sending and receiving, login as different users in separate browser windows or incognito/private tabs:
         </p>
         
-        <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 2px solid #81c784; margin-bottom: 1rem;">
+        <div style="background: var(--card-bg); padding: 1.5rem; border-radius: 8px; border: 2px solid #81c784; margin-bottom: 1rem;">
             <h5 style="margin: 0 0 1rem 0; color: #2e7d32;"><i class="fas fa-users-cog me-2"></i>Available Demo Accounts:</h5>
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
                 <div style="background: #f1f8f4; padding: 1rem; border-radius: 6px; border: 1px solid #a5d6a7;">
                     <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
-                        <i class="fas fa-user-shield me-1"></i> Demo Admin
+                        <i class="fas fa-user-tie me-1"></i> Priya Sharma (Backend Lead)
                     </div>
-                    <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
-                        <strong>Username:</strong> demo_admin_solo
+                    <div style="font-family: monospace; color: var(--text-primary); margin-bottom: 0.25rem;">
+                        <strong>Username:</strong> priya.sharma
                     </div>
-                    <div style="font-family: monospace; color: #333;">
-                        <strong>Password:</strong> demo123
-                    </div>
-                </div>
-                
-                <div style="background: #f1f8f4; padding: 1rem; border-radius: 6px; border: 1px solid #a5d6a7;">
-                    <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
-                        <i class="fas fa-user-tie me-1"></i> Alex Chen (PM)
-                    </div>
-                    <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
-                        <strong>Username:</strong> alex_chen_demo
-                    </div>
-                    <div style="font-family: monospace; color: #333;">
-                        <strong>Password:</strong> demo123
+                    <div style="font-family: monospace; color: var(--text-primary);">
+                        <strong>Password:</strong> DemoUser@2026
                     </div>
                 </div>
-                
+
                 <div style="background: #f1f8f4; padding: 1rem; border-radius: 6px; border: 1px solid #a5d6a7;">
                     <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
-                        <i class="fas fa-code me-1"></i> Sam Rivera (Dev)
+                        <i class="fas fa-code me-1"></i> Marcus Chen (Frontend / UX)
                     </div>
-                    <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
-                        <strong>Username:</strong> sam_rivera_demo
+                    <div style="font-family: monospace; color: var(--text-primary); margin-bottom: 0.25rem;">
+                        <strong>Username:</strong> marcus.chen
                     </div>
-                    <div style="font-family: monospace; color: #333;">
-                        <strong>Password:</strong> demo123
+                    <div style="font-family: monospace; color: var(--text-primary);">
+                        <strong>Password:</strong> DemoUser@2026
                     </div>
                 </div>
-                
+
                 <div style="background: #f1f8f4; padding: 1rem; border-radius: 6px; border: 1px solid #a5d6a7;">
                     <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
-                        <i class="fas fa-chart-line me-1"></i> Jordan Taylor (Analyst)
+                        <i class="fas fa-chart-line me-1"></i> Elena Vasquez (DevOps / QA)
                     </div>
-                    <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
-                        <strong>Username:</strong> jordan_taylor_demo
+                    <div style="font-family: monospace; color: var(--text-primary); margin-bottom: 0.25rem;">
+                        <strong>Username:</strong> elena.vasquez
                     </div>
-                    <div style="font-family: monospace; color: #333;">
-                        <strong>Password:</strong> demo123
+                    <div style="font-family: monospace; color: var(--text-primary);">
+                        <strong>Password:</strong> DemoUser@2026
                     </div>
                 </div>
             </div>
         </div>
         
         <div style="background: #fff8e1; padding: 1rem; border-radius: 6px; border: 1px solid #ffecb3;">
-            <div style="font-size: 0.9rem; color: #333;">
+            <div style="font-size: 0.9rem; color: var(--text-primary);">
                 <strong style="color: #f57f17;"><i class="fas fa-lightbulb me-1"></i> How to Test:</strong>
                 <ol style="margin: 0.5rem 0 0 1rem; padding: 0; font-size: 0.85rem;">
-                    <li>Open a chat room in this window (as demo_admin_solo)</li>
+                    <li>Open a chat room in this window (as {{ user.username }})</li>
                     <li>Open a new <strong>incognito/private window</strong></li>
-                    <li>Login as a different user (e.g., sam_rivera_demo / demo123)</li>
+                    <li>Login as a different user (e.g., marcus.chen / DemoUser@2026)</li>
                     <li>Navigate to the same chat room</li>
                     <li>Send messages from either window and watch them appear instantly in both!</li>
                 </ol>
@@ -250,7 +334,7 @@
         <ul>
             <li><strong>Chat Rooms:</strong> Click on a board below, then select a room to see conversations</li>
             <li><strong>Send Messages:</strong> Type in the message box and press Enter</li>
-            <li><strong>@Mention:</strong> Type @username to mention team members (e.g., @alex_chen_demo)</li>
+            <li><strong>@Mention:</strong> Type @username to mention team members (e.g., @priya.sharma)</li>
             <li><strong>Task Comments:</strong> Open any task and scroll to Comments section</li>
             <li><strong>File Sharing:</strong> Upload and share files within chat rooms</li>
         </ul>
@@ -273,6 +357,40 @@
     </div>
     {% endif %}
 
+    <!-- Pending Invitations Banner -->
+    {% if pending_invitations %}
+    <div class="boards-section mb-4">
+        <h2 class="section-title"><i class="fas fa-envelope-open-text me-2 text-warning"></i>Pending Chat Room Invitations</h2>
+        <div class="boards-grid">
+            {% for inv in pending_invitations %}
+            <div class="board-card" style="border-left: 4px solid #ffc107;">
+                <div class="board-name">{{ inv.chat_room.name }}</div>
+                <div class="board-members text-muted mb-2">
+                    <i class="fas fa-user me-1"></i> Invited by <strong>{{ inv.invited_by.username }}</strong><br>
+                    <i class="fas fa-layer-group me-1"></i> Board: {{ inv.chat_room.board.name }}
+                </div>
+                <div class="d-flex gap-2">
+                    <form method="post" action="{% url 'messaging:respond_chat_room_invitation' invitation_id=inv.id %}" class="flex-grow-1">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="accept">
+                        <button type="submit" class="btn btn-sm btn-success w-100">
+                            <i class="fas fa-check me-1"></i> Accept
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'messaging:respond_chat_room_invitation' invitation_id=inv.id %}" class="flex-grow-1">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="decline">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
+                            <i class="fas fa-times me-1"></i> Decline
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Your Boards Section -->
     <div class="boards-section">
         <h2 class="section-title"><i class="fas fa-layer-group me-2"></i>Your Boards & Chat Rooms</h2>
@@ -281,17 +399,30 @@
             <div class="boards-grid">
                 {% for item in boards_with_unread %}
                     <div class="board-card">
-                        <div class="board-name">{{ item.board.name }}</div>
+                        <div class="board-name">
+                            {{ item.board.name }}
+                            {% if item.workspace_label %}
+                                <span class="workspace-badge {% if item.workspace_is_demo %}workspace-badge-demo{% elif item.workspace_label == 'Sandbox' %}workspace-badge-sandbox{% else %}workspace-badge-regular{% endif %}">{{ item.workspace_label }}</span>
+                            {% endif %}
+                        </div>
                         <div class="board-members">
-                            <i class="fas fa-users me-1"></i> {{ item.board.members.count }} members
+                            <i class="fas fa-users me-1"></i> {{ item.member_count }} members
                         </div>
                         <div class="board-actions">
-                            <a href="{% url 'messaging:chat_room_list' board_id=item.board.id %}" class="btn btn-sm btn-primary w-100">
-                                <i class="fas fa-comments me-1"></i> Chat Rooms
-                                {% if item.unread_count > 0 %}
-                                    <span class="badge bg-light text-dark ms-1">{{ item.unread_count }}</span>
-                                {% endif %}
-                            </a>
+                            {% if item.has_board_access %}
+                                <a href="{% url 'messaging:chat_room_list' board_id=item.board.id %}" class="btn btn-sm btn-primary w-100">
+                                    <i class="fas fa-comments me-1"></i> Chat Rooms
+                                    {% if item.unread_count > 0 %}
+                                        <span class="badge bg-light text-dark ms-1">{{ item.unread_count }}</span>
+                                    {% endif %}
+                                </a>
+                            {% else %}
+                                {% for room in item.rooms %}
+                                <a href="{% url 'messaging:chat_room_detail' room_id=room.id %}" class="btn btn-sm btn-primary w-100 mb-1">
+                                    <i class="fas fa-comments me-1"></i> {{ room.name }}
+                                </a>
+                                {% endfor %}
+                            {% endif %}
                         </div>
                     </div>
                 {% endfor %}
@@ -307,6 +438,37 @@
             </div>
         {% endif %}
     </div>
+
+    <!-- Shared Chat Rooms Section (from other workspaces, invitation-based) -->
+    {% if shared_rooms_with_unread %}
+    <div class="boards-section mt-4">
+        <h2 class="section-title"><i class="fas fa-share-alt me-2"></i>Shared Chat Rooms</h2>
+        <p class="text-muted small mb-3">
+            <i class="fas fa-info-circle me-1"></i>
+            These chat rooms are on boards outside your workspace. You can chat here, but you do not have access to the boards themselves.
+        </p>
+        <div class="boards-grid">
+            {% for item in shared_rooms_with_unread %}
+            <div class="board-card" style="border-left: 4px solid #667eea;">
+                <div class="board-name">{{ item.room.name }}</div>
+                <div class="board-members text-muted mb-2">
+                    <i class="fas fa-layer-group me-1"></i> {{ item.room.board.name }}<br>
+                    <i class="fas fa-users me-1"></i> {{ item.room.members.count }} members
+                </div>
+                <div class="board-actions">
+                    <a href="{% url 'messaging:chat_room_detail' room_id=item.room.id %}" class="btn btn-sm btn-primary w-100">
+                        <i class="fas fa-comments me-1"></i> Open Room
+                        {% if item.unread_count > 0 %}
+                            <span class="badge bg-light text-dark ms-1">{{ item.unread_count }}</span>
+                        {% endif %}
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
 </div>
 {% endblock %}
 {% block extra_js %}

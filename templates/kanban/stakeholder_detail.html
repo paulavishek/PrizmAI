@@ -11,7 +11,7 @@
             <p class="text-muted">{{ stakeholder.role }} {% if stakeholder.organization %}- {{ stakeholder.organization }}{% endif %}</p>
         </div>
         <div class="col-md-4 text-end">
-            <a href="{% url 'stakeholder:stakeholder_list' board.id %}" class="btn btn-outline-secondary me-2">
+            <a href="{% url 'stakeholder:stakeholder_list' board.id %}" class="btn-prizm-back me-2">
                 <i class="bi bi-arrow-left"></i> Back to List
             </a>
             <a href="{% url 'stakeholder:stakeholder_update' board.id stakeholder.id %}" class="btn btn-outline-primary me-2">
@@ -119,14 +119,20 @@
                             <span class="badge bg-light text-dark">{{ stakeholder.get_desired_engagement_display|title }}</span>
                         </dd>
                         
-                        <dt class="col-sm-7">Engagement Gap:</dt>
+                        <dt class="col-sm-7">
+                            Engagement Gap:
+                            <i class="bi bi-info-circle"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="Desired minus current engagement level. 0 = on target (good); positive = under-engaged, increase engagement; negative = over-engaged, currently engaging more than needed."></i>
+                        </dt>
                         <dd class="col-sm-5">
                             {% if engagement_gap > 0 %}
-                            <span class="badge bg-danger">+{{ engagement_gap }}</span>
+                            <span class="badge bg-warning text-dark">+{{ engagement_gap }} &uarr; Engage more</span>
                             {% elif engagement_gap < 0 %}
-                            <span class="badge bg-success">{{ engagement_gap }}</span>
+                            <span class="badge bg-info text-dark">{{ engagement_gap }} &darr; Over-engaged</span>
                             {% else %}
-                            <span class="badge bg-light text-dark">No Gap</span>
+                            <span class="badge bg-success">Aligned &check;</span>
                             {% endif %}
                         </dd>
                     </dl>
@@ -373,7 +379,7 @@
     }
     
     .table-hover tbody tr:hover {
-        background-color: #f8f9fa;
+        background-color: var(--bg-tertiary);
     }
 </style>
 
@@ -386,15 +392,5 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// Handle back navigation to previous page
-function goBack() {
-    // Check if there's a previous page in history
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        // Fallback to stakeholder list if no history
-        window.location.href = '{% url "stakeholder:stakeholder_list" board.id %}';
-    }
-}
 </script>
 {% endblock %}

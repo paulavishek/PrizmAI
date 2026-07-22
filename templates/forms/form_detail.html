@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ form_obj.title }} — Forms{% endblock %}
+{% block page_title %}{{ form_obj.title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.response-row {
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.6rem;
+    background: var(--card-bg, #fff);
+}
+.quadrant-badge { font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 999px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <nav aria-label="breadcrumb" style="font-size:0.82rem;">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'form_list' %}">Forms</a></li>
+            <li class="breadcrumb-item active">{{ form_obj.title }}</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <p class="text-muted mb-1" style="font-size:0.875rem;">
+                {% if form_obj.target_destination == 'DISCOVERY' %}
+                    Submissions become PrizmDiscovery ideas, auto-scored by Spectra.
+                {% else %}
+                    Submissions become tasks on <strong>{{ form_obj.target_board.name }}</strong>.
+                {% endif %}
+            </p>
+            {% if not form_obj.is_active %}<span class="badge bg-secondary">Inactive — not accepting new submissions in listings</span>{% endif %}
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'form_fill' form_id=form_obj.pk %}" class="btn btn-outline-primary btn-sm">Fill Out</a>
+            {% if is_owner %}
+            <a href="{% url 'form_edit' form_id=form_obj.pk %}" class="btn btn-outline-secondary btn-sm">Edit</a>
+            <form method="post" action="{% url 'form_toggle_active' form_id=form_obj.pk %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                    {% if form_obj.is_active %}Deactivate{% else %}Activate{% endif %}
+                </button>
+            </form>
+            <form method="post" action="{% url 'form_delete' form_id=form_obj.pk %}" class="d-inline"
+                  onsubmit="return confirm('Delete this form and all its submissions?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <h6 class="fw-bold mb-2">Fields ({{ form_obj.fields.count }})</h6>
+    {% if form_obj.fields.all %}
+    <ul class="list-group mb-4">
+        {% for field in form_obj.fields.all %}
+        <li class="list-group-item d-flex justify-content-between align-items-center"
+            style="background: var(--card-bg, #fff); border-color: var(--border-color, #e5e7eb);">
+            <span>
+                {{ field.label }}
+                {% if field.is_required %}<span class="text-danger">*</span>{% endif %}
+                <span class="text-muted" style="font-size:0.78rem;">— {{ field.get_field_type_display }}</span>
+            </span>
+            {% if field.mapped_property != 'none' %}
+            <span class="badge bg-secondary-subtle text-secondary-emphasis">{{ field.get_mapped_property_display }}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+        <p class="text-muted mb-4">This form has no fields yet — <a href="{% url 'form_edit' form_id=form_obj.pk %}">add some</a>.</p>
+    {% endif %}
+
+    <h6 class="fw-bold mb-2">Responses ({{ submissions.count }})</h6>
+
+    {% if submissions %}
+        {% for s in submissions %}
+        <div class="response-row d-flex justify-content-between align-items-center">
+            <div>
+                <div class="fw-semibold">
+                    {% if s.created_idea %}
+                        <a href="{% url 'idea_detail' idea_id=s.created_idea.pk %}">{{ s.created_idea.title }}</a>
+                    {% elif s.created_task %}
+                        <a href="{% url 'task_detail' task_id=s.created_task.pk %}">{{ s.created_task.title }}</a>
+                    {% else %}
+                        <span class="text-muted">Could not create a target record</span>
+                    {% endif %}
+                </div>
+                <div class="text-muted" style="font-size:0.8rem;">
+                    Submitted by {{ s.submitter_user.get_full_name|default:s.submitter_user.username }} &middot; {{ s.created_at|date:"M j, Y g:i A" }}
+                </div>
+            </div>
+            <div>
+                {% if s.created_idea %}
+                    {% if s.created_idea.is_scored %}
+                        <span class="badge bg-info-subtle text-info-emphasis quadrant-badge">{{ s.created_idea.quadrant_label }}</span>
+                        <span class="text-muted" style="font-size:0.78rem;">Impact {{ s.created_idea.ai_score_impact }} / Effort {{ s.created_idea.ai_score_effort }}</span>
+                    {% else %}
+                        <span class="score-status" data-submission-id="{{ s.pk }}">
+                            <span class="badge bg-warning-subtle text-warning-emphasis quadrant-badge">Scoring…</span>
+                        </span>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="text-center text-muted py-4">
+            <p>No submissions yet.</p>
+        </div>
+    {% endif %}
+
+</div>
+
+<script>
+(function () {
+    // Auto-scoring runs on a Celery worker after this page has already
+    // rendered, so poll for any still-"Scoring…" row until it flips to a
+    // real quadrant/score — no manual reload needed.
+    var pending = Array.prototype.slice.call(document.querySelectorAll('.score-status[data-submission-id]'));
+    if (!pending.length) return;
+
+    function checkOne(el) {
+        var id = el.getAttribute('data-submission-id');
+        return fetch('/forms/submission/' + id + '/status/', {credentials: 'same-origin'})
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.scored) return true; // still pending
+                el.innerHTML =
+                    '<span class="badge bg-info-subtle text-info-emphasis quadrant-badge">' + data.quadrant_label + '</span> ' +
+                    '<span class="text-muted" style="font-size:0.78rem;">Impact ' + data.impact + ' / Effort ' + data.effort + '</span>';
+                return false; // done — drop from the pending list
+            })
+            .catch(function () { return true; }); // transient network hiccup — retry next tick
+    }
+
+    function poll() {
+        Promise.all(pending.map(checkOne)).then(function (stillPending) {
+            pending = pending.filter(function (_, i) { return stillPending[i]; });
+            if (pending.length) setTimeout(poll, 3000);
+        });
+    }
+
+    setTimeout(poll, 3000);
+})();
+</script>
+{% endblock %}

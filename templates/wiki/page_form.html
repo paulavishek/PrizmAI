@@ -1,18 +1,19 @@
 {% extends "base.html" %}
 {% load crispy_forms_tags %}
 {% load widget_tweaks %}
+{% load static %}
 
 {% block title %}{% if form.instance.pk %}Edit{% else %}Create{% endif %} Wiki Page{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css">
+<link rel="stylesheet" href="{% static 'vendor/highlight-github.min.css' %}?v={{ STATIC_VERSION|default:'12' }}">
 <style>
     .page-form-container {
         max-width: 100%;
     }
     
     .form-section {
-        background-color: #f8f9fa;
+        background-color: var(--bg-tertiary);
         padding: 20px;
         border-radius: 8px;
         margin-bottom: 20px;
@@ -25,7 +26,7 @@
     
     .help-text {
         font-size: 0.85rem;
-        color: #6c757d;
+        color: var(--text-muted);
         margin-top: 5px;
     }
     
@@ -35,7 +36,7 @@
     }
     
     .preview-pane {
-        background-color: white;
+        background-color: var(--card-bg);
         border: 1px solid #dee2e6;
         border-radius: 5px;
         padding: 15px;
@@ -64,17 +65,17 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-tagsinput/1.3.6/jquery.tagsinput.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-tagsinput/1.3.6/jquery.tagsinput.min.css">
+<script src="{% static 'vendor/marked.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
+<script src="{% static 'vendor/highlight.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
+<script src="{% static 'vendor/jquery.tagsinput.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
+<link rel="stylesheet" href="{% static 'vendor/jquery.tagsinput.min.css' %}?v={{ STATIC_VERSION|default:'12' }}">
 {% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-lg-9">
         <div class="mb-3">
-            <a href="{% if form.instance.pk %}{% url 'wiki:page_detail' form.instance.slug %}{% else %}{% url 'wiki:page_list' %}{% endif %}" class="btn btn-outline-secondary btn-sm">
+            <a href="{% if form.instance.pk %}{% url 'wiki:page_detail' form.instance.slug %}{% else %}{% url 'wiki:knowledge_hub_home' %}{% endif %}" class="btn-prizm-back btn-sm">
                 <i class="fas fa-arrow-left"></i> Back
             </a>
         </div>
@@ -125,14 +126,16 @@
             <!-- Basic Information -->
             <div class="form-section">
                 <h5 class="mb-3">Page Details</h5>
+                <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
                 
                 <div class="mb-3">
-                    {{ form.title.label_tag }}
+                    <label for="{{ form.title.id_for_label }}" class="form-label">Title <span class="required-asterisk">*</span></label>
                     {{ form.title|add_class:"form-control form-control-lg" }}
                     {% if form.title.help_text %}
                         <small class="help-text">{{ form.title.help_text|safe }}</small>
                     {% endif %}
                     {{ form.title.errors }}
+                    <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Page title is required.</div>
                 </div>
                 
                 <div class="row">
@@ -140,6 +143,11 @@
                         {{ form.category.label_tag }}
                         {{ form.category|add_class:"form-control" }}
                         {{ form.category.errors }}
+                        <!-- Live AI-assistant indicator: the assistant available on
+                             a page is a property of its category, so choosing the
+                             category here IS how you pick the assistant. -->
+                        <div id="categoryAssistantHint" class="mt-2 small"></div>
+                        {{ category_assistant_map|json_script:"categoryAssistantMap" }}
                     </div>
                     
                     <div class="col-md-6 mb-3">
@@ -154,6 +162,7 @@
             <!-- Page Content -->
             <div class="form-section">
                 <h5 class="mb-3">Content</h5>
+                <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
                 
                 <ul class="nav nav-tabs mb-3" role="tablist">
                     <li class="nav-item" role="presentation">
@@ -227,7 +236,7 @@
                     <button type="button" class="btn btn-outline-success btn-lg" data-bs-toggle="modal" data-bs-target="#importModal">
                         <i class="fas fa-file-import"></i> Import Document
                     </button>
-                    <a href="{% url 'wiki:page_list' %}" class="btn btn-outline-secondary btn-lg">
+                    <a href="{% url 'wiki:knowledge_hub_home' %}" class="btn btn-outline-secondary btn-lg">
                         <i class="fas fa-times"></i> Cancel
                     </a>
                 </div>
@@ -281,10 +290,10 @@
 
 Example meeting transcript:
 Sprint Planning Meeting - January 31, 2026
-Attendees: Alex Chen (PM), Sam Rivera (Dev), Jordan Taylor (Designer)
+Attendees: Priya Sharma (Backend Lead), Marcus Chen (Frontend / UX), Elena Vasquez (DevOps / QA)
 
-Alex: Let's review our Sprint 45 goals. Sam, can you take on the API authentication work?
-Sam: Yes, I can start that Monday. Should take about 5 days.
+Priya: Let's review our Sprint 45 goals. Marcus, can you take on the API authentication work?
+Marcus: Yes, I can start that Monday. Should take about 5 days.
 ..."></textarea>
                                 </div>
                             </div>
@@ -368,6 +377,46 @@ Sam: Yes, I can start that Monday. Should take about 5 days.
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // --- Live AI-assistant indicator, driven by the selected category ---
+    (function () {
+        const select = document.getElementById('id_category');
+        const hint = document.getElementById('categoryAssistantHint');
+        const mapEl = document.getElementById('categoryAssistantMap');
+        if (!select || !hint || !mapEl) return;
+        let assistantMap = {};
+        try { assistantMap = JSON.parse(mapEl.textContent) || {}; } catch (e) { assistantMap = {}; }
+        const INFO = {
+            meeting: {
+                cls: 'text-success',
+                icon: 'fa-users',
+                label: 'Meeting Assistant',
+                desc: 'analyzes transcripts to extract action items, decisions, and key points.'
+            },
+            documentation: {
+                cls: 'text-info',
+                icon: 'fa-robot',
+                label: 'Documentation Assistant',
+                desc: 'helps you write and improve reference documentation.'
+            },
+            none: {
+                cls: 'text-secondary',
+                icon: 'fa-ban',
+                label: 'No AI assistant',
+                desc: 'AI features are disabled for this category.'
+            }
+        };
+        function render() {
+            const type = assistantMap[select.value] || 'documentation';
+            const info = INFO[type] || INFO.documentation;
+            hint.innerHTML =
+                '<i class="fas ' + info.icon + ' me-1 ' + info.cls + '"></i>' +
+                '<span class="' + info.cls + ' fw-semibold">' + info.label + '</span> ' +
+                '<span class="text-muted">— ' + info.desc + '</span>';
+        }
+        select.addEventListener('change', render);
+        render();
+    })();
+
     // Live markdown preview
     const contentTextarea = document.querySelector('textarea[name="content"]');
     const previewPane = document.getElementById('markdown-preview');

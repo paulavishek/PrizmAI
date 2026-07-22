@@ -1,0 +1,3175 @@
+"""
+Sandbox Views - persistent personal demo system.
+
+Each real user gets their own private copy of the demo template boards.
+The sandbox persists as long as the user's account. No timer, no expiry.
+Master Demo Template boards (is_official_demo_board=True) are NEVER modified.
+
+Endpoints:
+  POST /toggle-demo-mode/           - provision sandbox (async via Celery) or re-enter existing
+  POST /demo/reset-mine/            - wipe user's sandbox and re-provision
+  GET  /sandbox/status/             - JSON status for in-app banner
+"""
+import logging
+
+from django.contrib.auth.decorators import login_required
+from django.db import models
+from django.http import JsonResponse
+from django.shortcuts import redirect
+from django.utils import timezone
+from django.views.decorators.http import require_http_methods
+
+from kanban.utils.demo_protection import allow_demo_writes
+
+logger = logging.getLogger(__name__)
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def sync_persona_memberships_to_owner(owner_user):
+    """Make ``owner_user``'s sandbox the one demo personas (Priya/Marcus/Elena,
+    alex/sam/jordan) are currently guest-members of, evicting their
+    BoardMembership from every other real user's sandbox.
+
+    Personas are a single shared login (@demo.prizmai.local, password printed
+    on-screen), so leaving one a guest member of more than one real user's
+    sandbox at a time lets anyone signed in with those credentials browse
+    another user's private sandbox data — a genuine cross-tenant leak, not
+    just clutter. See [[project_persona_membership_bleed]].
+
+    Previously this capping only ran inline in ``_duplicate_board`` (i.e. only
+    at first provisioning / Reset Demo), so whichever real user's sandbox was
+    cloned *most recently* silently evicted every other real user's persona
+    membership — including on sandboxes that predated the newer one and were
+    never touched again. A persona logging in to test messaging against an
+    older sandbox would land on whichever sandbox last "won" instead of the
+    one the real user just visited. Calling this on every real-user
+    re-entry into an *existing* sandbox (not just at creation) keeps the cap
+    following actual usage instead of only the last provisioning event.
+
+    Never touches a sandbox a persona owns themselves (personas are meant to
+    be guest-only, but pre-fix data may still have one).
+    """
+    from django.contrib.auth.models import User
+    from django.db.models import F
+    from kanban.models import Board, BoardMembership
+
+    owner_boards = list(
+        Board.objects.filter(owner=owner_user, is_sandbox_copy=True)
+        .select_related('cloned_from')
+    )
+    if not owner_boards:
+        return
+
+    persona_ids = set()
+    for board in owner_boards:
+        template = board.cloned_from
+        if not template:
+            continue
+        for membership in template.memberships.select_related('user').all():
+            email = getattr(membership.user, 'email', '') or ''
+            if '@demo.prizmai.local' in email:
+                persona_ids.add(membership.user_id)
+
+    if not persona_ids:
+        return
+
+    persona_users = list(User.objects.filter(id__in=persona_ids))
+
+    # Evict guest membership from every OTHER real user's sandbox.
+    BoardMembership.objects.filter(
+        user__in=persona_users,
+        board__is_sandbox_copy=True,
+    ).exclude(board__owner=owner_user).exclude(user=F('board__owner')).delete()
+
+    # Re-affirm guest membership on THIS owner's sandbox(es), scoped to the
+    # personas that are actually members of the template each board was
+    # cloned from (don't invent new persona associations).
+    for board in owner_boards:
+        template = board.cloned_from
+        if not template:
+            continue
+        template_persona_ids = set(
+            template.memberships.filter(
+                user__email__icontains='@demo.prizmai.local'
+            ).values_list('user_id', flat=True)
+        )
+        for persona in persona_users:
+            if persona.id in template_persona_ids:
+                BoardMembership.objects.get_or_create(
+                    board=board, user=persona,
+                    defaults={'role': 'member'},
+                )
+
+
+def _duplicate_board(template_board, user):
+    """
+    Deep-copy a single template board for a sandbox user.
+    Returns the new Board instance.
+
+    Per spec Edge Case 3:
+    - Set pk=None and id=None on every record before .save()
+    - Assign sandbox user as owner
+    - Set is_official_demo_board = False on all copies
+    - Do NOT copy BoardMembership records — create a fresh owner membership
+    """
+    from kanban.models import Board, BoardMembership, Column, TaskLabel, Task, Comment
+
+    # --- Board ---
+    # Build a fresh board from the template's field values, leaving M2M until after save
+    new_board = Board(
+        name=template_board.name,
+        description=template_board.description,
+        organization=None,                      # ← sandbox boards are user-owned, not demo org
+        owner=user,
+        created_by=user,
+        is_official_demo_board=False,          # ← critical: not a template
+        is_seed_demo_data=False,
+        is_sandbox_copy=True,                    # ← tags this as a sandbox copy
+        cloned_from=template_board,              # ← track which template it was cloned from
+        # Inherit the template workspace so workspace-scoped features (custom
+        # fields, etc.) resolve correctly for tasks on this sandbox board.
+        workspace=template_board.workspace,
+        strategy=None,                          # Do not inherit — mission tree uses _template_to_sandbox mapping
+        num_phases=template_board.num_phases,
+        task_prefix=template_board.task_prefix,
+        project_type=template_board.project_type,
+        # Copy project deadline so burn-rate projections work in the sandbox
+        project_deadline=template_board.project_deadline,
+        # Copy baseline for Scope Creep Index
+        baseline_task_count=template_board.baseline_task_count,
+        baseline_complexity_total=template_board.baseline_complexity_total,
+        baseline_set_date=template_board.baseline_set_date,
+    )
+    new_board.save()
+
+    # Lock shadow-branch recalculation for this sandbox clone.  Board
+    # memberships created below will fire signals that queue a Celery
+    # recalculate task; the cloned branch scores are already correct and
+    # don't need an immediate live recalculation.  120-second TTL is
+    # well beyond the 5-second signal countdown.
+    try:
+        from django.core.cache import cache as _clone_cache
+        _clone_cache.set(f'demo_shadow_lock_{new_board.id}', True, timeout=120)
+    except Exception:
+        pass
+
+    # Fresh owner membership for the real user
+    BoardMembership.objects.create(board=new_board, user=user, role='owner')
+
+    # Copy ONLY demo persona memberships so assignees resolve correctly.
+    # Real users must NEVER be copied — each user's sandbox is private.
+    # Demo personas (Priya/Marcus/Elena, alex/sam/jordan) are shared login
+    # credentials, so they're capped to being a guest member of exactly ONE
+    # real user's sandbox at a time — see sync_persona_memberships_to_owner()
+    # for why (cross-tenant leak) and [[project_persona_membership_bleed]].
+    sync_persona_memberships_to_owner(user)
+
+    # --- TaskLabels (board FK) ---
+    label_map = {}  # old label pk → new label instance
+    for label in template_board.labels.all():
+        new_label = TaskLabel(
+            name=label.name,
+            color=label.color,
+            board=new_board,
+            category=label.category,
+        )
+        new_label.save()
+        label_map[label.pk] = new_label
+
+    # --- Columns ---
+    from kanban.models import column_name_disables_aging
+    column_map = {}  # old column pk → new column instance
+    for col in template_board.columns.order_by('position'):
+        # Carry over the template's aging config; fall back to the name-based
+        # default so Done/Backlog columns stay disabled even if the template
+        # column predates the aging feature / wasn't backfilled.
+        aging_mode = col.aging_mode
+        if aging_mode == 'inherit' and column_name_disables_aging(col.name):
+            aging_mode = 'disabled'
+        new_col = Column(
+            name=col.name,
+            board=new_board,
+            position=col.position,
+            wip_limit=col.wip_limit,
+            aging_mode=aging_mode,
+            aging_warning_days=col.aging_warning_days,
+            aging_critical_days=col.aging_critical_days,
+        )
+        new_col.save()
+        column_map[col.pk] = new_col
+
+    # --- Tasks ---
+    task_map = {}  # old task pk → new task instance
+    task_template_dates = {}  # new task pk → template task updated_at
+    for task in (
+        Task.objects
+        .filter(column__board=template_board)
+        .select_related('column', 'assigned_to')
+        .order_by('column__position', 'position')
+    ):
+        new_col = column_map.get(task.column.pk)
+        if new_col is None:
+            continue
+
+        new_task = Task(
+            title=task.title,
+            description=task.description,
+            column=new_col,
+            position=task.position,
+            priority=task.priority,
+            progress=task.progress,
+            due_date=task.due_date,
+            start_date=task.start_date,
+            completed_at=task.completed_at,
+            phase=task.phase,
+            item_type=task.item_type,
+            milestone_status=task.milestone_status,
+            created_by=user,
+            # Keep original demo persona assignment (alex/sam/jordan)
+            assigned_to=task.assigned_to,
+            risk_level=task.risk_level,
+            risk_likelihood=task.risk_likelihood,
+            risk_impact=task.risk_impact,
+            complexity_score=task.complexity_score,
+            # Clear AI and personal operational data
+            ai_summary=None,
+            ai_summary_generated_at=None,
+            ai_risk_score=None,
+            ai_recommendations=None,
+        )
+        new_task.save()
+        # Preserve created_at (auto_now_add bypass) so the per-user copy keeps the
+        # template's real task age — analytics (cycle-time, backlog-age) depend on it.
+        Task.objects.filter(pk=new_task.pk).update(created_at=task.created_at)
+        task_map[task.pk] = new_task
+        task_template_dates[new_task.pk] = task.updated_at
+
+        # Re-assign labels via new label instances
+        for old_label in task.labels.all():
+            new_lab = label_map.get(old_label.pk)
+            if new_lab:
+                new_task.labels.add(new_lab)
+
+    # --- Comments (keep demo comments for realism) ---
+    for task in Task.objects.filter(column__board=template_board).select_related('column'):
+        new_task = task_map.get(task.pk)
+        if new_task is None:
+            continue
+        for comment in task.comments.order_by('created_at'):
+            Comment.objects.create(
+                task=new_task,
+                user=user,
+                content=comment.content,
+            )
+
+    # --- ChecklistItems ---
+    from kanban.models import ChecklistItem
+    for old_task in Task.objects.filter(column__board=template_board):
+        new_task = task_map.get(old_task.pk)
+        if new_task is None:
+            continue
+        for item in old_task.checklist_items.order_by('position'):
+            ChecklistItem.objects.create(
+                task=new_task,
+                title=item.title,
+                description=item.description,
+                is_completed=item.is_completed,
+                completed_at=item.completed_at,
+                position=item.position,
+                estimated_effort=item.estimated_effort,
+                priority=item.priority,
+                source=item.source,
+            )
+
+    # --- Task-to-Task Relationships (parent_task, dependencies, related, milestones) ---
+    for old_pk, new_task in task_map.items():
+        old_task = Task.objects.get(pk=old_pk)
+        updated = False
+
+        # Parent-child relationships (subtasks)
+        if old_task.parent_task_id and old_task.parent_task_id in task_map:
+            new_task.parent_task = task_map[old_task.parent_task_id]
+            updated = True
+
+        # Milestone positioning (position_after_task)
+        if old_task.position_after_task_id and old_task.position_after_task_id in task_map:
+            new_task.position_after_task = task_map[old_task.position_after_task_id]
+            updated = True
+
+        if updated:
+            new_task.save(update_fields=['parent_task', 'position_after_task'])
+
+        # Gantt chart dependencies (M2M)
+        for dep in old_task.dependencies.all():
+            if dep.pk in task_map:
+                new_task.dependencies.add(task_map[dep.pk])
+
+        # Related tasks (M2M)
+        for related in old_task.related_tasks.all():
+            if related.pk in task_map:
+                new_task.related_tasks.add(task_map[related.pk])
+
+    # --- Budget + TaskCost (for CPI calculation) ---
+    try:
+        from kanban.budget_models import ProjectBudget, TaskCost
+        template_budget = ProjectBudget.objects.filter(board=template_board).first()
+        if template_budget:
+            ProjectBudget.objects.create(
+                board=new_board,
+                allocated_budget=template_budget.allocated_budget,
+                currency=template_budget.currency,
+                allocated_hours=template_budget.allocated_hours,
+                warning_threshold=template_budget.warning_threshold,
+                critical_threshold=template_budget.critical_threshold,
+                ai_optimization_enabled=template_budget.ai_optimization_enabled,
+                created_by=user,
+            )
+            for tc in TaskCost.objects.filter(task__column__board=template_board).select_related('task'):
+                new_task = task_map.get(tc.task_id)
+                if new_task:
+                    TaskCost.objects.create(
+                        task=new_task,
+                        estimated_cost=tc.estimated_cost,
+                        estimated_hours=tc.estimated_hours,
+                        actual_cost=tc.actual_cost,
+                        hourly_rate=tc.hourly_rate,
+                        resource_cost=tc.resource_cost,
+                    )
+    except Exception:
+        pass  # Budget copying is best-effort; don't block provisioning
+
+    # --- Commitment Protocols (with signals, bets, credibility) ---
+    try:
+        from kanban.commitment_models import (
+            CommitmentProtocol, ConfidenceSignal, CommitmentBet, UserCredibilityScore,
+        )
+        for proto in CommitmentProtocol.objects.filter(board=template_board):
+            old_proto_pk = proto.pk
+            new_proto = CommitmentProtocol(
+                board=new_board,
+                title=proto.title,
+                description=proto.description,
+                target_date=proto.target_date,
+                initial_confidence=proto.initial_confidence,
+                current_confidence=proto.current_confidence,
+                confidence_halflife_days=proto.confidence_halflife_days,
+                decay_model=proto.decay_model,
+                status=proto.status,
+                created_by=proto.created_by,
+                baseline_snapshot=proto.baseline_snapshot,
+                last_signal_date=proto.last_signal_date,
+                ai_reasoning=proto.ai_reasoning,
+                negotiation_threshold=proto.negotiation_threshold,
+                token_pool_per_member=proto.token_pool_per_member,
+            )
+            new_proto.save()
+
+            # Preserve created_at and last_decay_calculation
+            CommitmentProtocol.objects.filter(pk=new_proto.pk).update(
+                created_at=proto.created_at,
+                last_decay_calculation=proto.last_decay_calculation,
+            )
+
+            # Link tasks via task_map
+            for old_task in proto.linked_tasks.all():
+                new_task = task_map.get(old_task.pk)
+                if new_task:
+                    new_proto.linked_tasks.add(new_task)
+
+            # Copy stakeholders directly (demo personas + sandbox user)
+            new_proto.stakeholders.set(proto.stakeholders.all())
+
+            # Copy signals
+            for sig in ConfidenceSignal.objects.filter(protocol_id=old_proto_pk):
+                related = task_map.get(sig.related_task_id) if sig.related_task_id else None
+                new_sig = ConfidenceSignal.objects.create(
+                    protocol=new_proto,
+                    signal_type=sig.signal_type,
+                    signal_value=sig.signal_value,
+                    description=sig.description,
+                    confidence_before=sig.confidence_before,
+                    confidence_after=sig.confidence_after,
+                    ai_generated=sig.ai_generated,
+                    recorded_by=sig.recorded_by,
+                    related_task=related,
+                )
+                ConfidenceSignal.objects.filter(pk=new_sig.pk).update(
+                    timestamp=sig.timestamp,
+                )
+
+            # Copy bets
+            for bet in CommitmentBet.objects.filter(protocol_id=old_proto_pk):
+                new_bet = CommitmentBet.objects.create(
+                    protocol=new_proto,
+                    bettor=bet.bettor,
+                    tokens_wagered=bet.tokens_wagered,
+                    confidence_estimate=bet.confidence_estimate,
+                    reasoning=bet.reasoning,
+                    is_anonymous=bet.is_anonymous,
+                    resolved=bet.resolved,
+                    resolution_correct=bet.resolution_correct,
+                    credibility_delta=bet.credibility_delta,
+                )
+                CommitmentBet.objects.filter(pk=new_bet.pk).update(
+                    placed_at=bet.placed_at,
+                )
+
+            # Ensure credibility scores exist for bettors
+            for bet in CommitmentBet.objects.filter(protocol_id=old_proto_pk):
+                try:
+                    old_cred = UserCredibilityScore.objects.get(user=bet.bettor)
+                    UserCredibilityScore.objects.get_or_create(
+                        user=bet.bettor,
+                        defaults={
+                            'score': old_cred.score,
+                            'total_bets': old_cred.total_bets,
+                            'correct_bets': old_cred.correct_bets,
+                            'tokens_remaining': old_cred.tokens_remaining,
+                        },
+                    )
+                except UserCredibilityScore.DoesNotExist:
+                    pass
+    except Exception:
+        pass  # Commitment copying is best-effort; don't block provisioning
+
+    # --- Time Entries (for time tracking views) ---
+    # The time-tracking dashboard is a *personal* timesheet: it filters entries by
+    # ``user=request.user``. Seeded demo entries are owned by personas, so remap the
+    # primary persona (priya.sharma)'s entries to the sandbox owner — this gives each
+    # user their own isolated copy of "Priya's timesheet" (matching the demo's
+    # intended fallback view) instead of everyone falling back to shared persona data
+    # read off the official demo boards. Other personas' entries stay persona-owned
+    # as board context.
+    try:
+        from django.contrib.auth.models import User
+        from kanban.budget_models import TimeEntry
+        _primary_persona = User.objects.filter(username='priya.sharma').first()
+        _primary_persona_id = _primary_persona.id if _primary_persona else None
+        for te in TimeEntry.objects.filter(
+            task__column__board=template_board
+        ).select_related('task', 'user'):
+            # Only clone entries owned by demo personas. A real user must never
+            # own entries on the official template (invariant), but if pollution
+            # slips in, cloning it verbatim would replicate that user's stray
+            # rows into every new sandbox (owner-filtered dashboards then show
+            # inflated totals). Skip non-persona rows so clones stay clean
+            # regardless of template state. All demo personas share the
+            # @demo.prizmai.local email domain (the is_demo_account flag is only
+            # set for the priya/elena/marcus team, not alex/sam/jordan, so it is
+            # NOT a reliable persona test). See [[project_time_tracking_demo_isolation]].
+            if not (te.user.email or '').lower().endswith('@demo.prizmai.local'):
+                continue
+            new_task = task_map.get(te.task_id)
+            if new_task:
+                new_te = TimeEntry.objects.create(
+                    task=new_task,
+                    user=user if te.user_id == _primary_persona_id else te.user,
+                    hours_spent=te.hours_spent,
+                    work_date=te.work_date,
+                    description=te.description,
+                )
+                TimeEntry.objects.filter(pk=new_te.pk).update(created_at=te.created_at)
+    except Exception:
+        pass
+
+    # --- ProjectROI ---
+    try:
+        from kanban.budget_models import ProjectROI
+        # Clone oldest-first so the new rows' ids stay in chronological order.
+        # ProjectROI's default ordering is ['-snapshot_date'] (newest first); cloning
+        # in that order would assign ids in reverse-chronological order, and
+        # demo_date_refresh._refresh_roi_snapshot_dates (which re-dates by id,
+        # assuming value/completion rise with id) would then invert the timeline
+        # — completion falling to 0 at the latest snapshot.
+        for roi in ProjectROI.objects.filter(board=template_board).order_by('snapshot_date'):
+            new_roi = ProjectROI.objects.create(
+                board=new_board,
+                expected_value=roi.expected_value,
+                realized_value=roi.realized_value,
+                snapshot_date=roi.snapshot_date,
+                total_cost=roi.total_cost,
+                roi_percentage=roi.roi_percentage,
+                completed_tasks=roi.completed_tasks,
+                total_tasks=roi.total_tasks,
+                ai_insights=roi.ai_insights,
+                ai_risk_score=roi.ai_risk_score,
+                created_by=roi.created_by,
+            )
+            ProjectROI.objects.filter(pk=new_roi.pk).update(created_at=roi.created_at)
+    except Exception:
+        pass
+
+    # --- Stakeholders & Task Involvements ---
+    try:
+        from kanban.stakeholder_models import ProjectStakeholder, StakeholderTaskInvolvement
+        stakeholder_map = {}  # old stakeholder pk → new stakeholder instance
+        for sh in ProjectStakeholder.objects.filter(board=template_board):
+            new_sh = ProjectStakeholder.objects.create(
+                board=new_board,
+                name=sh.name,
+                email=sh.email,
+                role=sh.role,
+                organization=sh.organization,
+                influence_level=sh.influence_level,
+                interest_level=sh.interest_level,
+                engagement_strategy=sh.engagement_strategy,
+                communication_preference=sh.communication_preference,
+                notes=sh.notes,
+                created_by=sh.created_by,
+            )
+            stakeholder_map[sh.pk] = new_sh
+
+        for inv in StakeholderTaskInvolvement.objects.filter(
+            stakeholder__board=template_board
+        ).select_related('stakeholder', 'task'):
+            new_sh = stakeholder_map.get(inv.stakeholder_id)
+            new_task = task_map.get(inv.task_id)
+            if new_sh and new_task:
+                StakeholderTaskInvolvement.objects.create(
+                    stakeholder=new_sh,
+                    task=new_task,
+                    involvement_type=inv.involvement_type,
+                    engagement_status=inv.engagement_status,
+                    feedback=inv.feedback,
+                    satisfaction_rating=inv.satisfaction_rating,
+                )
+    except Exception:
+        pass
+
+    # --- Burndown / Velocity ---
+    try:
+        from kanban.burndown_models import (
+            TeamVelocitySnapshot, BurndownPrediction, BurndownAlert, SprintMilestone,
+        )
+
+        velocity_map = {}
+        for vs in TeamVelocitySnapshot.objects.filter(board=template_board):
+            old_pk = vs.pk
+            new_vs = TeamVelocitySnapshot.objects.create(
+                board=new_board,
+                period_start=vs.period_start,
+                period_end=vs.period_end,
+                period_type=vs.period_type,
+                tasks_completed=vs.tasks_completed,
+                story_points_completed=vs.story_points_completed,
+                hours_completed=vs.hours_completed,
+                active_team_members=vs.active_team_members,
+                team_member_list=vs.team_member_list,
+                tasks_reopened=vs.tasks_reopened,
+                quality_score=vs.quality_score,
+                calculated_by=vs.calculated_by,
+            )
+            TeamVelocitySnapshot.objects.filter(pk=new_vs.pk).update(created_at=vs.created_at)
+            velocity_map[old_pk] = new_vs
+
+        prediction_map = {}
+        for bp in BurndownPrediction.objects.filter(board=template_board):
+            old_pk = bp.pk
+            new_bp = BurndownPrediction.objects.create(
+                board=new_board,
+                prediction_type=bp.prediction_type,
+                total_tasks=bp.total_tasks,
+                completed_tasks=bp.completed_tasks,
+                remaining_tasks=bp.remaining_tasks,
+                total_story_points=bp.total_story_points,
+                completed_story_points=bp.completed_story_points,
+                remaining_story_points=bp.remaining_story_points,
+                current_velocity=bp.current_velocity,
+                average_velocity=bp.average_velocity,
+                velocity_std_dev=bp.velocity_std_dev,
+                velocity_trend=bp.velocity_trend,
+                predicted_completion_date=bp.predicted_completion_date,
+                completion_date_lower_bound=bp.completion_date_lower_bound,
+                completion_date_upper_bound=bp.completion_date_upper_bound,
+                days_until_completion_estimate=bp.days_until_completion_estimate,
+                days_margin_of_error=bp.days_margin_of_error,
+                confidence_percentage=bp.confidence_percentage,
+                prediction_confidence_score=bp.prediction_confidence_score,
+                delay_probability=bp.delay_probability,
+                risk_level=bp.risk_level,
+                target_completion_date=bp.target_completion_date,
+                will_meet_target=bp.will_meet_target,
+                days_ahead_behind_target=bp.days_ahead_behind_target,
+                burndown_curve_data=bp.burndown_curve_data,
+                confidence_bands_data=bp.confidence_bands_data,
+                velocity_history_data=bp.velocity_history_data,
+                actionable_suggestions=bp.actionable_suggestions,
+                model_parameters=bp.model_parameters,
+            )
+            BurndownPrediction.objects.filter(pk=new_bp.pk).update(prediction_date=bp.prediction_date)
+            prediction_map[old_pk] = new_bp
+            # M2M: based_on_velocity_snapshots
+            for old_vs in bp.based_on_velocity_snapshots.all():
+                mapped = velocity_map.get(old_vs.pk)
+                if mapped:
+                    new_bp.based_on_velocity_snapshots.add(mapped)
+
+        for ba in BurndownAlert.objects.filter(board=template_board).select_related('prediction'):
+            new_pred = prediction_map.get(ba.prediction_id)
+            if new_pred:
+                new_ba = BurndownAlert.objects.create(
+                    prediction=new_pred,
+                    board=new_board,
+                    alert_type=ba.alert_type,
+                    severity=ba.severity,
+                    status=ba.status,
+                    title=ba.title,
+                    message=ba.message,
+                    metric_value=ba.metric_value,
+                    threshold_value=ba.threshold_value,
+                    suggested_actions=ba.suggested_actions,
+                    acknowledged_by=ba.acknowledged_by,
+                    acknowledged_at=ba.acknowledged_at,
+                    resolved_at=ba.resolved_at,
+                )
+                BurndownAlert.objects.filter(pk=new_ba.pk).update(created_at=ba.created_at)
+
+        for sm in SprintMilestone.objects.filter(board=template_board):
+            new_sm = SprintMilestone.objects.create(
+                board=new_board,
+                name=sm.name,
+                description=sm.description,
+                target_date=sm.target_date,
+                actual_date=sm.actual_date,
+                target_tasks_completed=sm.target_tasks_completed,
+                target_story_points=sm.target_story_points,
+                is_completed=sm.is_completed,
+                completion_percentage=sm.completion_percentage,
+                created_by=sm.created_by,
+            )
+            SprintMilestone.objects.filter(pk=new_sm.pk).update(created_at=sm.created_at)
+    except Exception:
+        pass
+
+    # --- Scope Tracking ---
+    try:
+        from kanban.models import ScopeChangeSnapshot, ScopeCreepAlert
+
+        scope_snapshot_map = {}
+        # Copy non-baseline snapshots first, then fix self-refs
+        for ss in ScopeChangeSnapshot.objects.filter(board=template_board).order_by('pk'):
+            old_pk = ss.pk
+            new_ss = ScopeChangeSnapshot.objects.create(
+                board=new_board,
+                total_tasks=ss.total_tasks,
+                total_complexity_points=ss.total_complexity_points,
+                avg_complexity=ss.avg_complexity,
+                high_priority_tasks=ss.high_priority_tasks,
+                urgent_priority_tasks=ss.urgent_priority_tasks,
+                todo_tasks=ss.todo_tasks,
+                in_progress_tasks=ss.in_progress_tasks,
+                completed_tasks=ss.completed_tasks,
+                is_baseline=ss.is_baseline,
+                scope_change_percentage=ss.scope_change_percentage,
+                complexity_change_percentage=ss.complexity_change_percentage,
+                ai_analysis=ss.ai_analysis,
+                predicted_delay_days=ss.predicted_delay_days,
+                created_by=ss.created_by,
+                snapshot_type=ss.snapshot_type,
+                notes=ss.notes,
+            )
+            ScopeChangeSnapshot.objects.filter(pk=new_ss.pk).update(snapshot_date=ss.snapshot_date)
+            scope_snapshot_map[old_pk] = new_ss
+        # Fix baseline_snapshot self-refs
+        for old_pk, new_ss in scope_snapshot_map.items():
+            old_ss = ScopeChangeSnapshot.objects.get(pk=old_pk)
+            if old_ss.baseline_snapshot_id and old_ss.baseline_snapshot_id in scope_snapshot_map:
+                new_ss.baseline_snapshot = scope_snapshot_map[old_ss.baseline_snapshot_id]
+                new_ss.save(update_fields=['baseline_snapshot'])
+
+        for sca in ScopeCreepAlert.objects.filter(board=template_board).select_related('snapshot'):
+            new_snap = scope_snapshot_map.get(sca.snapshot_id)
+            if new_snap:
+                new_sca = ScopeCreepAlert.objects.create(
+                    board=new_board,
+                    snapshot=new_snap,
+                    severity=sca.severity,
+                    status=sca.status,
+                    scope_increase_percentage=sca.scope_increase_percentage,
+                    complexity_increase_percentage=sca.complexity_increase_percentage,
+                    tasks_added=sca.tasks_added,
+                    predicted_delay_days=sca.predicted_delay_days,
+                    timeline_at_risk=sca.timeline_at_risk,
+                    recommendations=sca.recommendations,
+                    ai_summary=sca.ai_summary,
+                    acknowledged_by=sca.acknowledged_by,
+                    acknowledged_at=sca.acknowledged_at,
+                    resolved_by=sca.resolved_by,
+                    resolved_at=sca.resolved_at,
+                    resolution_notes=sca.resolution_notes,
+                )
+                ScopeCreepAlert.objects.filter(pk=new_sca.pk).update(detected_at=sca.detected_at)
+    except Exception:
+        pass
+
+    # --- Skill Profiles & Gaps ---
+    try:
+        from kanban.models import TeamSkillProfile, SkillGap, SkillDevelopmentPlan
+
+        tsp = TeamSkillProfile.objects.filter(board=template_board).first()
+        if tsp:
+            new_tsp = TeamSkillProfile.objects.create(
+                board=new_board,
+                skill_inventory=tsp.skill_inventory,
+                total_capacity_hours=tsp.total_capacity_hours,
+                utilized_capacity_hours=tsp.utilized_capacity_hours,
+                last_analysis=tsp.last_analysis,
+            )
+
+        skill_gap_map = {}
+        for sg in SkillGap.objects.filter(board=template_board):
+            old_pk = sg.pk
+            new_sg = SkillGap.objects.create(
+                board=new_board,
+                skill_name=sg.skill_name,
+                proficiency_level=sg.proficiency_level,
+                required_count=sg.required_count,
+                available_count=sg.available_count,
+                gap_count=sg.gap_count,
+                severity=sg.severity,
+                status=sg.status,
+                sprint_period_start=sg.sprint_period_start,
+                sprint_period_end=sg.sprint_period_end,
+                ai_recommendations=sg.ai_recommendations,
+                estimated_impact_hours=sg.estimated_impact_hours,
+                confidence_score=sg.confidence_score,
+                resolved_at=sg.resolved_at,
+                acknowledged_by=sg.acknowledged_by,
+            )
+            SkillGap.objects.filter(pk=new_sg.pk).update(identified_at=sg.identified_at)
+            skill_gap_map[old_pk] = new_sg
+            # M2M: affected_tasks
+            for old_task in sg.affected_tasks.all():
+                mapped = task_map.get(old_task.pk)
+                if mapped:
+                    new_sg.affected_tasks.add(mapped)
+
+        for sdp in SkillDevelopmentPlan.objects.filter(board=template_board):
+            new_gap = skill_gap_map.get(sdp.skill_gap_id)
+            if new_gap:
+                new_sdp = SkillDevelopmentPlan.objects.create(
+                    skill_gap=new_gap,
+                    board=new_board,
+                    plan_type=sdp.plan_type,
+                    title=sdp.title,
+                    description=sdp.description,
+                    target_skill=sdp.target_skill,
+                    target_proficiency=sdp.target_proficiency,
+                    start_date=sdp.start_date,
+                    target_completion_date=sdp.target_completion_date,
+                    actual_completion_date=sdp.actual_completion_date,
+                    estimated_cost=sdp.estimated_cost,
+                    estimated_hours=sdp.estimated_hours,
+                    status=sdp.status,
+                    progress_percentage=sdp.progress_percentage,
+                    expected_impact=sdp.expected_impact,
+                    actual_impact=sdp.actual_impact,
+                    success_metrics=sdp.success_metrics,
+                    created_by=sdp.created_by,
+                    assigned_to=sdp.assigned_to,
+                    ai_suggested=sdp.ai_suggested,
+                    ai_confidence=sdp.ai_confidence,
+                )
+                SkillDevelopmentPlan.objects.filter(pk=new_sdp.pk).update(created_at=sdp.created_at)
+                new_sdp.target_users.set(sdp.target_users.all())
+    except Exception:
+        pass
+
+    # --- Retrospectives ---
+    try:
+        from kanban.retrospective_models import (
+            ProjectRetrospective, LessonLearned, ImprovementMetric,
+            RetrospectiveActionItem, RetrospectiveTrend,
+        )
+
+        retro_map = {}
+        for retro in ProjectRetrospective.objects.filter(board=template_board).order_by('pk'):
+            old_pk = retro.pk
+            prev_retro = retro_map.get(retro.previous_retrospective_id) if retro.previous_retrospective_id else None
+            new_retro = ProjectRetrospective.objects.create(
+                board=new_board,
+                title=retro.title,
+                retrospective_type=retro.retrospective_type,
+                status=retro.status,
+                period_start=retro.period_start,
+                period_end=retro.period_end,
+                metrics_snapshot=retro.metrics_snapshot,
+                what_went_well=retro.what_went_well,
+                what_needs_improvement=retro.what_needs_improvement,
+                lessons_learned=retro.lessons_learned,
+                key_achievements=retro.key_achievements,
+                challenges_faced=retro.challenges_faced,
+                improvement_recommendations=retro.improvement_recommendations,
+                overall_sentiment_score=retro.overall_sentiment_score,
+                team_morale_indicator=retro.team_morale_indicator,
+                previous_retrospective=prev_retro,
+                performance_trend=retro.performance_trend,
+                ai_generated_at=retro.ai_generated_at,
+                ai_confidence_score=retro.ai_confidence_score,
+                ai_model_used=retro.ai_model_used,
+                team_notes=retro.team_notes,
+                team_feedback_on_ai=retro.team_feedback_on_ai,
+                created_by=retro.created_by,
+                finalized_by=retro.finalized_by,
+                finalized_at=retro.finalized_at,
+                meeting_transcript=None,  # Transcripts are board-specific, skip cross-ref
+            )
+            ProjectRetrospective.objects.filter(pk=new_retro.pk).update(created_at=retro.created_at)
+            retro_map[old_pk] = new_retro
+
+        lesson_map = {}
+        for ll in LessonLearned.objects.filter(board=template_board):
+            old_pk = ll.pk
+            new_retro = retro_map.get(ll.retrospective_id)
+            if new_retro:
+                new_ll = LessonLearned.objects.create(
+                    retrospective=new_retro,
+                    board=new_board,
+                    title=ll.title,
+                    description=ll.description,
+                    category=ll.category,
+                    priority=ll.priority,
+                    trigger_event=ll.trigger_event,
+                    impact_description=ll.impact_description,
+                    recommended_action=ll.recommended_action,
+                    action_owner=ll.action_owner,
+                    status=ll.status,
+                    implementation_date=ll.implementation_date,
+                    validation_date=ll.validation_date,
+                    expected_benefit=ll.expected_benefit,
+                    actual_benefit=ll.actual_benefit,
+                    success_metrics=ll.success_metrics,
+                    ai_suggested=ll.ai_suggested,
+                    ai_confidence=ll.ai_confidence,
+                    is_recurring_issue=ll.is_recurring_issue,
+                    recurrence_count=ll.recurrence_count,
+                )
+                LessonLearned.objects.filter(pk=new_ll.pk).update(created_at=ll.created_at)
+                lesson_map[old_pk] = new_ll
+        # Fix related_lessons M2M (self-referential)
+        for old_pk, new_ll in lesson_map.items():
+            old_ll = LessonLearned.objects.get(pk=old_pk)
+            for rel in old_ll.related_lessons.all():
+                mapped = lesson_map.get(rel.pk)
+                if mapped:
+                    new_ll.related_lessons.add(mapped)
+
+        for im in ImprovementMetric.objects.filter(board=template_board):
+            new_retro = retro_map.get(im.retrospective_id)
+            if new_retro:
+                new_im = ImprovementMetric.objects.create(
+                    board=new_board,
+                    retrospective=new_retro,
+                    metric_type=im.metric_type,
+                    metric_name=im.metric_name,
+                    description=im.description,
+                    metric_value=im.metric_value,
+                    previous_value=im.previous_value,
+                    target_value=im.target_value,
+                    change_amount=im.change_amount,
+                    change_percentage=im.change_percentage,
+                    trend=im.trend,
+                    unit_of_measure=im.unit_of_measure,
+                    higher_is_better=im.higher_is_better,
+                    measured_at=im.measured_at,
+                )
+                ImprovementMetric.objects.filter(pk=new_im.pk).update(created_at=im.created_at)
+
+        for rai in RetrospectiveActionItem.objects.filter(board=template_board):
+            new_retro = retro_map.get(rai.retrospective_id)
+            new_lesson = lesson_map.get(rai.related_lesson_id) if rai.related_lesson_id else None
+            new_task = task_map.get(rai.related_task_id) if rai.related_task_id else None
+            if new_retro:
+                new_rai = RetrospectiveActionItem.objects.create(
+                    retrospective=new_retro,
+                    board=new_board,
+                    title=rai.title,
+                    description=rai.description,
+                    action_type=rai.action_type,
+                    status=rai.status,
+                    assigned_to=rai.assigned_to,
+                    target_completion_date=rai.target_completion_date,
+                    actual_completion_date=rai.actual_completion_date,
+                    priority=rai.priority,
+                    expected_impact=rai.expected_impact,
+                    actual_impact=rai.actual_impact,
+                    blocked_reason=rai.blocked_reason,
+                    blocked_date=rai.blocked_date,
+                    progress_percentage=rai.progress_percentage,
+                    progress_notes=rai.progress_notes,
+                    related_lesson=new_lesson,
+                    related_task=new_task,
+                    ai_suggested=rai.ai_suggested,
+                    ai_confidence=rai.ai_confidence,
+                )
+                RetrospectiveActionItem.objects.filter(pk=new_rai.pk).update(created_at=rai.created_at)
+                new_rai.stakeholders.set(rai.stakeholders.all())
+
+        for rt in RetrospectiveTrend.objects.filter(board=template_board):
+            new_rt = RetrospectiveTrend.objects.create(
+                board=new_board,
+                period_type=rt.period_type,
+                retrospectives_analyzed=rt.retrospectives_analyzed,
+                total_lessons_learned=rt.total_lessons_learned,
+                lessons_implemented=rt.lessons_implemented,
+                lessons_validated=rt.lessons_validated,
+                implementation_rate=rt.implementation_rate,
+                total_action_items=rt.total_action_items,
+                action_items_completed=rt.action_items_completed,
+                completion_rate=rt.completion_rate,
+                recurring_issues=rt.recurring_issues,
+                top_improvement_categories=rt.top_improvement_categories,
+                velocity_trend=rt.velocity_trend,
+                quality_trend=rt.quality_trend,
+                ai_insights=rt.ai_insights,
+                key_recommendations=rt.key_recommendations,
+            )
+            RetrospectiveTrend.objects.filter(pk=new_rt.pk).update(
+                analysis_date=rt.analysis_date, created_at=rt.created_at,
+            )
+    except Exception:
+        pass
+
+    # --- Coaching ---
+    try:
+        from kanban.coach_models import CoachingSuggestion, PMMetrics
+
+        for cs in CoachingSuggestion.objects.filter(board=template_board):
+            new_task_ref = task_map.get(cs.task_id) if cs.task_id else None
+            new_cs = CoachingSuggestion.objects.create(
+                board=new_board,
+                task=new_task_ref,
+                suggestion_type=cs.suggestion_type,
+                severity=cs.severity,
+                status=cs.status,
+                title=cs.title,
+                message=cs.message,
+                reasoning=cs.reasoning,
+                recommended_actions=cs.recommended_actions,
+                expected_impact=cs.expected_impact,
+                metrics_snapshot=cs.metrics_snapshot,
+                confidence_score=cs.confidence_score,
+                ai_model_used=cs.ai_model_used,
+                generation_method=cs.generation_method,
+                expires_at=cs.expires_at,
+                resolved_at=cs.resolved_at,
+                acknowledged_by=cs.acknowledged_by,
+                acknowledged_at=cs.acknowledged_at,
+                was_helpful=cs.was_helpful,
+                action_taken=cs.action_taken,
+            )
+            CoachingSuggestion.objects.filter(pk=new_cs.pk).update(created_at=cs.created_at)
+
+        for pm in PMMetrics.objects.filter(board=template_board):
+            PMMetrics.objects.create(
+                board=new_board,
+                pm_user=pm.pm_user,
+                period_start=pm.period_start,
+                period_end=pm.period_end,
+                suggestions_received=pm.suggestions_received,
+                suggestions_acted_on=pm.suggestions_acted_on,
+                avg_response_time_hours=pm.avg_response_time_hours,
+                velocity_trend=pm.velocity_trend,
+                risk_mitigation_success_rate=pm.risk_mitigation_success_rate,
+                deadline_hit_rate=pm.deadline_hit_rate,
+                team_satisfaction_score=pm.team_satisfaction_score,
+                improvement_areas=pm.improvement_areas,
+                struggle_areas=pm.struggle_areas,
+                coaching_effectiveness_score=pm.coaching_effectiveness_score,
+                calculated_by=pm.calculated_by,
+            )
+    except Exception:
+        pass
+
+    # --- Stakeholders ---
+    try:
+        from kanban.stakeholder_models import (
+            ProjectStakeholder, StakeholderTaskInvolvement,
+            EngagementMetrics, StakeholderTag, ProjectStakeholderTag,
+        )
+
+        stakeholder_tag_map = {}
+        for st in StakeholderTag.objects.filter(board=template_board):
+            new_st = StakeholderTag.objects.create(
+                name=st.name,
+                color=st.color,
+                board=new_board,
+                created_by=st.created_by,
+            )
+            stakeholder_tag_map[st.pk] = new_st
+
+        stakeholder_map = {}
+        for ps in ProjectStakeholder.objects.filter(board=template_board):
+            old_pk = ps.pk
+            new_ps = ProjectStakeholder.objects.create(
+                name=ps.name,
+                role=ps.role,
+                organization=ps.organization,
+                email=ps.email,
+                phone=ps.phone,
+                board=new_board,
+                influence_level=ps.influence_level,
+                interest_level=ps.interest_level,
+                current_engagement=ps.current_engagement,
+                desired_engagement=ps.desired_engagement,
+                notes=ps.notes,
+                is_active=ps.is_active,
+                created_by=ps.created_by,
+            )
+            ProjectStakeholder.objects.filter(pk=new_ps.pk).update(created_at=ps.created_at)
+            stakeholder_map[old_pk] = new_ps
+            # Copy stakeholder tags via through model
+            for pst in ProjectStakeholderTag.objects.filter(stakeholder_id=old_pk):
+                mapped_tag = stakeholder_tag_map.get(pst.tag_id)
+                if mapped_tag:
+                    ProjectStakeholderTag.objects.create(
+                        stakeholder=new_ps,
+                        tag=mapped_tag,
+                    )
+
+        for sti in StakeholderTaskInvolvement.objects.filter(
+            stakeholder__board=template_board
+        ).select_related('stakeholder', 'task'):
+            new_sh = stakeholder_map.get(sti.stakeholder_id)
+            new_task = task_map.get(sti.task_id)
+            if new_sh and new_task:
+                StakeholderTaskInvolvement.objects.create(
+                    stakeholder=new_sh,
+                    task=new_task,
+                    involvement_type=sti.involvement_type,
+                    engagement_status=sti.engagement_status,
+                    engagement_count=sti.engagement_count,
+                    last_engagement=sti.last_engagement,
+                    satisfaction_rating=sti.satisfaction_rating,
+                    feedback=sti.feedback,
+                    concerns=sti.concerns,
+                    metadata=sti.metadata,
+                )
+
+        for em in EngagementMetrics.objects.filter(board=template_board).select_related('stakeholder'):
+            new_sh = stakeholder_map.get(em.stakeholder_id)
+            if new_sh:
+                EngagementMetrics.objects.create(
+                    board=new_board,
+                    stakeholder=new_sh,
+                    total_engagements=em.total_engagements,
+                    engagements_this_month=em.engagements_this_month,
+                    engagements_this_quarter=em.engagements_this_quarter,
+                    average_engagements_per_month=em.average_engagements_per_month,
+                    primary_channel=em.primary_channel,
+                    channels_used=em.channels_used,
+                    average_satisfaction=em.average_satisfaction,
+                    positive_engagements_count=em.positive_engagements_count,
+                    negative_engagements_count=em.negative_engagements_count,
+                    days_since_last_engagement=em.days_since_last_engagement,
+                    pending_follow_ups=em.pending_follow_ups,
+                    engagement_gap=em.engagement_gap,
+                    period_start=em.period_start,
+                    period_end=em.period_end,
+                )
+
+        # --- Fresh Engagement Records (seeded at provision time, dates relative to today) ---
+        # Not copied from template — generated fresh so charts look populated from day one
+        # in every user's sandbox without carrying over template-specific history.
+        from kanban.stakeholder_models import StakeholderEngagementRecord
+        from datetime import date as _date, timedelta as _td
+        _today = _date.today()
+        _name_to_sh = {sh.name: sh for sh in stakeholder_map.values()}
+        # (stakeholder_name, days_ago, channel, description, outcome, sentiment, rating)
+        _seed_records = [
+            ('Dr. Priya Sharma',   7, 'meeting', 'Weekly project status review.',
+             'Budget confirmed. Authentication System escalated to P1.', 'positive', 5),
+            ('Dr. Priya Sharma',  28, 'video',   'Architecture milestone check-in.',
+             'Signed off on system design.', 'positive', 5),
+            ('Marcus Johnson',     5, 'video',   'Sprint planning — feature prioritisation.',
+             'User Registration elevated to P1 for current sprint.', 'positive', 5),
+            ('Marcus Johnson',    21, 'chat',    'Shared wireframe prototypes for review.',
+             'Minor UX revisions requested. Go-ahead given.', 'positive', 4),
+            ('Lisa Chen',         10, 'meeting', 'Security requirements workshop.',
+             'Session token policy agreed: 30 min idle, 8 hr absolute.', 'positive', 4),
+            ('Lisa Chen',         32, 'email',   'API Rate Limiting spec sent for compliance review.',
+             'Approved with minor notes on logging granularity.', 'neutral', 3),
+            ('David Park',         8, 'video',   'User Registration Flow UX review.',
+             'Prototypes approved. A11y improvements incorporated.', 'positive', 5),
+            ('David Park',        30, 'meeting', 'Design system handoff.',
+             'Component library transferred. Two open items on mobile breakpoints.', 'positive', 4),
+            ('Rachel Torres',     12, 'email',   'Feature preview summary and beta guide sent.',
+             'Positive response; staging access requested.', 'positive', 4),
+            ('James Wilson',      14, 'video',   'CI/CD pipeline architecture review.',
+             'Container registry confirmed. 2-week prod prep runway noted.', 'positive', 4),
+            ('James Wilson',      40, 'chat',    'Notification Service queue encryption discussion.',
+             'At-rest encryption flagged as requirement.', 'neutral', 3),
+            ('Tom Bradley',       60, 'email',   'Quarterly compliance status report.',
+             'Acknowledged. No compliance blockers raised.', 'neutral', 4),
+        ]
+        for _sh_name, _days_ago, _channel, _desc, _outcome, _sentiment, _rating in _seed_records:
+            _new_sh = _name_to_sh.get(_sh_name)
+            if _new_sh:
+                StakeholderEngagementRecord.objects.create(
+                    stakeholder=_new_sh,
+                    date=_today - _td(days=_days_ago),
+                    description=_desc,
+                    communication_channel=_channel,
+                    outcome=_outcome,
+                    engagement_sentiment=_sentiment,
+                    satisfaction_rating=_rating,
+                    follow_up_required=False,
+                    created_by=user,
+                )
+    except Exception:
+        pass
+
+    # --- Conflict Detection ---
+    try:
+        from kanban.conflict_models import (
+            ConflictDetection, ConflictResolution, ConflictNotification, ResolutionPattern,
+        )
+
+        def _remap_blob_task_ids(blob):
+            """conflict_data/implementation_data embed raw task PKs (task_id,
+            task1_id, task2_id) captured against the TEMPLATE board's tasks.
+            The M2M fields (ConflictDetection.tasks, etc.) get remapped to this
+            sandbox's cloned tasks via task_map below, but these JSON blobs
+            don't — so without this, resolution auto-apply (and the dependency
+            cascade it triggers) silently reads/writes the shared template
+            board's tasks instead of the sandbox owner's own copy. Drop the key
+            entirely when the referenced task wasn't cloned (e.g. archived)
+            rather than leaving a stale cross-board id behind.
+            """
+            if not isinstance(blob, dict):
+                return blob
+            remapped = dict(blob)
+            for key in ('task_id', 'task1_id', 'task2_id'):
+                if key in remapped and remapped[key] is not None:
+                    mapped = task_map.get(remapped[key])
+                    if mapped:
+                        remapped[key] = mapped.id
+                    else:
+                        del remapped[key]
+            return remapped
+
+        conflict_map = {}
+        for cd in ConflictDetection.objects.filter(board=template_board):
+            old_pk = cd.pk
+            new_cd = ConflictDetection.objects.create(
+                conflict_type=cd.conflict_type,
+                severity=cd.severity,
+                status=cd.status,
+                title=cd.title,
+                description=cd.description,
+                board=new_board,
+                conflict_data=_remap_blob_task_ids(cd.conflict_data),
+                ai_confidence_score=cd.ai_confidence_score,
+                suggested_resolutions=cd.suggested_resolutions,
+                resolution_feedback=cd.resolution_feedback,
+                resolution_effectiveness=cd.resolution_effectiveness,
+                detection_run_id=cd.detection_run_id,
+                auto_detection=cd.auto_detection,
+                resolved_at=cd.resolved_at,
+            )
+            ConflictDetection.objects.filter(pk=new_cd.pk).update(detected_at=cd.detected_at)
+            conflict_map[old_pk] = new_cd
+            # M2M: tasks
+            for old_task in cd.tasks.all():
+                mapped = task_map.get(old_task.pk)
+                if mapped:
+                    new_cd.tasks.add(mapped)
+            # M2M: affected_users
+            new_cd.affected_users.set(cd.affected_users.all())
+
+        resolution_map = {}
+        for cr in ConflictResolution.objects.filter(conflict__board=template_board):
+            new_conflict = conflict_map.get(cr.conflict_id)
+            if new_conflict:
+                # If the source resolution has stale/missing substantive reasoning
+                # (empty or only a historical note), clear it so the conflict_detail
+                # view regenerates it fresh for this user on first visit.
+                source_reasoning = (cr.ai_reasoning or '').strip()
+                copied_reasoning = (
+                    '' if (not source_reasoning or source_reasoning.startswith('Based on'))
+                    else source_reasoning
+                )
+                new_cr = ConflictResolution.objects.create(
+                    conflict=new_conflict,
+                    resolution_type=cr.resolution_type,
+                    title=cr.title,
+                    description=cr.description,
+                    action_steps=cr.action_steps,
+                    estimated_impact=cr.estimated_impact,
+                    ai_confidence=cr.ai_confidence,
+                    ai_reasoning=copied_reasoning,
+                    auto_applicable=cr.auto_applicable,
+                    implementation_data=_remap_blob_task_ids(cr.implementation_data),
+                    applied_at=cr.applied_at,
+                    applied_by=cr.applied_by,
+                    times_suggested=cr.times_suggested,
+                    times_accepted=cr.times_accepted,
+                    avg_effectiveness_rating=cr.avg_effectiveness_rating,
+                )
+                resolution_map[cr.pk] = new_cr
+
+                # A cloned 'reassign' suggestion's title/description hardcode
+                # a specific assignee name computed from the TEMPLATE board's
+                # workload at whatever time it was originally generated.
+                # Copying it verbatim means the same stale target survives
+                # every Reset Demo indefinitely, and can recommend a
+                # candidate who's actually more loaded than the overbooked
+                # user on THIS sandbox board. Recompute the target against
+                # this board's live workload instead.
+                if cr.resolution_type == 'reassign' and new_conflict.conflict_type == 'resource':
+                    try:
+                        from kanban.utils.conflict_detection import ConflictResolutionSuggester
+
+                        excluded_user_id = (new_conflict.conflict_data or {}).get('user_id')
+                        if not excluded_user_id:
+                            affected_user = new_conflict.affected_users.first()
+                            excluded_user_id = affected_user.id if affected_user else None
+
+                        task_id = (new_cr.implementation_data or {}).get('task_id')
+                        task = Task.objects.filter(id=task_id).first() if task_id else None
+
+                        if excluded_user_id and task:
+                            target_member, ai_confidence = ConflictResolutionSuggester.pick_reassignment_candidate(
+                                new_board, excluded_user_id, task=task
+                            )
+                            if target_member:
+                                overbooked_user = User.objects.filter(id=excluded_user_id).first()
+                                overbooked_name = (
+                                    (new_conflict.conflict_data or {}).get('user_name')
+                                    or (overbooked_user.get_full_name() or overbooked_user.username if overbooked_user else '')
+                                )
+                                target_name = target_member.get_full_name() or target_member.username
+                                new_cr.title = f"Reassign '{task.title}' to {target_name}"
+                                new_cr.description = (
+                                    f"Move task '{task.title}' from {overbooked_name} to {target_name} to balance workload."
+                                )
+                                new_cr.ai_confidence = ai_confidence
+                                new_cr.implementation_data = {
+                                    **(new_cr.implementation_data or {}),
+                                    'new_assignee_id': target_member.id,
+                                }
+                                new_cr.save(update_fields=['title', 'description', 'ai_confidence', 'implementation_data'])
+                    except Exception:
+                        pass
+
+        # Fix chosen_resolution FK on conflicts
+        for old_pk, new_cd in conflict_map.items():
+            old_cd = ConflictDetection.objects.get(pk=old_pk)
+            if old_cd.chosen_resolution_id:
+                mapped_res = resolution_map.get(old_cd.chosen_resolution_id)
+                if mapped_res:
+                    new_cd.chosen_resolution = mapped_res
+                    new_cd.save(update_fields=['chosen_resolution'])
+
+        for cn in ConflictNotification.objects.filter(conflict__board=template_board):
+            new_conflict = conflict_map.get(cn.conflict_id)
+            if new_conflict:
+                new_cn = ConflictNotification.objects.create(
+                    conflict=new_conflict,
+                    user=cn.user,
+                    read_at=cn.read_at,
+                    acknowledged=cn.acknowledged,
+                    notification_type=cn.notification_type,
+                )
+                ConflictNotification.objects.filter(pk=new_cn.pk).update(sent_at=cn.sent_at)
+
+        for rp in ResolutionPattern.objects.filter(board=template_board):
+            ResolutionPattern.objects.create(
+                conflict_type=rp.conflict_type,
+                resolution_type=rp.resolution_type,
+                board=new_board,
+                pattern_context=rp.pattern_context,
+                times_used=rp.times_used,
+                times_successful=rp.times_successful,
+                success_rate=rp.success_rate,
+                avg_effectiveness_rating=rp.avg_effectiveness_rating,
+                last_used_at=rp.last_used_at,
+                confidence_boost=rp.confidence_boost,
+            )
+    except Exception:
+        pass
+
+    # --- Messaging (ChatRoom + ChatMessage + TaskThreadComment) ---
+    try:
+        from messaging.models import ChatRoom, ChatMessage, TaskThreadComment
+
+        chatroom_map = {}
+        for cr in ChatRoom.objects.filter(board=template_board):
+            old_pk = cr.pk
+            new_cr = ChatRoom.objects.create(
+                board=new_board,
+                name=cr.name,
+                description=cr.description,
+                created_by=cr.created_by,
+            )
+            ChatRoom.objects.filter(pk=new_cr.pk).update(created_at=cr.created_at)
+            chatroom_map[old_pk] = new_cr
+            # Include the sandbox owner so the Messages badge has correct
+            # unread counts before they ever open the Messages page.
+            # Template members are demo personas; the real user is added
+            # alongside them.
+            new_cr.members.set(list(cr.members.all()) + [user])
+
+        for cm in ChatMessage.objects.filter(chat_room__board=template_board).order_by('created_at'):
+            new_room = chatroom_map.get(cm.chat_room_id)
+            if new_room:
+                new_cm = ChatMessage.objects.create(
+                    chat_room=new_room,
+                    author=cm.author,
+                    content=cm.content,
+                    is_read=cm.is_read,
+                    read_at=cm.read_at,
+                )
+                ChatMessage.objects.filter(pk=new_cm.pk).update(created_at=cm.created_at)
+                new_cm.read_by.set(cm.read_by.all())
+                new_cm.mentioned_users.set(cm.mentioned_users.all())
+
+        for ttc in TaskThreadComment.objects.filter(task__column__board=template_board):
+            new_task = task_map.get(ttc.task_id)
+            if new_task:
+                new_ttc = TaskThreadComment.objects.create(
+                    task=new_task,
+                    author=ttc.author,
+                    content=ttc.content,
+                )
+                TaskThreadComment.objects.filter(pk=new_ttc.pk).update(created_at=ttc.created_at)
+                new_ttc.mentioned_users.set(ttc.mentioned_users.all())
+    except Exception:
+        pass
+
+    # --- AI Assistant (Knowledge Base + Recommendations) ---
+    try:
+        from ai_assistant.models import ProjectKnowledgeBase, AITaskRecommendation
+
+        for kb in ProjectKnowledgeBase.objects.filter(board=template_board):
+            new_source = task_map.get(kb.source_task_id) if kb.source_task_id else None
+            ProjectKnowledgeBase.objects.create(
+                board=new_board,
+                content_type=kb.content_type,
+                title=kb.title,
+                content=kb.content,
+                summary=kb.summary,
+                source_task=new_source,
+                source_url=kb.source_url,
+                is_active=kb.is_active,
+            )
+
+        for rec in AITaskRecommendation.objects.filter(board=template_board):
+            new_task = task_map.get(rec.task_id)
+            if new_task:
+                AITaskRecommendation.objects.create(
+                    task=new_task,
+                    board=new_board,
+                    recommendation_type=rec.recommendation_type,
+                    title=rec.title,
+                    description=rec.description,
+                    potential_impact=rec.potential_impact,
+                    confidence_score=rec.confidence_score,
+                    suggested_action=rec.suggested_action,
+                    expected_benefit=rec.expected_benefit,
+                    status=rec.status,
+                    implemented_at=rec.implemented_at,
+                    implementation_notes=rec.implementation_notes,
+                )
+    except Exception:
+        pass
+
+    # --- Decision Center ---
+    # DecisionItems are NOT copied from the template.  ``collect_for_user()``
+    # (called right after sandbox provisioning) will regenerate them for the
+    # sandbox owner's board set, avoiding orphaned/duplicate items that were
+    # left with the wrong ``created_for`` user.
+    # See sandbox_provisioning.py → provision_sandbox_task.
+
+    # --- Task Activities (keep demo activity history for realism) ---
+    try:
+        from kanban.models import TaskActivity
+        for act in TaskActivity.objects.filter(task__column__board=template_board).select_related('task'):
+            new_task = task_map.get(act.task_id)
+            if new_task:
+                new_act = TaskActivity.objects.create(
+                    task=new_task,
+                    user=act.user,
+                    activity_type=act.activity_type,
+                    description=act.description,
+                )
+                TaskActivity.objects.filter(pk=new_act.pk).update(created_at=act.created_at)
+    except Exception:
+        pass
+
+    # --- Wiki Links (board/task references only, WikiPages are org-level) ---
+    try:
+        from wiki.models import WikiLink
+        for wl in WikiLink.objects.filter(board=template_board):
+            new_task_ref = task_map.get(wl.task_id) if wl.task_id else None
+            WikiLink.objects.create(
+                wiki_page=wl.wiki_page,  # Wiki pages are org-level, shared
+                link_type=wl.link_type,
+                task=new_task_ref,
+                board=new_board,
+                created_by=wl.created_by,
+                description=wl.description,
+            )
+    except Exception:
+        pass
+
+    # --- Preserve template timestamps (bypass auto_now via .update()) ---
+    # Without this, all sandbox tasks get updated_at=now which causes the
+    # Completion Velocity chart to show a single spike on today's date.
+    for new_pk, template_updated_at in task_template_dates.items():
+        Task.objects.filter(pk=new_pk).update(updated_at=template_updated_at)
+
+    # --- Requirements Analysis (categories, objectives, requirements) ---
+    try:
+        from requirements.models import RequirementCategory, ProjectObjective, Requirement
+
+        cat_map = {}
+        for cat in RequirementCategory.objects.filter(board=template_board):
+            new_cat = RequirementCategory.objects.create(
+                board=new_board,
+                name=cat.name,
+                description=cat.description,
+            )
+            cat_map[cat.pk] = new_cat
+
+        obj_map = {}
+        for obj in ProjectObjective.objects.filter(board=template_board):
+            new_obj = ProjectObjective.objects.create(
+                board=new_board,
+                title=obj.title,
+                description=obj.description,
+                created_by=obj.created_by,
+            )
+            obj_map[obj.pk] = new_obj
+
+        req_map = {}
+        for req in Requirement.objects.filter(board=template_board).prefetch_related(
+            'objectives', 'linked_tasks',
+        ):
+            new_req = Requirement.objects.create(
+                board=new_board,
+                title=req.title,
+                description=req.description,
+                type=req.type,
+                priority=req.priority,
+                status=req.status,
+                category=cat_map.get(req.category_id),
+                acceptance_criteria=req.acceptance_criteria,
+                created_by=req.created_by,
+                assigned_reviewer=req.assigned_reviewer,
+            )
+            req_map[req.pk] = new_req
+            for obj in req.objectives.all():
+                new_obj = obj_map.get(obj.pk)
+                if new_obj:
+                    new_req.objectives.add(new_obj)
+            for old_task in req.linked_tasks.all():
+                new_task = task_map.get(old_task.pk)
+                if new_task:
+                    new_req.linked_tasks.add(new_task)
+
+        # Related requirements (self-referential M2M)
+        for old_pk, new_req in req_map.items():
+            old_req = Requirement.objects.get(pk=old_pk)
+            for related in old_req.related_requirements.all():
+                new_related = req_map.get(related.pk)
+                if new_related:
+                    new_req.related_requirements.add(new_related)
+    except Exception:
+        pass  # Requirements copying is best-effort
+
+    # --- What-If Scenarios ---
+    whatif_map = {}  # old pk → new instance (needed for Shadow Branch source_scenario FK)
+    try:
+        from kanban.whatif_models import WhatIfScenario
+        for ws in WhatIfScenario.objects.filter(board=template_board):
+            old_pk = ws.pk
+            new_ws = WhatIfScenario.objects.create(
+                board=new_board,
+                created_by=ws.created_by,
+                name=ws.name,
+                scenario_type=ws.scenario_type,
+                input_parameters=ws.input_parameters,
+                baseline_snapshot=ws.baseline_snapshot,
+                impact_results=ws.impact_results,
+                ai_analysis=ws.ai_analysis,
+                is_starred=False,
+            )
+            WhatIfScenario.objects.filter(pk=new_ws.pk).update(created_at=ws.created_at)
+            whatif_map[old_pk] = new_ws
+    except Exception:
+        pass
+
+    # --- Shadow Branches + Snapshots + Divergence Logs ---
+    try:
+        from django.utils import timezone as _tz
+        from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
+        from kanban.tasks.shadow_branch_tasks import compute_baseline_velocity
+        _clone_now = _tz.now()
+        # Recompute (rather than copy) the baseline velocity against the new
+        # sandbox board's own cloned TeamVelocitySnapshot/BurndownPrediction
+        # rows (cloned earlier in this function). Copying the template's raw
+        # value verbatim let a stale/atypical baseline (e.g. 0.56 tasks/wk)
+        # survive into every sandbox, which inflates velocity_health =
+        # actual/baseline as soon as real tasks are completed and pushes
+        # every branch to the feasibility ceiling together.
+        _new_board_baseline_velocity = compute_baseline_velocity(new_board)
+        for branch in ShadowBranch.objects.filter(board=template_board):
+            old_branch_pk = branch.pk
+            new_source = whatif_map.get(branch.source_scenario_id) if branch.source_scenario_id else None
+            new_branch = ShadowBranch.objects.create(
+                board=new_board,
+                name=branch.name,
+                description=branch.description,
+                created_by=branch.created_by,
+                status=branch.status,
+                source_scenario=new_source,
+                branch_color=branch.branch_color,
+                is_starred=branch.is_starred,
+                baseline_velocity_per_week=_new_board_baseline_velocity or branch.baseline_velocity_per_week,
+            )
+            ShadowBranch.objects.filter(pk=new_branch.pk).update(created_at=branch.created_at)
+
+            # Collect snapshots ordered oldest-first so we can identify the
+            # latest one and pin it to today — ensuring it always falls inside
+            # the "How It Affected Your Branches" today window regardless of
+            # when the official demo data was last seeded.
+            branch_snaps = list(
+                BranchSnapshot.objects.filter(branch_id=old_branch_pk).order_by('captured_at')
+            )
+            latest_snap_pk = branch_snaps[-1].pk if branch_snaps else None
+
+            # Collapse consecutive byte-identical snapshots (same score/deltas/
+            # conflicts) so the race-duplicate pairs baked into the template
+            # (two recalcs one second apart writing the same row) don't get
+            # faithfully reproduced into every sandbox on Reset Demo — the same
+            # collapse the divergence-log clone below already does.  The latest
+            # snapshot is always kept, since it's pinned to "today" to drive the
+            # "How It Affected Your Branches" standup window.
+            previous_snap_key = None
+            for snap in branch_snaps:
+                snap_key = (
+                    round(float(snap.feasibility_score), 2),
+                    snap.scope_delta,
+                    snap.team_delta,
+                    snap.deadline_delta_weeks,
+                    tuple(snap.conflicts_detected or []),
+                )
+                if snap_key == previous_snap_key and snap.pk != latest_snap_pk:
+                    continue
+                previous_snap_key = snap_key
+                new_snap = BranchSnapshot.objects.create(
+                    branch=new_branch,
+                    scope_delta=snap.scope_delta,
+                    team_delta=snap.team_delta,
+                    deadline_delta_weeks=snap.deadline_delta_weeks,
+                    feasibility_score=snap.feasibility_score,
+                    projected_completion_date=snap.projected_completion_date,
+                    projected_budget_utilization=snap.projected_budget_utilization,
+                    conflicts_detected=snap.conflicts_detected,
+                    gemini_recommendation=snap.gemini_recommendation,
+                )
+                # Pin the most recent snapshot to now so it is visible in
+                # "How It Affected Your Branches" on the first page load.
+                new_captured_at = _clone_now if snap.pk == latest_snap_pk else snap.captured_at
+                BranchSnapshot.objects.filter(pk=new_snap.pk).update(captured_at=new_captured_at)
+
+            # Clone divergence logs, but:
+            #   (a) drop entries whose trigger_event looks like leftover
+            #       internal testing (e.g. "Test task", "Verification:",
+            #       "Test #1") — these polluted the template during earlier
+            #       hand-testing and survive every reset until filtered;
+            #   (b) collapse consecutive identical entries (same trigger
+            #       and same old/new scores) so a single real adjustment
+            #       can't surface as 8 back-to-back rows of "Board
+            #       recalculation after scope/team adjustment (+12.0)".
+            TEST_TRIGGER_PATTERNS = (
+                'test task',
+                'test #',
+                'verification:',
+                'regenerate ai rec',
+                'manual test',
+                'debug',
+            )
+
+            def _looks_like_test_trigger(text: str) -> bool:
+                if not text:
+                    return False
+                lowered = text.lower()
+                return any(p in lowered for p in TEST_TRIGGER_PATTERNS)
+
+            previous_key = None
+            div_logs = (
+                BranchDivergenceLog.objects
+                .filter(branch_id=old_branch_pk)
+                .order_by('logged_at')
+            )
+            for div in div_logs:
+                if _looks_like_test_trigger(div.trigger_event):
+                    continue
+                key = (
+                    div.trigger_event,
+                    str(div.old_score),
+                    str(div.new_score),
+                )
+                if key == previous_key:
+                    continue
+                previous_key = key
+                new_div = BranchDivergenceLog.objects.create(
+                    branch=new_branch,
+                    old_score=div.old_score,
+                    new_score=div.new_score,
+                    trigger_event=div.trigger_event,
+                )
+                BranchDivergenceLog.objects.filter(pk=new_div.pk).update(logged_at=div.logged_at)
+    except Exception:
+        pass
+
+    # --- Pre-Mortem Analysis + Acknowledgments ---
+    try:
+        from kanban.premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
+        for pm in PreMortemAnalysis.objects.filter(board=template_board):
+            old_pm_pk = pm.pk
+            new_pm = PreMortemAnalysis.objects.create(
+                board=new_board,
+                created_by=pm.created_by,
+                overall_risk_level=pm.overall_risk_level,
+                analysis_json=pm.analysis_json,
+                board_snapshot=pm.board_snapshot,
+            )
+            PreMortemAnalysis.objects.filter(pk=new_pm.pk).update(created_at=pm.created_at)
+
+            for ack in PreMortemScenarioAcknowledgment.objects.filter(pre_mortem_id=old_pm_pk):
+                new_ack = PreMortemScenarioAcknowledgment.objects.create(
+                    pre_mortem=new_pm,
+                    scenario_index=ack.scenario_index,
+                    acknowledged_by=ack.acknowledged_by,
+                    notes=ack.notes,
+                )
+                PreMortemScenarioAcknowledgment.objects.filter(pk=new_ack.pk).update(
+                    acknowledged_at=ack.acknowledged_at,
+                )
+    except Exception:
+        pass
+
+    # --- Stress Test Session + ImmunityScore + Scenarios + Vaccines ---
+    try:
+        from kanban.stress_test_models import (
+            StressTestSession, ImmunityScore, StressTestScenario, Vaccine,
+        )
+        for session in StressTestSession.objects.filter(board=template_board):
+            old_session_pk = session.pk
+            new_session = StressTestSession.objects.create(
+                board=new_board,
+                run_by=session.run_by,
+                score_rationale=session.score_rationale,
+                assumptions_made=session.assumptions_made,
+                vaccines_applied_at_run=session.vaccines_applied_at_run,
+            )
+            StressTestSession.objects.filter(pk=new_session.pk).update(created_at=session.created_at)
+
+            try:
+                old_score = ImmunityScore.objects.get(session_id=old_session_pk)
+                ImmunityScore.objects.create(
+                    session=new_session,
+                    overall=old_score.overall,
+                    schedule=old_score.schedule,
+                    budget=old_score.budget,
+                    team=old_score.team,
+                    dependencies=old_score.dependencies,
+                    scope_stability=old_score.scope_stability,
+                    schedule_rationale=old_score.schedule_rationale,
+                    budget_rationale=old_score.budget_rationale,
+                    team_rationale=old_score.team_rationale,
+                    dependencies_rationale=old_score.dependencies_rationale,
+                    scope_stability_rationale=old_score.scope_stability_rationale,
+                )
+            except ImmunityScore.DoesNotExist:
+                pass
+
+            for sc in StressTestScenario.objects.filter(session_id=old_session_pk):
+                StressTestScenario.objects.create(
+                    session=new_session,
+                    scenario_number=sc.scenario_number,
+                    attack_type=sc.attack_type,
+                    title=sc.title,
+                    attack_description=sc.attack_description,
+                    cascade_effect=sc.cascade_effect,
+                    outcome=sc.outcome,
+                    severity=sc.severity,
+                    tasks_blocked=sc.tasks_blocked,
+                    estimated_delay_weeks=sc.estimated_delay_weeks,
+                    has_recovery_path=sc.has_recovery_path,
+                    early_warning_sign=sc.early_warning_sign,
+                    tags=sc.tags,
+                    is_addressed=sc.is_addressed,
+                    addressed_at=sc.addressed_at,
+                    addressed_by=sc.addressed_by,
+                )
+
+            for vac in Vaccine.objects.filter(session_id=old_session_pk):
+                Vaccine.objects.create(
+                    session=new_session,
+                    board=new_board,
+                    vaccine_number=vac.vaccine_number,
+                    targets_scenario_number=vac.targets_scenario_number,
+                    name=vac.name,
+                    description=vac.description,
+                    effort_level=vac.effort_level,
+                    effort_rationale=vac.effort_rationale,
+                    projected_score_improvement=vac.projected_score_improvement,
+                    implementation_hint=vac.implementation_hint,
+                    is_applied=vac.is_applied,
+                    applied_at=vac.applied_at,
+                    applied_by=vac.applied_by,
+                )
+    except Exception:
+        pass
+
+    # --- Scope Autopsy Report + Timeline Events ---
+    try:
+        from kanban.scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
+        for report in ScopeAutopsyReport.objects.filter(board=template_board):
+            old_report_pk = report.pk
+            new_report = ScopeAutopsyReport.objects.create(
+                board=new_board,
+                created_by=report.created_by,
+                status=report.status,
+                baseline_task_count=report.baseline_task_count,
+                baseline_date=report.baseline_date,
+                final_task_count=report.final_task_count,
+                total_scope_growth_percentage=report.total_scope_growth_percentage,
+                total_delay_days=report.total_delay_days,
+                total_budget_impact=report.total_budget_impact,
+                timeline_json=report.timeline_json,
+                pattern_analysis=report.pattern_analysis,
+                ai_summary=report.ai_summary,
+                recommendations=report.recommendations,
+                board_snapshot=report.board_snapshot,
+            )
+            ScopeAutopsyReport.objects.filter(pk=new_report.pk).update(created_at=report.created_at)
+
+            for evt in ScopeTimelineEvent.objects.filter(report_id=old_report_pk):
+                ScopeTimelineEvent.objects.create(
+                    report=new_report,
+                    event_date=evt.event_date,
+                    title=evt.title,
+                    description=evt.description,
+                    source_type=evt.source_type,
+                    source_object_type=evt.source_object_type,
+                    source_object_id=evt.source_object_id,
+                    tasks_added=evt.tasks_added,
+                    tasks_removed=evt.tasks_removed,
+                    net_task_change=evt.net_task_change,
+                    added_by=evt.added_by,
+                    estimated_delay_days=evt.estimated_delay_days,
+                    estimated_budget_impact=evt.estimated_budget_impact,
+                    cumulative_task_count=evt.cumulative_task_count,
+                    is_major_event=evt.is_major_event,
+                )
+    except Exception:
+        pass
+
+    # --- Project Confidence score history (Triple Constraint → 30-Day Trend) ---
+    # Without this, sandbox boards have zero history and the trend chart shows
+    # "Not enough data yet" until the user recalculates twice. computed_at is
+    # auto_now_add, so preserve the original timestamp with a follow-up update.
+    try:
+        from kanban.project_signals_models import ProjectConfidenceScore
+        for sc in ProjectConfidenceScore.objects.filter(board=template_board):
+            new_sc = ProjectConfidenceScore.objects.create(
+                board=new_board,
+                scope_score=sc.scope_score,
+                budget_score=sc.budget_score,
+                schedule_score=sc.schedule_score,
+                signal_adjustment=sc.signal_adjustment,
+                composite_score=sc.composite_score,
+                trend=sc.trend,
+                previous_score=sc.previous_score,
+                computation_data=sc.computation_data,
+            )
+            ProjectConfidenceScore.objects.filter(pk=new_sc.pk).update(
+                computed_at=sc.computed_at,
+            )
+    except Exception:
+        pass
+
+    # --- Exit Protocol: Health Signals + Cemetery Entry + HospiceSession + Organs ---
+    try:
+        from exit_protocol.models import (
+            ProjectHealthSignal, CemeteryEntry, HospiceSession, ProjectOrgan,
+        )
+        for sig in ProjectHealthSignal.objects.filter(board=template_board):
+            new_sig = ProjectHealthSignal.objects.create(
+                board=new_board,
+                velocity_last_sprint=sig.velocity_last_sprint,
+                velocity_3sprint_avg=sig.velocity_3sprint_avg,
+                velocity_decline_pct=sig.velocity_decline_pct,
+                budget_spent_pct=sig.budget_spent_pct,
+                tasks_complete_pct=sig.tasks_complete_pct,
+                deadlines_missed_30d=sig.deadlines_missed_30d,
+                days_since_last_activity=sig.days_since_last_activity,
+                dimensions_available=sig.dimensions_available,
+                hospice_risk_score=sig.hospice_risk_score,
+                score_is_valid=sig.score_is_valid,
+                triggered_hospice=sig.triggered_hospice,
+            )
+            ProjectHealthSignal.objects.filter(pk=new_sig.pk).update(recorded_at=sig.recorded_at)
+
+        # Cemetery entries reference a board — only copy if the entry is on this template board
+        for ce in CemeteryEntry.objects.filter(board=template_board):
+            CemeteryEntry.objects.create(
+                board=new_board,
+                project_name=ce.project_name,
+                project_description=ce.project_description,
+                board_id_snapshot=new_board.pk,
+                team_size=ce.team_size,
+                total_tasks=ce.total_tasks,
+                completed_tasks=ce.completed_tasks,
+                budget_allocated=ce.budget_allocated,
+                budget_spent=ce.budget_spent,
+                start_date=ce.start_date,
+                end_date=ce.end_date,
+                cause_of_death=ce.cause_of_death,
+                ai_cause_rationale=ce.ai_cause_rationale,
+                contributing_factors=ce.contributing_factors,
+                autopsy_report=ce.autopsy_report,
+                autopsy_summary=ce.autopsy_summary,
+                lessons_to_repeat=ce.lessons_to_repeat,
+                lessons_to_avoid=ce.lessons_to_avoid,
+                open_questions=ce.open_questions,
+                decline_timeline=ce.decline_timeline,
+                tags=ce.tags,
+            )
+
+        # HospiceSession + ProjectOrgans — copy so Organ Bank and Transition Memos
+        # are populated in every sandbox, not just the master template board.
+        for hs in HospiceSession.objects.filter(board=template_board):
+            new_hs = HospiceSession.objects.create(
+                board=new_board,
+                initiated_by=hs.initiated_by,
+                trigger_type=hs.trigger_type,
+                status=hs.status,
+                ai_assessment=hs.ai_assessment,
+                knowledge_checklist=hs.knowledge_checklist,
+                team_transition_memos=hs.team_transition_memos,
+                checklist_completed_items=hs.checklist_completed_items,
+            )
+            HospiceSession.objects.filter(pk=new_hs.pk).update(
+                initiated_at=hs.initiated_at,
+                buried_at=hs.buried_at,
+            )
+            for organ in ProjectOrgan.objects.filter(hospice_session=hs):
+                new_organ = ProjectOrgan.objects.create(
+                    source_board=new_board,
+                    hospice_session=new_hs,
+                    organ_type=organ.organ_type,
+                    name=organ.name,
+                    description=organ.description,
+                    payload=organ.payload,
+                    reusability_score=organ.reusability_score,
+                    ai_rationale=organ.ai_rationale,
+                    best_suited_for=organ.best_suited_for,
+                    cautions=organ.cautions,
+                    status=organ.status,
+                )
+                ProjectOrgan.objects.filter(pk=new_organ.pk).update(
+                    extracted_at=organ.extracted_at,
+                )
+    except Exception:
+        pass
+
+    # --- Knowledge Graph: MemoryNodes & MemoryConnections ---
+    try:
+        _clone_board_memories(template_board, new_board)
+    except Exception:
+        pass
+
+    return new_board
+
+
+def _clone_board_memories(template_board, new_board):
+    """Deep-copy a board's Organizational Memory (MemoryNodes + the AI-discovered
+    MemoryConnections between them) from ``template_board`` onto ``new_board``.
+
+    Used when provisioning a per-user demo sandbox copy, and re-used by the
+    ``resync_demo_sandbox_memories`` management command to restore existing copies
+    to the curated set. Carries the Spectra gap state (``has_gaps`` and friends)
+    so cloned demo memories keep their "Gaps Noted" badges — otherwise copies fall
+    back to ``has_gaps=False`` and the demo user never sees the Ask-Spectra
+    "fill the gaps" loop.
+    """
+    from knowledge_graph.models import MemoryNode, MemoryConnection
+    node_map = {}  # old node pk → new node instance
+    for node in MemoryNode.objects.filter(board=template_board):
+        old_pk = node.pk
+        new_node = MemoryNode(
+            board=new_board,
+            mission=node.mission,
+            node_type=node.node_type,
+            title=node.title,
+            content=node.content,
+            context_data=node.context_data,
+            tags=node.tags,
+            created_by=node.created_by,
+            is_auto_captured=node.is_auto_captured,
+            is_org_wide=node.is_org_wide,
+            source_object_type=node.source_object_type,
+            source_object_id=node.source_object_id,
+            importance_score=node.importance_score,
+            has_gaps=node.has_gaps,
+            gap_questions=node.gap_questions,
+            gap_questions_original=node.gap_questions_original,
+            gaps_analyzed=node.gaps_analyzed,
+        )
+        new_node.save()
+        MemoryNode.objects.filter(pk=new_node.pk).update(created_at=node.created_at)
+        node_map[old_pk] = new_node
+
+    # Copy AI-discovered connections between copied nodes
+    for conn in MemoryConnection.objects.filter(from_node__board=template_board):
+        new_from = node_map.get(conn.from_node_id)
+        new_to = node_map.get(conn.to_node_id)
+        if new_from and new_to:
+            MemoryConnection.objects.get_or_create(
+                from_node=new_from,
+                to_node=new_to,
+                connection_type=conn.connection_type,
+                defaults={
+                    'reason': conn.reason,
+                    'ai_generated': conn.ai_generated,
+                },
+            )
+
+
+NUM_TASKS_TO_REASSIGN = 3  # How many demo tasks to reassign to the real user
+
+# Tasks whose ownership is asserted by name in the seeded coaching suggestions
+# (see populate_all_demo_data._create_coaching_suggestions).  These must NOT be
+# reassigned to the sandbox owner, or the AI Coach cards contradict the board
+# (e.g. the overload card says "Priya owns Social Login Integration" while the
+# board shows it assigned to the real user).
+_COACHING_PROTECTED_TASK_TITLES = [
+    'Social Login Integration',
+    'Database Schema & Migrations',
+    'Authentication System',
+]
+
+
+def _reassign_demo_tasks_to_user(sandbox, user):
+    """
+    Pick NUM_TASKS_TO_REASSIGN tasks on the user's sandbox copy and reassign
+    them from demo personas to the real user.  Store the mapping in
+    sandbox.reassigned_tasks so we can restore on leave.
+
+    Selection criteria: prefer variety — different priorities, with due dates,
+    from different demo personas.
+    """
+    from kanban.models import Board, Task
+
+    boards = Board.objects.filter(owner=user, is_sandbox_copy=True)
+    if not boards.exists():
+        return
+
+    # Idempotency guard: never reassign if the user already has tasks assigned
+    # on their sandbox.  This function runs on EVERY demo (re-)entry
+    # (toggle_demo_mode / switch_workspace).  Without this guard, a "dirty"
+    # exit — leaving demo by navigating away or letting the session end, so the
+    # restore step never ran — leaves the previous batch still assigned to the
+    # user.  The candidate filter below only picks persona-owned tasks, so a
+    # second pass selects a *different* set of NUM_TASKS_TO_REASSIGN tasks and
+    # overwrites ``reassigned_tasks`` — the user accumulates 3 → 6 → 9… tasks
+    # while the restore mapping only tracks the latest batch (orphaning the
+    # rest).  If tasks are already assigned, the sandbox is already in a valid
+    # state; leave it untouched.
+    already_assigned = Task.objects.filter(
+        column__board__in=boards,
+        item_type='task',
+        assigned_to=user,
+    ).exclude(progress=100).exists()
+    if already_assigned:
+        return
+
+    # Find tasks on sandbox boards that are assigned to demo personas
+    candidates = list(
+        Task.objects
+        .filter(
+            column__board__in=boards,
+            item_type='task',
+            assigned_to__isnull=False,
+            assigned_to__email__contains='@demo.prizmai.local',
+        )
+        .exclude(progress=100)
+        .exclude(title__in=_COACHING_PROTECTED_TASK_TITLES)
+        .select_related('assigned_to', 'column__board')
+        .order_by('due_date')
+    )
+
+    # Pick tasks from distinct priority tiers so the dashboard "My Tasks"
+    # sort/filter shows clearly different results for each sort mode.
+    # Strategy: one urgent, one medium, one high — each from a different
+    # priority level so Urgency/Priority/Due Date sorts all produce
+    # visibly different orderings.
+    TARGET_PRIORITIES = ['urgent', 'medium', 'high', 'low']
+    picked = []
+    used_ids = set()
+    for target_priority in TARGET_PRIORITIES:
+        if len(picked) >= NUM_TASKS_TO_REASSIGN:
+            break
+        for t in candidates:
+            if t.id not in used_ids and t.priority == target_priority:
+                picked.append(t)
+                used_ids.add(t.id)
+                break
+    # Fill any remaining slots from whatever is left
+    if len(picked) < NUM_TASKS_TO_REASSIGN:
+        for t in candidates:
+            if t.id not in used_ids and len(picked) < NUM_TASKS_TO_REASSIGN:
+                picked.append(t)
+                used_ids.add(t.id)
+
+    mapping = {}
+    for task in picked:
+        mapping[str(task.id)] = task.assigned_to_id
+        task.assigned_to = user
+        task.save(update_fields=['assigned_to'])
+
+    sandbox.reassigned_tasks = mapping
+    sandbox.save(update_fields=['reassigned_tasks'])
+
+    # Spread out updated_at so the "Recent" sort produces a clearly different
+    # order from Urgency/Priority/Due Date sorts.
+    # picked is ordered [urgent, medium, high, ...], so we assign the freshest
+    # timestamp to the last item (high priority) and the oldest to the first
+    # (urgent) — making Recent sort roughly reverse of Priority sort.
+    from django.utils import timezone as _tz
+    from datetime import timedelta as _td
+    _offsets = [_td(days=14), _td(days=5), _td(hours=2)]
+    for task, offset in zip(picked, _offsets):
+        Task.objects.filter(pk=task.pk).update(updated_at=_tz.now() - offset)
+
+
+def _restore_demo_task_assignments(sandbox):
+    """
+    Reassign tasks back to their original demo persona owners using the
+    mapping stored in sandbox.reassigned_tasks.
+    """
+    from kanban.models import Task
+    from django.contrib.auth.models import User
+
+    mapping = sandbox.reassigned_tasks or {}
+    if not mapping:
+        return
+
+    for task_id_str, original_user_id in mapping.items():
+        try:
+            task = Task.objects.get(pk=int(task_id_str))
+            task.assigned_to_id = original_user_id
+            task.save(update_fields=['assigned_to'])
+        except Task.DoesNotExist:
+            pass  # Task was deleted (board purged)
+
+    sandbox.reassigned_tasks = {}
+    sandbox.save(update_fields=['reassigned_tasks'])
+
+
+def _join_demo_org(user):
+    """Add the user to the demo organization and as a member of the demo board."""
+    from accounts.models import Organization, UserProfile
+    from kanban.models import Board, BoardMembership
+
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    if not demo_org:
+        return
+
+    # Store original org so we can restore on leave
+    profile = user.profile
+    if not profile.organization or not profile.organization.is_demo:
+        # Only update if not already in demo org
+        profile._original_org_id = getattr(profile, '_original_org_id', profile.organization_id)
+        profile.organization = demo_org
+        profile.save(update_fields=['organization'])
+
+
+def _clone_discovery_ideas_for_user(user):
+    """Clone the canonical demo Discovery ideas into a private per-user set.
+
+    Discovery ideas are organization-scoped, but the demo sandbox isolates per
+    user (each demo user gets their own private board copies). To make Discovery
+    obey the same model, every demo user gets their own copy of the template
+    ideas (sandbox_owner=user); their scoring / approval / comments never touch
+    the shared template (sandbox_owner=None) or any other user's copies.
+
+    Idempotent: clears the user's existing clones first, so it can be called on
+    every (re-)provision and reset. Promotions are re-pointed at the user's own
+    sandbox board copy (and the matching cloned task) so the "promoted to board"
+    state is per-user too.
+    """
+    from accounts.models import Organization
+    from kanban.discovery_models import DiscoveryIdea, IdeaComment, IdeaPromotion
+    from kanban.models import Board, Task
+
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    if not demo_org:
+        return
+
+    # Clear existing clones for idempotency (reset re-clones from the template).
+    DiscoveryIdea.objects.filter(organization=demo_org, sandbox_owner=user).delete()
+
+    templates = DiscoveryIdea.objects.filter(
+        organization=demo_org, is_demo=True, sandbox_owner__isnull=True,
+    ).prefetch_related('comments')
+
+    for tpl in templates:
+        clone = DiscoveryIdea.objects.create(
+            organization=demo_org,
+            workspace=tpl.workspace,
+            title=tpl.title,
+            description=tpl.description,
+            source=tpl.source,
+            stage=tpl.stage,
+            submitted_by=tpl.submitted_by,
+            ai_score_impact=tpl.ai_score_impact,
+            ai_score_effort=tpl.ai_score_effort,
+            ai_score_confidence=tpl.ai_score_confidence,
+            ai_score_recommendation=tpl.ai_score_recommendation,
+            ai_score_reasoning=tpl.ai_score_reasoning,
+            ai_scored_at=tpl.ai_scored_at,
+            promoted_at=tpl.promoted_at,
+            promoted_by=tpl.promoted_by,
+            is_demo=True,
+            sandbox_owner=user,
+        )
+        # Preserve the template's submission time (created_at is auto_now_add).
+        DiscoveryIdea.objects.filter(pk=clone.pk).update(created_at=tpl.created_at)
+
+        # Clone the comment thread, preserving author + timestamps.
+        for c in tpl.comments.all():
+            cc = IdeaComment.objects.create(idea=clone, author=c.author, content=c.content)
+            IdeaComment.objects.filter(pk=cc.pk).update(created_at=c.created_at)
+
+        # Clone the promotion, re-pointed at the user's own board copy + task.
+        tpl_promo = IdeaPromotion.objects.filter(idea=tpl).first()
+        if tpl_promo:
+            user_board = None
+            if tpl_promo.board_id:
+                user_board = Board.objects.filter(
+                    owner=user, is_sandbox_copy=True, cloned_from_id=tpl_promo.board_id,
+                ).first()
+            clone_promo = IdeaPromotion.objects.create(
+                idea=clone,
+                board=user_board or tpl_promo.board,
+                promoted_at=tpl_promo.promoted_at,
+                promoted_by=tpl_promo.promoted_by,
+            )
+            # A promoted task always carries the idea's title (see idea_promote
+            # and the seeder), and board cloning copies tasks by title — so find
+            # the matching task on the user's board copy by the idea title.
+            # Best-effort: if there's no match, the promotion just shows the
+            # board link without a task.
+            if user_board:
+                match = Task.objects.filter(
+                    column__board=user_board, title=clone.title,
+                ).first()
+                if match:
+                    clone_promo.tasks.add(match)
+                    # Mirror the template promoted task's phase onto the user's
+                    # board copy. The sandbox board is duplicated BEFORE the
+                    # discovery seeder (re)creates the template ticket with its
+                    # phase, so the copy can carry a stale/empty phase — sync it
+                    # here so the promoted ticket isn't stranded in the Gantt's
+                    # "Unphased" row.
+                    tpl_task = tpl_promo.tasks.first()
+                    if tpl_task and match.phase != tpl_task.phase:
+                        match.phase = tpl_task.phase
+                        match.save(update_fields=['phase'])
+
+
+def _clone_wiki_for_user(user):
+    """Clone the canonical demo wiki into a private per-user copy.
+
+    Wiki content (categories + pages) is workspace-scoped, but the demo sandbox
+    is a single shared workspace — so without per-user copies every demo user
+    would see, edit, and delete every other demo user's wiki content. Mirror the
+    Discovery / per-user-board isolation model: each demo user gets their own
+    clone of the template categories and pages (``sandbox_owner=user``), and the
+    wiki scope helper (``wiki/scoping.py``) shows a demo user only their own
+    clones — never the shared templates (``sandbox_owner IS NULL``) or anyone
+    else's copies. See [[_clone_discovery_ideas_for_user]].
+
+    Idempotent: clears the user's existing clones first, so it can be called on
+    every (re-)provision and reset. Preserves author, timestamps, tags,
+    transcript metadata and slugs so the cloned wiki reads identically to the
+    template (only the owner differs).
+    """
+    from accounts.models import Organization
+    from wiki.models import WikiCategory, WikiPage
+
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    if not demo_org:
+        return
+
+    # Clear existing clones for idempotency (reset re-clones from the template).
+    # Pages first (FK to category), then categories.
+    WikiPage.objects.filter(sandbox_owner=user).delete()
+    WikiCategory.objects.filter(sandbox_owner=user).delete()
+
+    # Clone the template categories, remembering template-id -> clone so cloned
+    # pages can be re-pointed at the user's own category copies.
+    cat_map = {}
+    template_cats = WikiCategory.objects.filter(
+        organization=demo_org, sandbox_owner__isnull=True,
+    )
+    for tpl in template_cats:
+        clone = WikiCategory.objects.create(
+            name=tpl.name,
+            slug=tpl.slug,
+            description=tpl.description,
+            organization=tpl.organization,
+            workspace=tpl.workspace,
+            icon=tpl.icon,
+            color=tpl.color,
+            position=tpl.position,
+            ai_assistant_type=tpl.ai_assistant_type,
+            sandbox_owner=user,
+        )
+        cat_map[tpl.id] = clone
+
+    # Clone the template pages into the matching cloned categories. Two related
+    # passes so intra-wiki parent_page links resolve to the user's own copies.
+    template_pages = list(WikiPage.objects.filter(
+        organization=demo_org, sandbox_owner__isnull=True,
+        category__in=template_cats,
+    ))
+    page_map = {}
+    for tpl in template_pages:
+        clone_cat = cat_map.get(tpl.category_id)
+        if clone_cat is None:
+            continue
+        clone = WikiPage.objects.create(
+            title=tpl.title,
+            slug=tpl.slug,
+            content=tpl.content,
+            category=clone_cat,
+            organization=tpl.organization,
+            workspace=tpl.workspace,
+            created_by=tpl.created_by,
+            updated_by=tpl.updated_by,
+            is_published=tpl.is_published,
+            is_pinned=tpl.is_pinned,
+            tags=tpl.tags,
+            transcript_metadata=tpl.transcript_metadata,
+            version=tpl.version,
+            sandbox_owner=user,
+        )
+        # Preserve the template's timestamps (created_at is auto_now_add and
+        # updated_at is auto_now, so both are overwritten on create) — the
+        # Knowledge Hub orders by -updated_at and shows the created date.
+        WikiPage.objects.filter(pk=clone.pk).update(
+            created_at=tpl.created_at, updated_at=tpl.updated_at,
+        )
+        page_map[tpl.id] = clone
+
+    # Second pass: re-point hierarchical parent_page links within the clone set.
+    for tpl in template_pages:
+        if tpl.parent_page_id and tpl.id in page_map:
+            parent_clone = page_map.get(tpl.parent_page_id)
+            if parent_clone is not None:
+                WikiPage.objects.filter(pk=page_map[tpl.id].pk).update(
+                    parent_page=parent_clone,
+                )
+
+
+def _remap_demo_time_entries_to_owner(user):
+    """Repair pre-existing sandboxes so the time-tracking dashboard is per-user.
+
+    The dashboard is a personal timesheet filtered by ``user=request.user``.
+    Sandboxes provisioned before the clone fix carry the primary persona
+    (priya.sharma)'s seeded time entries owned by the persona, so the real user
+    owns none and falls back to shared persona data. Remap those persona-owned
+    entries on the user's own sandbox boards to the user, matching the isolation
+    model used by [[_reassign_demo_tasks_to_user]] and
+    [[_clone_discovery_ideas_for_user]].
+
+    Idempotent: only priya-owned rows are targeted and reassigned to ``user``, so
+    a second pass finds nothing.
+    """
+    from django.contrib.auth.models import User
+    from kanban.models import Board
+    from kanban.budget_models import TimeEntry
+
+    persona = User.objects.filter(username='priya.sharma').first()
+    if not persona:
+        return
+    sandbox_boards = Board.objects.filter(owner=user, is_sandbox_copy=True)
+    if not sandbox_boards.exists():
+        return
+    TimeEntry.objects.filter(
+        user=persona,
+        task__column__board__in=sandbox_boards,
+    ).update(user=user)
+
+
+def _clone_calendar_events_for_user(user):
+    """Clone the demo CalendarEvents into the user's own sandbox boards.
+
+    Calendar events are seeded only on the official demo template board and were
+    never cloned per user, so the calendar view read them off the shared template
+    (``board__is_official_demo_board=True``). Their teammate-visibility then
+    depended on which persona team happened to be a member of the user's sandbox,
+    so different users saw different (or no) events. To obey the per-user sandbox
+    isolation model ([[project_demo_sandbox_isolation_model]], same fix as
+    [[_remap_demo_time_entries_to_owner]] and [[_clone_discovery_ideas_for_user]]),
+    every user gets their own copy of the events on their own board.
+
+    Most clones' ``created_by`` is remapped to the sandbox owner so the events are
+    visible via the calendar's "my own events" clause and the owner "owns" their
+    calendar. ``linked_task`` is re-pointed at the matching cloned task by title;
+    participants (valid persona users) are kept for display.
+
+    A small subset (``_PERSONA_OWNED_TITLES``) deliberately KEEPS its persona
+    ``created_by`` instead of remapping. Personas are genuine members of the
+    sandbox board (see _duplicate_board), so these render to the owner as sanitized
+    "Priya — busy" / "Marcus — Out of Office" teammate-status blocks via the
+    calendar's teammate-visibility clause — this is what keeps the "Team can see
+    I'm busy" feature demonstrable. Because the owner is neither their creator nor a
+    participant, they appear exactly once (no "my own events" duplicate). Before the
+    events feed was board-scoped these would have collided with the template
+    originals; now that duplicate is gone ([[project_calendar_event_duplication]]).
+
+    Clone-if-empty: skips any sandbox board that already has events, so it is
+    idempotent across re-entries and never wipes events the user created
+    themselves. Fresh (re-)provision purges sandbox events first
+    (``_purge_existing_sandbox``), so this repopulates them cleanly.
+    """
+    from kanban.models import Board, CalendarEvent, CalendarEventParticipant, Task
+
+    # Seeded events kept persona-owned so the owner sees genuine teammate
+    # busy/OOO blocks (matched by title — populate_calendar_demo_data). Chosen
+    # because the sandbox owner is not a participant in any of them, so they read
+    # naturally as "someone else is busy" rather than the owner's own events.
+    _PERSONA_OWNED_TITLES = {
+        'Marcus Chen - PTO',
+        'Architecture Review: Search Engine',
+        '1:1: Priya & Marcus',
+    }
+
+    sandbox_boards = Board.objects.filter(
+        owner=user, is_sandbox_copy=True, cloned_from__isnull=False,
+    ).select_related('cloned_from')
+    for sb in sandbox_boards:
+        template = sb.cloned_from
+        if CalendarEvent.objects.filter(board=sb).exists():
+            # Already populated (cloned or user-created) — leave the events
+            # themselves untouched, but repair cloned_from lineage on any rows
+            # cloned before that field existed, so the feed can dedupe them.
+            _backfill_cloned_from_lineage(sb, template)
+            continue
+        # Board cloning copies tasks by title, so map linked tasks by title.
+        sb_tasks = {t.title: t for t in Task.objects.filter(column__board=sb)}
+        for ev in CalendarEvent.objects.filter(board=template).prefetch_related('participant_links'):
+            new_linked = sb_tasks.get(ev.linked_task.title) if ev.linked_task_id else None
+            # Keep persona ownership for the teammate-status subset; everything
+            # else is owned by the sandbox owner.
+            clone_creator = ev.created_by if ev.title in _PERSONA_OWNED_TITLES else user
+            clone = CalendarEvent.objects.create(
+                title=ev.title,
+                description=ev.description,
+                event_type=ev.event_type,
+                visibility=ev.visibility,
+                start_datetime=ev.start_datetime,
+                end_datetime=ev.end_datetime,
+                is_all_day=ev.is_all_day,
+                location=ev.location,
+                board=sb,
+                linked_task=new_linked,
+                created_by=clone_creator,
+                is_demo=True,
+                cloned_from=ev,
+            )
+            # Preserve each participant's real RSVP status from the seed
+            # narrative (pending/declined/accepted) rather than flattening
+            # everyone to "accepted" — the demo deliberately seeds RSVP variety
+            # (see populate_calendar_demo_data) and every real user only ever
+            # sees their own sandbox clone, so this is the only place that
+            # variety would ever be visible.
+            for link in ev.participant_links.all():
+                CalendarEventParticipant.objects.create(
+                    event=clone, user=link.user, status=link.status,
+                    responded_at=link.responded_at,
+                )
+
+
+def _backfill_cloned_from_lineage(sandbox_board, template_board):
+    """Repairs CalendarEvent.cloned_from lineage for sandbox clones created
+    before that field existed. Matches by (title, start_datetime) — the clone
+    loop above never mutates either — and skips any title+start_datetime pair
+    that isn't unique on the template board rather than guessing wrong.
+
+    Called both from the sandbox owner's own provisioning flows above, and
+    from unified_calendar_events_api for any sandbox board a *viewer*
+    currently has in scope (regardless of whether they own it) — a demo
+    persona browsing a teammate's sandbox needs this repaired on her own
+    request, not just on the owner's.
+    """
+    from kanban.models import CalendarEvent
+
+    missing = CalendarEvent.objects.filter(board=sandbox_board, cloned_from__isnull=True)
+    if not missing.exists():
+        return
+    by_key, ambiguous = {}, set()
+    for ev in CalendarEvent.objects.filter(board=template_board):
+        key = (ev.title, ev.start_datetime)
+        if key in by_key:
+            ambiguous.add(key)
+        else:
+            by_key[key] = ev.id
+    for clone in missing:
+        key = (clone.title, clone.start_datetime)
+        if key in ambiguous or key not in by_key:
+            continue
+        clone.cloned_from_id = by_key[key]
+        clone.save(update_fields=['cloned_from'])
+
+
+def _clone_custom_fields_for_user(user):
+    """Clone the demo custom-field schema (+ seeded task values) per user.
+
+    ``CustomFieldDefinition`` is workspace-scoped, but the demo workspace is
+    shared by every demo user — so without per-user copies every demo user would
+    see, rename, and delete every other demo user's custom fields (and the
+    ``(workspace, name)`` uniqueness would even stop two users making the same
+    field). Mirror the Discovery / Wiki isolation model
+    ([[_clone_wiki_for_user]], [[_clone_discovery_ideas_for_user]]): each demo
+    user gets their own clone of the template definitions + options
+    (``sandbox_owner=user``), and the scope helper
+    (``kanban/custom_field_scoping.py``) shows a demo user only their own clones
+    — never the shared templates (``sandbox_owner IS NULL``) or anyone else's.
+
+    Also re-creates the seeded ``TaskCustomFieldValue`` rows: the values are
+    seeded only on the template board's tasks and ``_duplicate_board`` does not
+    copy them, so without this step a fresh sandbox shows an empty schema with no
+    values. We match template tasks to the user's sandbox tasks by title (board
+    cloning copies tasks by title) and re-point each value at the cloned
+    definition + cloned options.
+
+    Idempotent: clears the user's existing clones first (which cascades their
+    ``TaskCustomFieldValue`` rows), so it can be called on every (re-)provision
+    and reset.
+    """
+    from accounts.models import Organization
+    from kanban.models import Board, Task, Workspace
+    from kanban.custom_field_models import (
+        CustomFieldDefinition, CustomFieldOption, TaskCustomFieldValue,
+    )
+
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    if not demo_org:
+        return
+    demo_ws = Workspace.objects.filter(is_demo=True).first()
+    if not demo_ws:
+        return
+
+    # Clear existing clones for idempotency. Deleting the definitions cascades
+    # their TaskCustomFieldValue rows (FK on_delete=CASCADE), so sandbox task
+    # values are cleared too before we re-create them below.
+    CustomFieldDefinition.objects.filter(sandbox_owner=user).delete()
+
+    # Clone the template definitions (sandbox_owner IS NULL on the demo
+    # workspace) into the user's private set, remembering the id maps so values
+    # and options re-point at the clones.
+    def_map = {}   # template def id -> clone def
+    opt_map = {}   # template option id -> clone option
+    template_defs = CustomFieldDefinition.objects.filter(
+        workspace=demo_ws, sandbox_owner__isnull=True,
+    ).prefetch_related('options')
+    for tpl in template_defs:
+        clone = CustomFieldDefinition.objects.create(
+            workspace=tpl.workspace,
+            name=tpl.name,
+            field_type=tpl.field_type,
+            is_required=tpl.is_required,
+            is_multi_select=tpl.is_multi_select,
+            default_text=tpl.default_text,
+            default_number=tpl.default_number,
+            default_date=tpl.default_date,
+            default_boolean=tpl.default_boolean,
+            applies_to_tasks=tpl.applies_to_tasks,
+            applies_to_boards=tpl.applies_to_boards,
+            applies_to_epics=tpl.applies_to_epics,
+            exclude_from_ai=tpl.exclude_from_ai,
+            is_active=tpl.is_active,
+            position=tpl.position,
+            created_by=tpl.created_by,
+            sandbox_owner=user,
+        )
+        def_map[tpl.id] = clone
+        for opt in tpl.options.all():
+            clone_opt = CustomFieldOption.objects.create(
+                field=clone,
+                value=opt.value,
+                is_default=opt.is_default,
+                position=opt.position,
+            )
+            opt_map[opt.id] = clone_opt
+
+    if not def_map:
+        return
+
+    # Re-create the seeded task values on the user's own sandbox tasks. Match
+    # sandbox tasks to their template originals by title within each cloned
+    # board (board cloning copies tasks by title; _reassign_demo_tasks_to_user
+    # never renames them).
+    sandbox_boards = Board.objects.filter(
+        owner=user, is_sandbox_copy=True, cloned_from__isnull=False,
+    ).select_related('cloned_from')
+    for sb in sandbox_boards:
+        template = sb.cloned_from
+        sb_tasks = {t.title: t for t in Task.objects.filter(column__board=sb)}
+        template_values = TaskCustomFieldValue.objects.filter(
+            task__column__board=template, field_id__in=def_map,
+        ).prefetch_related('selected_options')
+        for tv in template_values:
+            sb_task = sb_tasks.get(tv.task.title)
+            clone_def = def_map.get(tv.field_id)
+            if sb_task is None or clone_def is None:
+                continue
+            new_val = TaskCustomFieldValue.objects.create(
+                task=sb_task,
+                field=clone_def,
+                value_text=tv.value_text,
+                value_number=tv.value_number,
+                value_date=tv.value_date,
+                value_boolean=tv.value_boolean,
+                updated_by=tv.updated_by,
+            )
+            selected = [
+                opt_map[o.id] for o in tv.selected_options.all() if o.id in opt_map
+            ]
+            if selected:
+                new_val.selected_options.set(selected)
+
+
+def _leave_demo_org(user):
+    """Remove the user from the demo organization, restoring their original org.
+
+    The original org is recovered by looking for the user's real (non-demo)
+    workspace or, failing that, an org created by the user.  This avoids
+    relying on a transient in-memory attribute that would be lost between
+    requests.
+    """
+    from accounts.models import UserProfile, Organization
+    from kanban.models import Workspace
+
+    profile = user.profile
+    if profile.organization and profile.organization.is_demo:
+        # Recover the user's real org from their non-demo workspace
+        real_ws = Workspace.objects.filter(
+            created_by=user, is_demo=False, is_active=True,
+        ).order_by('-created_at').first()
+        if real_ws and real_ws.organization:
+            profile.organization = real_ws.organization
+        else:
+            # Fallback: org the user created
+            real_org = Organization.objects.filter(
+                created_by=user, is_demo=False,
+            ).order_by('-id').first()
+            profile.organization = real_org  # may be None
+        profile.save(update_fields=['organization'])
+
+
+def _purge_existing_sandbox(user):
+    """
+    Delete any existing sandbox for the user (boards + DemoSandbox record).
+
+    Comprehensive cleanup of ALL user-generated artifacts across every feature:
+    - Sandbox-copy boards (is_sandbox_copy=True)
+    - User-created boards in the demo workspace (manually created during demo)
+    - Exit Protocol: HospiceSession, CemeteryEntry, ProjectOrgan, OrganTransplant, etc.
+    - Models with SET_NULL on Board FK (orphaned after board deletion)
+    - User-scoped data: DC briefings/settings, notifications, AI sessions, Spectra state
+    - GenericForeignKey models: UserFavorite, StrategicFollower, StrategicUpdate
+    - Commitment protocol: UserCredibilityScore
+    - Knowledge graph: MemoryNode, MemoryConnection, OrganizationalMemoryQuery
+    - Wiki: user-created WikiPages
+    - Analytics: UserSession, AI request logs
+    - Onboarding: OnboardingWorkspacePreview
+    - User-created tasks on official demo template boards
+    - Exit protocol entries on official demo template boards
+    """
+    from kanban.models import DemoSandbox, Board, Task, Workspace
+    from accounts.models import Organization
+
+    uid = getattr(user, 'id', None)
+
+    sandbox_boards = Board.objects.filter(
+        owner=user,
+        is_sandbox_copy=True,
+        is_official_demo_board=False,
+        is_seed_demo_data=False,
+    )
+
+    # Also find boards the user created manually in the demo workspace
+    # (these have is_sandbox_copy=False and wouldn't be caught above)
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    demo_ws = None
+    if demo_org:
+        demo_ws = Workspace.objects.filter(
+            organization=demo_org, is_demo=True, is_active=True,
+        ).first()
+    user_created_demo_boards = Board.objects.none()
+    if demo_ws:
+        user_created_demo_boards = Board.objects.filter(
+            created_by=user,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
+            workspace=demo_ws,
+        )
+
+    all_boards_to_delete = (sandbox_boards | user_created_demo_boards).distinct()
+    sandbox_board_ids = list(all_boards_to_delete.values_list('id', flat=True))
+
+    try:
+        sandbox = user.demo_sandbox
+        # Restore assignments before deleting
+        _restore_demo_task_assignments(sandbox)
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    if sandbox_board_ids:
+        sandbox_task_ids = list(
+            Task.objects.filter(column__board_id__in=sandbox_board_ids)
+            .values_list('id', flat=True)
+        )
+
+        # ── Models with SET_NULL on Board FK (won't cascade-delete) ──
+        try:
+            from ai_assistant.models import (
+                AIAssistantMessage, AIAssistantSession, AIAssistantAnalytics,
+            )
+            orphan_sessions = AIAssistantSession.objects.filter(board_id__in=sandbox_board_ids)
+            AIAssistantMessage.objects.filter(session__in=orphan_sessions).delete()
+            orphan_sessions.delete()
+            AIAssistantAnalytics.objects.filter(board_id__in=sandbox_board_ids).delete()
+        except Exception:
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
+
+        try:
+            from kanban.models import CalendarEvent
+            CalendarEvent.objects.filter(board_id__in=sandbox_board_ids).delete()
+        except Exception:
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
+
+        try:
+            from knowledge_graph.models import MemoryNode, MemoryConnection
+            orphan_nodes = MemoryNode.objects.filter(board_id__in=sandbox_board_ids)
+            orphan_node_ids = list(orphan_nodes.values_list('id', flat=True))
+            if orphan_node_ids:
+                MemoryConnection.objects.filter(
+                    models.Q(from_node_id__in=orphan_node_ids)
+                    | models.Q(to_node_id__in=orphan_node_ids)
+                ).delete()
+                orphan_nodes.delete()
+        except Exception:
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
+
+        try:
+            from wiki.models import WikiLink
+            WikiLink.objects.filter(board_id__in=sandbox_board_ids).delete()
+            if sandbox_task_ids:
+                WikiLink.objects.filter(task_id__in=sandbox_task_ids).delete()
+        except Exception:
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
+
+        # ── Exit Protocol models (belt-and-suspenders, also cascade from board) ──
+        try:
+            from exit_protocol.models import (
+                CemeteryEntry, HospiceSession, ProjectOrgan,
+                OrganTransplant, ProjectHealthSignal, HospiceDismissal,
+            )
+            # OrganTransplant references both source and target boards
+            OrganTransplant.objects.filter(
+                models.Q(organ__source_board_id__in=sandbox_board_ids)
+                | models.Q(target_board_id__in=sandbox_board_ids)
+            ).delete()
+            ProjectOrgan.objects.filter(source_board_id__in=sandbox_board_ids).delete()
+            CemeteryEntry.objects.filter(board_id__in=sandbox_board_ids).delete()
+            HospiceSession.objects.filter(board_id__in=sandbox_board_ids).delete()
+            ProjectHealthSignal.objects.filter(board_id__in=sandbox_board_ids).delete()
+            HospiceDismissal.objects.filter(board_id__in=sandbox_board_ids).delete()
+        except Exception:
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
+
+        # ── Nullify SET_NULL FKs from objects OUTSIDE the deletion set ──
+        # (e.g. CemeteryEntry.resurrected_as on a non-sandbox board pointing
+        #  to a sandbox board, Board.cloned_from self-refs within the set, etc.)
+        try:
+            Board.objects.filter(
+                cloned_from_id__in=sandbox_board_ids,
+            ).update(cloned_from=None)
+        except Exception:
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
+
+        try:
+            from exit_protocol.models import CemeteryEntry
+            CemeteryEntry.objects.filter(
+                resurrected_as_id__in=sandbox_board_ids,
+            ).update(resurrected_as=None)
+        except Exception:
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
+
+        try:
+            from wiki.models import MeetingNotes
+            MeetingNotes.objects.filter(
+                related_board_id__in=sandbox_board_ids,
+            ).update(related_board=None)
+        except Exception:
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
+
+        # Explicitly delete board-scoped signal rows first. This clears the rows
+        # that exist *before* the cascade; the post-cascade sweep below handles
+        # rows created *during* it.
+        try:
+            from kanban.project_signals_models import ProjectSignal, ProjectConfidenceScore
+            ProjectSignal.objects.filter(board_id__in=sandbox_board_ids).delete()
+            ProjectConfidenceScore.objects.filter(board_id__in=sandbox_board_ids).delete()
+        except Exception:
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
+
+        # ── Now delete sandbox boards + user-created demo boards (cascades most other models) ──
+        # Vendor note: the PRAGMA path below is SQLite-only. On PostgreSQL
+        # (production / Google Cloud) the plain .delete() runs with FK
+        # enforcement ON, so a genuinely-missed cascade child surfaces as an
+        # IntegrityError here instead of being silently orphaned. Either way the
+        # post-cascade orphan sweep below runs unconditionally, so the known
+        # ProjectSignal/TaskActivity orphans are cleaned on both backends.
+        from django.db import connection
+        if connection.vendor == 'sqlite':
+            # SQLite enforces FK constraints per-statement; complex cascade
+            # chains can fail even when Django's collector orders them
+            # correctly.  Temporarily disable FK checks for the bulk delete.
+            cursor = connection.cursor()
+            cursor.execute('PRAGMA foreign_keys = OFF')
+            try:
+                all_boards_to_delete.delete()
+            finally:
+                cursor.execute('PRAGMA foreign_keys = ON')
+        else:
+            all_boards_to_delete.delete()
+
+        # ── Post-cascade orphan sweep (root-cause fix) ──────────────────────
+        # A post_delete handler (record_project_signal_on_task_delete) inserts a
+        # fresh ProjectSignal for every task removed *during* the cascade above.
+        # Those rows are born after Django's collector already chose what to
+        # delete, so the pre-delete cleanup can't see them — and with FK checks
+        # off, SQLite doesn't reject them either. The result is orphaned rows
+        # that accumulate on every reset and eventually block migrations
+        # (PRAGMA foreign_key_check fails). Sweep them here, keyed on the id sets
+        # captured *before* deletion, so any rows created mid-cascade are removed.
+        try:
+            from kanban.project_signals_models import ProjectSignal, ProjectConfidenceScore
+            from kanban.models import TaskActivity
+            ProjectSignal.objects.filter(board_id__in=sandbox_board_ids).delete()
+            ProjectConfidenceScore.objects.filter(board_id__in=sandbox_board_ids).delete()
+            TaskActivity.objects.filter(task_id__in=sandbox_task_ids).delete()
+        except Exception:
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── User-scoped data (not board-scoped, survives board deletion) ──
+    try:
+        from decision_center.models import DecisionItem, DecisionCenterBriefing
+        DecisionItem.objects.filter(created_for=user).delete()
+        # Only clear the demo briefing — the real-workspace briefing survives.
+        DecisionCenterBriefing.objects.filter(user=user, is_demo=True).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    try:
+        from decision_center.models import DecisionCenterSettings
+        DecisionCenterSettings.objects.filter(user=user).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    try:
+        from django.core.cache import cache
+        cache.delete(f'dc_widget_{user.id}_demo')
+        cache.delete(f'dc_widget_{user.id}_real')
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    try:
+        from messaging.models import Notification
+        Notification.objects.filter(recipient=user).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    try:
+        from ai_assistant.models import AIAssistantMessage, AIAssistantSession
+        # Also clean any user-owned sessions not tied to a board
+        user_sessions = AIAssistantSession.objects.filter(user=user)
+        AIAssistantMessage.objects.filter(session__in=user_sessions).delete()
+        user_sessions.delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    try:
+        from ai_assistant.models import SpectraConversationState
+        SpectraConversationState.objects.filter(user=user).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    try:
+        from kanban.models import CalendarEvent
+        # Clean user-created calendar events (not board-scoped ones)
+        CalendarEvent.objects.filter(created_by=user, board__isnull=True, is_demo=True).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── GenericForeignKey models (orphaned references after board/task deletion) ──
+    try:
+        from kanban.models import UserFavorite
+        UserFavorite.objects.filter(user=user).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    try:
+        from kanban.models import StrategicFollower
+        StrategicFollower.objects.filter(user=user).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    try:
+        from kanban.models import StrategicUpdate
+        StrategicUpdate.objects.filter(author=user).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── Commitment / Prediction market user data ──
+    try:
+        from kanban.commitment_models import UserCredibilityScore
+        UserCredibilityScore.objects.filter(user=user).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── Knowledge graph query logs ──
+    try:
+        from knowledge_graph.models import OrganizationalMemoryQuery
+        OrganizationalMemoryQuery.objects.filter(asked_by=user).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── Wiki: the user's per-user demo clones ──
+    # Demo wiki is cloned per user (sandbox_owner=user); delete that whole set
+    # (pages first, then categories — pages FK to category) so a reset rebuilds
+    # it cleanly. Pages the user authored during the demo also carry
+    # sandbox_owner=user (set by the create view), so they're covered here.
+    # NOTE: we must NOT delete by created_by alone — a real user's real-workspace
+    # pages have sandbox_owner=None and would be wrongly purged. Legacy demo
+    # pages created before this fix (sandbox_owner=None) are scoped to the demo
+    # org so real content is never touched.
+    try:
+        from wiki.models import WikiPage, WikiCategory
+        from accounts.models import Organization
+        WikiPage.objects.filter(sandbox_owner=user).delete()
+        WikiCategory.objects.filter(sandbox_owner=user).delete()
+        demo_org = Organization.objects.filter(is_demo=True).first()
+        if demo_org:
+            WikiPage.objects.filter(
+                created_by=user, sandbox_owner__isnull=True, organization=demo_org,
+            ).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── Analytics session data ──
+    # Only delete closed (historical) sessions. The currently-open session must
+    # survive so that the logout feedback form can display accurate metrics.
+    # Deleting it here would cause the middleware to create a fresh session with
+    # all-zero counts on the very next request, making the logout page show 0
+    # for every metric even after an active demo session.
+    try:
+        from analytics.models import UserSession
+        UserSession.objects.filter(user=user, session_end__isnull=False).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── AI usage logs ──
+    try:
+        from api.ai_usage_models import AIRequestLog
+        AIRequestLog.objects.filter(user=user).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── Onboarding preview data ──
+    try:
+        from kanban.onboarding_models import OnboardingWorkspacePreview
+        OnboardingWorkspacePreview.objects.filter(user=user).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── Clean user-created tasks on official demo template boards ──
+    # Users may have accidentally created tasks on the template (e.g. via
+    # direct URL).  These are non-seed tasks that would otherwise be copied
+    # into every future sandbox, corrupting the demo baseline.
+    try:
+        template_boards = Board.objects.filter(is_official_demo_board=True)
+        user_tasks_on_template = Task.objects.filter(
+            column__board__in=template_boards,
+            is_seed_demo_data=False,
+            created_by=user,
+        )
+        if user_tasks_on_template.exists():
+            from kanban.models import Comment, TaskActivity, TaskFile
+            task_ids = list(user_tasks_on_template.values_list('id', flat=True))
+            Comment.objects.filter(task_id__in=task_ids).delete()
+            TaskActivity.objects.filter(task_id__in=task_ids).delete()
+            TaskFile.objects.filter(task_id__in=task_ids).delete()
+            user_tasks_on_template.delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── Strip real-user pollution from official demo template boards ──
+    # A real user must never own TimeEntry rows or a BoardMembership on the
+    # official template (invariant: see [[project_demo_reset_official_board_invariants]]).
+    # _duplicate_board clones template time entries, so any stray real-user rows
+    # here get copied into every new sandbox as that user's own, inflating their
+    # timesheet on every reset. Delete them so the user self-heals on reset even
+    # if pollution slipped in via a legacy path. Only the resetting user's own
+    # rows are touched; persona-owned seed entries are preserved.
+    try:
+        from kanban.budget_models import TimeEntry
+        from kanban.models import BoardMembership
+        template_boards = Board.objects.filter(is_official_demo_board=True)
+        TimeEntry.objects.filter(
+            user=user, task__column__board__in=template_boards,
+        ).delete()
+        BoardMembership.objects.filter(
+            user=user, board__in=template_boards,
+        ).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── Exit protocol entries on official demo boards (created by user) ──
+    # These aren't caught by the board-scoped cleanup above because official
+    # demo boards are never deleted.
+    try:
+        from exit_protocol.models import (
+            CemeteryEntry, HospiceSession, ProjectOrgan,
+            OrganTransplant, ProjectHealthSignal, HospiceDismissal,
+        )
+        template_boards = Board.objects.filter(is_official_demo_board=True)
+        template_ids = list(template_boards.values_list('id', flat=True))
+        if template_ids:
+            # Clean hospice sessions initiated by this user on template boards
+            user_hospice = HospiceSession.objects.filter(
+                board_id__in=template_ids, initiated_by=user,
+            )
+            hospice_ids = list(user_hospice.values_list('id', flat=True))
+            if hospice_ids:
+                CemeteryEntry.objects.filter(hospice_session_id__in=hospice_ids).delete()
+                ProjectOrgan.objects.filter(hospice_session_id__in=hospice_ids).delete()
+                user_hospice.delete()
+            HospiceDismissal.objects.filter(
+                board_id__in=template_ids, user=user,
+            ).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── User-created Goals & Missions in the demo workspace ──
+    # Reset must clear strategic objects the user added in the sandbox; they
+    # live on the shared demo workspace (not on sandbox board copies), so the
+    # board-scoped cleanup above never touches them and they would otherwise
+    # accumulate across resets. Seeded demo goals (is_seed_demo_data=True,
+    # workspace=None) are excluded and preserved.
+    try:
+        from kanban.models import Mission, OrganizationGoal
+        if demo_ws:
+            Mission.objects.filter(
+                workspace=demo_ws, created_by=user, is_seed_demo_data=False,
+            ).delete()
+            OrganizationGoal.objects.filter(
+                workspace=demo_ws, created_by=user, is_seed_demo_data=False,
+            ).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── User's private Discovery idea sandbox in the demo org ──
+    # Discovery ideas are organization-scoped, but the demo sandbox clones them
+    # per user (sandbox_owner=user) — both the cloned template ideas and any the
+    # user submitted during the demo. Delete the whole per-user set; the shared
+    # template (sandbox_owner=None) is untouched, and re-provisioning re-clones a
+    # fresh copy. Deleting an idea cascades its comments and promotion record.
+    try:
+        from kanban.discovery_models import DiscoveryIdea
+        if demo_org:
+            DiscoveryIdea.objects.filter(
+                organization=demo_org, sandbox_owner=user,
+            ).delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── DemoSandbox record ──
+    try:
+        sandbox = user.demo_sandbox
+        sandbox.delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+
+# ── Views ─────────────────────────────────────────────────────────────────────
+
+@login_required
+@require_http_methods(["POST"])
+def reset_my_demo(request):
+    """POST /demo/reset-mine/ — wipe the user's sandbox and re-provision it
+    SYNCHRONOUSLY, returning the dashboard redirect URL.
+
+    Why synchronous (no Celery, no WebSocket): the deep-copy is only ~10s
+    (measured). Routing it through a Celery task on a dedicated worker + a
+    WebSocket progress channel added exactly the machinery that kept failing on
+    the local solo-worker/Windows setup — the task was not reliably executed and
+    `async_to_sync(group_send)` could deadlock — leaving the reset hung for
+    minutes with the DB untouched. Doing the work right here in the request
+    removes all of that: the request itself completing IS the completion signal,
+    so the browser just redirects on the response.
+
+    A sync view under ASGI runs in Django's sync thread (the event loop and
+    WebSockets stay responsive); the ~10s only briefly serializes other sync
+    views, which is fine for the demo. Unlike the old Celery task, this also
+    cannot be killed by a 120s task time-limit, so it completes even if it has to
+    wait on SQLite's write lock.
+    """
+    # Demo persona accounts (priya/marcus/elena etc.) are shared guest-only
+    # test logins with no sandbox of their own to reset — provisioning one
+    # for them here would trigger _duplicate_board's membership-cap logic
+    # and silently steal their guest membership away from whichever real
+    # user's sandbox they were actually being used to test. See
+    # is_demo_persona() docstring / [[project_persona_membership_bleed]].
+    from kanban.utils.demo_protection import is_demo_persona
+    if is_demo_persona(request.user):
+        return JsonResponse(
+            {'status': 'error',
+             'message': 'Demo persona accounts share a login across every '
+                        'tester and have no individual sandbox to reset. '
+                        'Log in as your own account to reset your demo.'},
+            status=400,
+        )
+
+    # Switch the active workspace to the demo up front so the post-reset
+    # dashboard renders the demo (see the cross-process-race note that motivated
+    # this; it is now committed in the same process that does the reset).
+    try:
+        from kanban.utils.demo_protection import get_demo_workspace
+        profile = request.user.profile
+        demo_ws = get_demo_workspace()
+        if demo_ws:
+            profile.active_workspace = demo_ws
+        profile.is_viewing_demo = True
+        profile.save(update_fields=['active_workspace', 'is_viewing_demo'])
+    except Exception:
+        # Never let a workspace-switch hiccup block the reset itself.
+        pass
+
+    try:
+        from kanban.tasks.sandbox_provisioning import provision_sandbox_sync
+        result = provision_sandbox_sync(request.user.id, is_reset=True)
+    except Exception:
+        logger.exception("Synchronous demo reset failed for user %s", request.user.id)
+        return JsonResponse(
+            {'status': 'error',
+             'message': 'Reset failed. Please click Reset Demo again.'},
+            status=500,
+        )
+
+    if not isinstance(result, dict):
+        result = {}
+    return JsonResponse({
+        'status': result.get('status', 'created'),
+        'redirect_url': result.get('redirect_url', '/dashboard/'),
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def sandbox_status(request):
+    """
+    JSON status endpoint — reports whether a sandbox exists and is active.
+    """
+    from kanban.models import DemoSandbox
+
+    user = request.user
+    is_viewing_demo = getattr(getattr(user, 'profile', None), 'is_viewing_demo', False)
+    try:
+        user.demo_sandbox
+        return JsonResponse({
+            'has_sandbox': True,
+            'is_viewing_demo': is_viewing_demo,
+        })
+    except DemoSandbox.DoesNotExist:
+        return JsonResponse({'has_sandbox': False, 'is_viewing_demo': False})

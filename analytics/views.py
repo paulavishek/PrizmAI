@@ -12,13 +12,14 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.utils import timezone
 from django.db.models import Count, Avg, Sum, Q
-from django.db.models.functions import TruncDate, TruncWeek
+from django.db.models.functions import TruncDate
 from django.core.cache import cache
 from datetime import timedelta
 import json
 import logging
 
-from .models import UserSession, Feedback, FeedbackPrompt, AnalyticsEvent
+from .models import UserSession, Feedback, FeedbackPrompt, AnalyticsEvent, FeatureAdoptionEvent, AIQuotaEvent, WorkspacePresetEvent
+from kanban.decorators import demo_write_guard
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,9 @@ class CustomLogoutView(View):
             min_engagement = getattr(settings, 'ANALYTICS_MIN_ENGAGEMENT_FOR_FEEDBACK', 2)
             show_feedback_form = session.duration_minutes >= min_engagement
             
-            logger.info(f"Logout - User: {session.user}, Duration: {session.duration_minutes}min, "
+            # Log the user PK rather than the username to avoid leaking PII into
+            # server logs (consistent with AXES masking auth identifiers).
+            logger.info(f"Logout - User ID: {session.user_id}, Duration: {session.duration_minutes}min, "
                        f"Min Required: {min_engagement}min, Show Form: {show_feedback_form}")
             
             # Create feedback prompt record
@@ -112,6 +115,7 @@ class CustomLogoutView(View):
 
 
 @require_http_methods(["POST"])
+@demo_write_guard
 def submit_feedback_ajax(request):
     """
     Simple AJAX endpoint for feedback submission.
@@ -188,6 +192,7 @@ def submit_feedback_ajax(request):
 # ============================================================================
 
 @require_http_methods(["POST"])
+@demo_write_guard
 def track_aha_moment_ajax(request):
     """
     Track an aha moment when user experiences product value.
@@ -277,6 +282,7 @@ def track_aha_moment_ajax(request):
 
 
 @require_http_methods(["POST"])
+@demo_write_guard
 def aha_moment_interaction(request):
     """
     Track user interaction with aha moment celebration UI.
@@ -348,24 +354,27 @@ def aha_moment_stats_api(request):
 
 
 @require_http_methods(["POST"])
+@demo_write_guard
 def collect_demo_email(request):
     """
     Collect email from demo user for sending reminders.
     Called when user optionally provides email during demo.
+    Stores in DemoEmailCapture (standalone model) rather than on DemoSession
+    so email capture is decoupled from session lifecycle.
     """
-    from .models import DemoSession
-    
+    from .models import DemoSession, DemoEmailCapture
+
     try:
         data = json.loads(request.body)
         email = data.get('email', '').strip()
         session_id = data.get('session_id') or request.session.session_key
-        
+
         if not email:
             return JsonResponse({
                 'success': False,
                 'message': 'Email is required'
             }, status=400)
-        
+
         # Basic email validation
         import re
         if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
@@ -373,30 +382,36 @@ def collect_demo_email(request):
                 'success': False,
                 'message': 'Invalid email format'
             }, status=400)
-        
+
         if not session_id:
             return JsonResponse({
                 'success': False,
                 'message': 'No session found'
             }, status=400)
-        
+
+        # Resolve the demo session (optional — capture is still stored even if not found)
+        demo_session = None
         try:
-            session = DemoSession.objects.get(session_id=session_id)
-            session.demo_user_email = email
-            session.save(update_fields=['demo_user_email'])
-            
-            logger.info(f"Demo email collected for session {session_id[:8]}: {email}")
-            
-            return JsonResponse({
-                'success': True,
-                'message': 'Email saved! We\'ll send you helpful reminders.'
-            })
+            demo_session = DemoSession.objects.get(session_id=session_id)
         except DemoSession.DoesNotExist:
             return JsonResponse({
                 'success': False,
                 'message': 'Demo session not found'
             }, status=404)
-    
+
+        DemoEmailCapture.objects.create(
+            session_id=session_id,
+            demo_session=demo_session,
+            email=email,
+        )
+
+        logger.info(f"Demo email collected for session {session_id[:8]}: {email}")
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Email saved! We\'ll send you helpful reminders.'
+        })
+
     except Exception as e:
         logger.error(f"Error collecting demo email: {e}", exc_info=True)
         return JsonResponse({
@@ -545,8 +560,12 @@ def analytics_dashboard(request):
             ai_features_used__gt=0
         ).count(),
         'feedback_givers': total_feedback,
+        # Default conversion rates to 0; overwritten below if visitors > 0
+        'task_conversion': 0,
+        'ai_conversion': 0,
+        'feedback_conversion': 0,
     }
-    
+
     # Calculate conversion rates
     if funnel['visitors'] > 0:
         funnel['task_conversion'] = (funnel['task_creators'] / funnel['visitors']) * 100
@@ -597,44 +616,118 @@ def analytics_dashboard(request):
     else:
         demo_stats['conversion_rate'] = 0
     
+    # === FEATURE ADOPTION MATRIX (top 15 by unique user count) ===
+    total_users_count = User.objects.count()
+    feature_adoption_matrix = (
+        FeatureAdoptionEvent.objects
+        .filter(timestamp__gte=start_date)
+        .values('feature')
+        .annotate(unique_users=Count('user', distinct=True))
+        .order_by('-unique_users')[:15]
+    )
+    for row in feature_adoption_matrix:
+        row['pct'] = round((row['unique_users'] / total_users_count) * 100, 1) if total_users_count else 0
+
+    # Avg distinct features per active user in the period (feature depth score)
+    active_user_ids = set(
+        FeatureAdoptionEvent.objects.filter(timestamp__gte=start_date).values_list('user_id', flat=True)
+    )
+    if active_user_ids:
+        per_user_feature_counts = [
+            FeatureAdoptionEvent.objects.filter(user_id=uid, timestamp__gte=start_date)
+            .values('feature').distinct().count()
+            for uid in active_user_ids
+        ]
+        feature_depth_score = round(sum(per_user_feature_counts) / len(per_user_feature_counts), 1)
+    else:
+        feature_depth_score = 0
+
+    # === AI QUOTA FUNNEL ===
+    total_quota_users = User.objects.filter(ai_quota__isnull=False).count()
+    quota_hit_limit = AIQuotaEvent.objects.filter(
+        event_type='quota_exhausted', timestamp__gte=start_date
+    ).values('user').distinct().count()
+    quota_byok_after = AIQuotaEvent.objects.filter(
+        event_type='byok_configured', timestamp__gte=start_date
+    ).values('user').distinct().count()
+    ai_quota_funnel = {
+        'total_quota_users': total_quota_users,
+        'hit_limit': quota_hit_limit,
+        'hit_limit_pct': round((quota_hit_limit / total_quota_users) * 100, 1) if total_quota_users else 0,
+        'configured_byok_after': quota_byok_after,
+        'byok_conversion_pct': round((quota_byok_after / quota_hit_limit) * 100, 1) if quota_hit_limit else 0,
+    }
+
+    # === BYOK STATS ===
+    byok_total = AIQuotaEvent.objects.filter(event_type='byok_configured').values('user').distinct().count()
+    byok_by_provider = list(
+        AIQuotaEvent.objects
+        .filter(event_type='byok_configured')
+        .exclude(provider_configured='')
+        .values('provider_configured')
+        .annotate(users=Count('user', distinct=True))
+        .order_by('-users')
+    )
+    byok_stats = {
+        'total_byok_users': byok_total,
+        'by_provider': byok_by_provider,
+    }
+
+    # === WORKSPACE TIER DISTRIBUTION ===
+    from kanban.preset_models import WorkspacePreset
+    tier_distribution = list(
+        WorkspacePreset.objects.values('global_preset')
+        .annotate(count=Count('id'))
+        .order_by('-count')
+    )
+    tier_upgrades = WorkspacePresetEvent.objects.filter(timestamp__gte=start_date).count()
+
     context = {
         'days': days,
         'start_date': start_date,
-        
+
         # Summary stats
         'total_sessions': total_sessions,
         'total_users': total_users,
         'total_feedback': total_feedback,
         'registrations': registrations,
         'return_visitors': return_visitors,
-        
+
         # Engagement
         'engagement_breakdown': engagement_breakdown,
         'avg_metrics': avg_metrics,
-        
+
         # Features
         'feature_usage': feature_usage,
         'ai_events': ai_events,
-        
+
         # Trends
         'daily_sessions': list(daily_sessions),
-        
+
         # Feedback
         'feedback_stats': feedback_stats,
         'sentiment_breakdown': sentiment_list,
         'rating_distribution': rating_distribution,
-        
+
         # Funnel
         'funnel': funnel,
-        
+
         # Recent activity
         'recent_feedback': recent_feedback,
         'high_engagement_users': high_engagement_users,
-        
-        # Abuse prevention (NEW)
+
+        # Abuse prevention
         'abuse_stats': abuse_stats,
         'demo_stats': demo_stats,
         'high_risk_visitors': high_risk_visitors,
+
+        # Phase 5 — Feature adoption & AI quota analytics
+        'feature_adoption_matrix': list(feature_adoption_matrix),
+        'feature_depth_score': feature_depth_score,
+        'ai_quota_funnel': ai_quota_funnel,
+        'byok_stats': byok_stats,
+        'tier_distribution': tier_distribution,
+        'tier_upgrades': tier_upgrades,
     }
-    
+
     return render(request, 'analytics/dashboard.html', context)

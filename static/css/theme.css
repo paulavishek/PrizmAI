@@ -6,8 +6,8 @@
     --bg-secondary: #ffffff;
     --bg-tertiary: #e9ecef;
     --text-primary: #212529;
-    --text-secondary: #6c757d;
-    --text-muted: #999999;
+    --text-secondary: #495057;
+    --text-muted: #6b7280;
     --border-color: #dee2e6;
     --border-light: #e9ecef;
     --shadow-color: rgba(0, 0, 0, 0.1);
@@ -22,6 +22,14 @@
     --btn-hover-bg: #dde2e6;
     --card-bg: #ffffff;
     --footer-bg: #f8f9fa;
+    /* Chart.js canvas text (titles/axis labels) — canvas ignores CSS, so this
+       is mirrored in static/js/chart-theme.js. Keep the two in sync. */
+    --chart-title-color: #1a3d7c;
+    /* Topbar chip accents (Demo Info / Reset Demo / My Workspace) — brightened
+       in dark mode so they don't read dark-on-dark. */
+    --tws-chip-indigo: #6366f1;
+    --tws-chip-amber: #d97706;
+    --tws-chip-amber-alt: #f59e0b;
 }
 
 /* Dark Mode Colors */
@@ -31,9 +39,12 @@ body.dark-mode,
     --bg-primary: #1a1a1a;
     --bg-secondary: #2d2d2d;
     --bg-tertiary: #3a3a3a;
-    --text-primary: #e8e8e8;
-    --text-secondary: #b0b0b0;
-    --text-muted: #808080;
+    /* Bright text on dark — house rule: text on dark backgrounds should read as
+       clear white, not faded grey. These are intentionally high; keep a faint
+       step between them for hierarchy only. */
+    --text-primary: #f2f4f7;
+    --text-secondary: #d6dae1;
+    --text-muted: #c3c8d0;
     --border-color: #444444;
     --border-light: #3a3a3a;
     --shadow-color: rgba(0, 0, 0, 0.3);
@@ -48,7 +59,154 @@ body.dark-mode,
     --btn-hover-bg: #444444;
     --card-bg: #2d2d2d;
     --footer-bg: #1a1a1a;
+    --chart-title-color: #8fb3ff;
+    --tws-chip-indigo: #a5b4fc;
+    --tws-chip-amber: #fbbf24;
+    --tws-chip-amber-alt: #fbbf24;
 }
+
+/* ── Dark Mode: bright-text house rule ────────────────────────────────────
+   On dark backgrounds, faded greys and dark accent-blues read as low-contrast.
+   Force Bootstrap's muted/secondary text and colored HEADINGS to bright,
+   readable values in dark mode. Scoped to text roles (not links/buttons/badges)
+   so brand accents on interactive elements are preserved. */
+[data-bs-theme="dark"] .text-muted,
+[data-bs-theme="dark"] .text-secondary,
+[data-bs-theme="dark"] small.text-muted {
+    color: var(--text-secondary) !important;
+}
+
+/* Colored section/card/chart titles (e.g. .text-primary / .text-info headings)
+   are too dark on near-black — make headings bright white instead. Semantic
+   status headings (danger/warning/success) keep their high-contrast colors. */
+[data-bs-theme="dark"] h1.text-primary, [data-bs-theme="dark"] h2.text-primary,
+[data-bs-theme="dark"] h3.text-primary, [data-bs-theme="dark"] h4.text-primary,
+[data-bs-theme="dark"] h5.text-primary, [data-bs-theme="dark"] h6.text-primary,
+[data-bs-theme="dark"] h1.text-info, [data-bs-theme="dark"] h2.text-info,
+[data-bs-theme="dark"] h3.text-info, [data-bs-theme="dark"] h4.text-info,
+[data-bs-theme="dark"] h5.text-info, [data-bs-theme="dark"] h6.text-info,
+[data-bs-theme="dark"] .card-header .text-primary,
+[data-bs-theme="dark"] .card-header .text-info {
+    color: var(--text-primary) !important;
+}
+
+/* Semantic TEXT colors (not backgrounds/badges): the solid Bootstrap hues
+   (#dc3545 red, #198754 green, #ffc107 amber) are too dark on near-black.
+   Brighten to light tints so they stay readable and keep their meaning.
+   Targets .text-* utilities only — .bg-danger/.badge backgrounds keep their
+   solid colors (white text on them is already high-contrast). */
+[data-bs-theme="dark"] .text-danger  { color: #f28b82 !important; }
+[data-bs-theme="dark"] .text-success { color: #81c995 !important; }
+[data-bs-theme="dark"] .text-warning { color: #fdd663 !important; }
+[data-bs-theme="dark"] .text-primary { color: #8fb3ff !important; }
+
+/* Global surface safety net: Bootstrap's .bg-white / .bg-light utilities are
+   hardcoded light and don't flip. Map them to theme surfaces so utility-class
+   cards/panels stop rendering as white boxes in dark mode. (Inline
+   style="background:#fff" can't be caught here — those are fixed per-template.) */
+[data-bs-theme="dark"] .bg-white { background-color: var(--card-bg) !important; }
+[data-bs-theme="dark"] .bg-light { background-color: var(--bg-tertiary) !important; }
+
+/* Searchable checkbox UI that JS builds in place of raw <select multiple>
+   listboxes (task_detail.html / create_task.html "P1-03" enhancement) —
+   token-driven so it follows dark mode instead of the hardcoded #fff it used
+   to inline. Used for Timeline Dependencies, Related Tasks, and multi-select
+   custom fields (e.g. "Environment"). */
+.pz-multiselect-wrapper {
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    background-color: var(--input-bg);
+}
+.pz-multiselect-search {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    padding: 5px 10px;
+    font-size: 0.875rem;
+    outline: none;
+    border-radius: 6px 6px 0 0;
+    background-color: var(--input-bg);
+    color: var(--input-text);
+}
+.pz-multiselect-search::placeholder { color: var(--text-muted); }
+.pz-multiselect-list {
+    max-height: 140px;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+.pz-multiselect-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    user-select: none;
+    color: var(--input-text);
+}
+.pz-multiselect-option:hover { background-color: var(--bg-tertiary); }
+
+/* Bootstrap .text-dark / .text-black literally mean "dark text" — invisible on
+   a dark background. Force them bright in dark mode (rule 1: dark bg → light
+   text). Very common on headings across templates, so this is a big safe win. */
+[data-bs-theme="dark"] .text-dark,
+[data-bs-theme="dark"] .text-black { color: var(--text-primary) !important; }
+
+/* .table-light thead/rows are hardcoded light — darken them so their cell text
+   (which follows the theme) stays readable instead of dark-on-light-on-dark. */
+[data-bs-theme="dark"] .table-light {
+    --bs-table-bg: var(--bg-tertiary);
+    --bs-table-color: var(--text-primary);
+    --bs-table-border-color: var(--border-color);
+}
+
+/* Same problem for .table-info / .table-secondary (e.g. timesheet's "today" /
+   "weekend" header columns) — hardcoded light backgrounds with dark text. */
+[data-bs-theme="dark"] .table-info {
+    --bs-table-bg: rgba(94, 157, 255, 0.18);
+    --bs-table-color: var(--text-primary);
+    --bs-table-border-color: var(--border-color);
+}
+[data-bs-theme="dark"] .table-secondary {
+    --bs-table-bg: var(--bg-tertiary);
+    --bs-table-color: var(--text-primary);
+    --bs-table-border-color: var(--border-color);
+}
+
+/* ── Dark Mode: Signature Primary Button ─────────────────────────── */
+body.dark-mode .btn-prizm-primary,
+[data-bs-theme="dark"] .btn-prizm-primary {
+    background: linear-gradient(135deg, #7b93f5 0%, #8d5fc7 100%);
+    box-shadow: 0 2px 10px rgba(123, 147, 245, 0.35);
+}
+
+body.dark-mode .btn-prizm-primary:hover,
+[data-bs-theme="dark"] .btn-prizm-primary:hover {
+    background: linear-gradient(135deg, #6e86e8 0%, #7f52b8 100%);
+    box-shadow: 0 4px 16px rgba(123, 147, 245, 0.5);
+}
+/* ── End Dark Mode: Signature Primary Button ─────────────────────── */
+
+/* ── Dark Mode: AI Skeleton ──────────────────────────────────────── */
+body.dark-mode .ai-skeleton,
+[data-bs-theme="dark"] .ai-skeleton {
+    background: var(--card-bg, #2d2d2d);
+}
+body.dark-mode .ai-skeleton--shimmer,
+[data-bs-theme="dark"] .ai-skeleton--shimmer {
+    background: linear-gradient(
+        90deg,
+        var(--card-bg, #2d2d2d) 25%,
+        rgba(255,255,255,0.08) 37%,
+        var(--card-bg, #2d2d2d) 63%
+    );
+    background-size: 800px 100%;
+}
+body.dark-mode .ai-progress-bar,
+[data-bs-theme="dark"] .ai-progress-bar {
+    background: var(--border-color, #444);
+}
+/* ── End Dark Mode: AI Skeleton ──────────────────────────────────── */
 
 /* General Theme Application */
 body {
@@ -179,6 +337,91 @@ textarea::placeholder {
     border-color: var(--border-color);
 }
 
+/* Outline buttons keep Bootstrap's solid light-mode hues in dark mode
+   (buttons are excluded from the global bright-text rule above so brand
+   accents stay recognizable), but those hues read too dark against
+   near-black cards. Keep a tinted border for identity, brighten the label
+   itself to white so it reads clearly — matching the solid .btn-success
+   "Resolved" button's white text. */
+[data-bs-theme="dark"] .btn-outline-primary {
+    color: #ffffff;
+    border-color: var(--link-color);
+}
+[data-bs-theme="dark"] .btn-outline-primary:hover {
+    background-color: var(--link-color);
+    border-color: var(--link-color);
+    color: #1a1a1a;
+}
+[data-bs-theme="dark"] .btn-outline-secondary {
+    color: #ffffff;
+    border-color: var(--border-color);
+}
+[data-bs-theme="dark"] .btn-outline-secondary:hover {
+    background-color: var(--border-color);
+    border-color: var(--border-color);
+    color: #ffffff;
+}
+[data-bs-theme="dark"] .btn-outline-danger {
+    color: #ffffff;
+    border-color: #f28b82;
+}
+[data-bs-theme="dark"] .btn-outline-danger:hover {
+    background-color: #f28b82;
+    border-color: #f28b82;
+    color: #1a1a1a;
+}
+[data-bs-theme="dark"] .btn-outline-success {
+    color: #ffffff;
+    border-color: #81c995;
+}
+[data-bs-theme="dark"] .btn-outline-success:hover {
+    background-color: #81c995;
+    border-color: #81c995;
+    color: #1a1a1a;
+}
+[data-bs-theme="dark"] .btn-outline-warning {
+    color: #ffffff;
+    border-color: #fdd663;
+}
+[data-bs-theme="dark"] .btn-outline-warning:hover {
+    background-color: #fdd663;
+    border-color: #fdd663;
+    color: #1a1a1a;
+}
+[data-bs-theme="dark"] .btn-outline-info {
+    color: #ffffff;
+    border-color: #6edff6;
+}
+[data-bs-theme="dark"] .btn-outline-info:hover {
+    background-color: #6edff6;
+    border-color: #6edff6;
+    color: #1a1a1a;
+}
+
+/* Task form field labels (Title, Description, Progress, etc.) are hardcoded
+   to a light-mode grey (see .task-form .form-label in styles.css) that reads
+   faded on a dark card. Brighten to match the sidebar's .text-muted labels. */
+[data-bs-theme="dark"] .task-form .form-label {
+    color: var(--text-primary);
+}
+
+/* .form-range (Task Complexity slider): Bootstrap's dark-theme track color
+   (--bs-tertiary-bg, ~#2b3035) is nearly indistinguishable from our card
+   background, making the track invisible. Use a lighter, visible track and
+   brighten the thumb to match the theme's link color. */
+[data-bs-theme="dark"] .form-range::-webkit-slider-runnable-track {
+    background-color: var(--border-color);
+}
+[data-bs-theme="dark"] .form-range::-moz-range-track {
+    background-color: var(--border-color);
+}
+[data-bs-theme="dark"] .form-range::-webkit-slider-thumb {
+    background-color: var(--link-color);
+}
+[data-bs-theme="dark"] .form-range::-moz-range-thumb {
+    background-color: var(--link-color);
+}
+
 /* Alert Theme */
 .alert {
     border-color: var(--border-color);
@@ -237,6 +480,42 @@ textarea::placeholder {
     background-color: var(--btn-hover-bg);
 }
 
+/* ── Dark Mode Column Color System ────────────────────────────────── */
+body.dark-mode .kanban-column-header--green,
+[data-bs-theme="dark"] .kanban-column-header--green  { background-color: rgba(40, 167, 69, 0.20); border-left-color: #28a745; color: #7dcea0; }
+body.dark-mode .kanban-column-header--blue,
+[data-bs-theme="dark"] .kanban-column-header--blue   { background-color: rgba(0, 123, 255, 0.20); border-left-color: #4da3ff; color: #8ec5ff; }
+body.dark-mode .kanban-column-header--purple,
+[data-bs-theme="dark"] .kanban-column-header--purple { background-color: rgba(111, 66, 193, 0.20); border-left-color: #8b5fcf; color: #c4b0e8; }
+body.dark-mode .kanban-column-header--orange,
+[data-bs-theme="dark"] .kanban-column-header--orange { background-color: rgba(253, 126, 20, 0.20); border-left-color: #fd9a4e; color: #ffc999; }
+body.dark-mode .kanban-column-header--red,
+[data-bs-theme="dark"] .kanban-column-header--red    { background-color: rgba(220, 53, 69, 0.20); border-left-color: #e76a78; color: #f0adb4; }
+body.dark-mode .kanban-column-header--yellow,
+[data-bs-theme="dark"] .kanban-column-header--yellow { background-color: rgba(255, 193, 7, 0.20); border-left-color: #ffc107; color: #ffe9a0; }
+body.dark-mode .kanban-column-header--teal,
+[data-bs-theme="dark"] .kanban-column-header--teal   { background-color: rgba(32, 201, 151, 0.20); border-left-color: #20c997; color: #9dd5d0; }
+body.dark-mode .kanban-column-header--gray,
+[data-bs-theme="dark"] .kanban-column-header--gray   { background-color: rgba(108, 117, 125, 0.20); border-left-color: #8d959c; color: #b0b5ba; }
+
+body.dark-mode .kanban-column-header--green:hover,
+[data-bs-theme="dark"] .kanban-column-header--green:hover  { background-color: rgba(40, 167, 69, 0.30); }
+body.dark-mode .kanban-column-header--blue:hover,
+[data-bs-theme="dark"] .kanban-column-header--blue:hover   { background-color: rgba(0, 123, 255, 0.30); }
+body.dark-mode .kanban-column-header--purple:hover,
+[data-bs-theme="dark"] .kanban-column-header--purple:hover { background-color: rgba(111, 66, 193, 0.30); }
+body.dark-mode .kanban-column-header--orange:hover,
+[data-bs-theme="dark"] .kanban-column-header--orange:hover { background-color: rgba(253, 126, 20, 0.30); }
+body.dark-mode .kanban-column-header--red:hover,
+[data-bs-theme="dark"] .kanban-column-header--red:hover    { background-color: rgba(220, 53, 69, 0.30); }
+body.dark-mode .kanban-column-header--yellow:hover,
+[data-bs-theme="dark"] .kanban-column-header--yellow:hover { background-color: rgba(255, 193, 7, 0.30); }
+body.dark-mode .kanban-column-header--teal:hover,
+[data-bs-theme="dark"] .kanban-column-header--teal:hover   { background-color: rgba(32, 201, 151, 0.30); }
+body.dark-mode .kanban-column-header--gray:hover,
+[data-bs-theme="dark"] .kanban-column-header--gray:hover   { background-color: rgba(108, 117, 125, 0.30); }
+/* ── End Dark Mode Column Color System ────────────────────────────── */
+
 /* Task Card Theme */
 .task-card,
 .kanban-card {
@@ -254,11 +533,21 @@ textarea::placeholder {
 /* Table Theme */
 table {
     color: var(--text-primary);
+    font-size: 0.875rem;
 }
 
 thead {
     background-color: var(--bg-tertiary);
     color: var(--text-primary);
+}
+
+thead th {
+    padding: 0.85rem 0.75rem;
+    font-weight: 600;
+}
+
+tbody td {
+    padding: 0.75rem 0.75rem;
 }
 
 tbody tr {
@@ -330,10 +619,6 @@ a:hover {
 .modal-footer {
     background-color: var(--bg-secondary);
     border-color: var(--border-color);
-}
-
-.btn-close {
-    filter: invert(1);
 }
 
 body.dark-mode .btn-close {
@@ -408,8 +693,10 @@ body::-webkit-scrollbar-thumb:hover {
     padding: 0.5rem 0.75rem;
     border-radius: 5px;
     border: none;
-    background-color: var(--bg-secondary, transparent);
-    color: var(--navbar-text, #fff);
+    background-color: transparent;
+    /* Use theme text color, not --navbar-text (which is white in light mode and
+       made the icon invisible on the light topbar). */
+    color: var(--text-primary, #212529);
     cursor: pointer;
     transition: opacity 0.2s ease;
     font-size: 1rem;
@@ -425,8 +712,76 @@ body::-webkit-scrollbar-thumb:hover {
     font-weight: bold;
 }
 
-/* Accessibility mode — ensure class-based overrides from accessibility.css
-   still apply when prizm-accessibility-mode is set on <html> */
-html.prizm-accessibility-mode body {
-    /* Re-assert colorblind-mode inheritance for selectors that target body */
+/* Accessibility mode is activated via body.colorblind-mode (set pre-paint by the
+   anti-flicker script in base.html and maintained by display-mode.js). The
+   overrides live in accessibility.css. */
+
+/* ============================================================
+   QUILL EDITOR TOOLBAR — DARK MODE
+   Quill's Snow theme hardcodes near-black icon strokes/fills (#444) and a
+   light toolbar background, so the B/I/U/H1/H2/list/link icons are almost
+   invisible on a dark page background. Brighten them to match --text-primary.
+   ============================================================ */
+body.dark-mode .ql-toolbar.ql-snow {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+body.dark-mode .ql-snow .ql-stroke {
+    stroke: var(--text-primary);
+}
+
+body.dark-mode .ql-snow .ql-fill,
+body.dark-mode .ql-snow .ql-stroke.ql-fill {
+    fill: var(--text-primary);
+}
+
+body.dark-mode .ql-snow .ql-picker {
+    color: var(--text-primary);
+}
+
+body.dark-mode .ql-snow .ql-picker-options {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+body.dark-mode .ql-snow .ql-picker-item {
+    color: var(--text-primary);
+}
+
+body.dark-mode .ql-toolbar.ql-snow .ql-picker-label {
+    border-color: transparent;
+}
+
+body.dark-mode .ql-toolbar.ql-snow button:hover,
+body.dark-mode .ql-toolbar.ql-snow button:focus,
+body.dark-mode .ql-toolbar.ql-snow button.ql-active,
+body.dark-mode .ql-toolbar.ql-snow .ql-picker-label:hover,
+body.dark-mode .ql-toolbar.ql-snow .ql-picker-label.ql-active,
+body.dark-mode .ql-toolbar.ql-snow .ql-picker-item:hover {
+    color: var(--link-color);
+}
+
+body.dark-mode .ql-toolbar.ql-snow button:hover .ql-stroke,
+body.dark-mode .ql-toolbar.ql-snow button:focus .ql-stroke,
+body.dark-mode .ql-toolbar.ql-snow button.ql-active .ql-stroke,
+body.dark-mode .ql-toolbar.ql-snow .ql-picker-label:hover .ql-stroke,
+body.dark-mode .ql-toolbar.ql-snow .ql-picker-label.ql-active .ql-stroke {
+    stroke: var(--link-color);
+}
+
+body.dark-mode .ql-toolbar.ql-snow button:hover .ql-fill,
+body.dark-mode .ql-toolbar.ql-snow button:focus .ql-fill,
+body.dark-mode .ql-toolbar.ql-snow button.ql-active .ql-fill,
+body.dark-mode .ql-toolbar.ql-snow .ql-picker-label:hover .ql-fill,
+body.dark-mode .ql-toolbar.ql-snow .ql-picker-label.ql-active .ql-fill {
+    fill: var(--link-color);
+}
+
+body.dark-mode .ql-snow.ql-container {
+    border-color: var(--border-color);
+}
+
+body.dark-mode .ql-editor.ql-blank::before {
+    color: var(--text-secondary);
 }

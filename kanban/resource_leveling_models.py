@@ -16,7 +16,9 @@ class UserPerformanceProfile(models.Model):
     Used for predicting task completion times and skill matching
     """
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='performance_profile')
-    # Organization is optional - simplified mode doesn't require it
+    # Workspace is the tenant scope now. Optional — simplified mode doesn't require it.
+    workspace = models.ForeignKey('kanban.Workspace', on_delete=models.SET_NULL, null=True, blank=True, related_name='performance_profiles')
+    # DEPRECATED: kept nullable for back-compat only; Workspace is the scope now.
     organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='performance_profiles_org')
     
     # Performance metrics
@@ -50,8 +52,14 @@ class UserPerformanceProfile(models.Model):
     def __str__(self):
         return f"{self.user.username} - Performance Profile"
     
-    def update_metrics(self):
-        """Recalculate all performance metrics from historical data"""
+    def update_metrics(self, board=None):
+        """Recalculate all performance metrics from historical data.
+
+        If ``board`` is provided, the current-workload calculation is scoped
+        to that board (rather than ``get_user_boards(self.user)``) — useful
+        when computing per-board workload reports for users who aren't in
+        their own demo session.
+        """
         from kanban.models import Task
         
         # Get completed tasks in last 90 days
@@ -96,7 +104,7 @@ class UserPerformanceProfile(models.Model):
         self.update_skill_profile(completed_tasks)
         
         # Update current workload (don't save yet, we'll save once after all updates)
-        self.update_current_workload(save=False)
+        self.update_current_workload(save=False, board=board)
         
         self.total_tasks_completed = task_count
         self.last_task_completed = completed_tasks.latest('completed_at').completed_at
@@ -123,19 +131,34 @@ class UserPerformanceProfile(models.Model):
         # Store top 50 keywords
         self.skill_keywords = dict(word_counts.most_common(50))
     
-    def update_current_workload(self, save=True):
+    def update_current_workload(self, save=True, board=None):
         """
         Calculate current workload from active tasks
-        
+
         Args:
-            save: If True, saves the profile after updating. Set to False when 
+            save: If True, saves the profile after updating. Set to False when
                   calling from methods that will save afterwards to avoid duplicate saves.
+            board: Optional Board to scope active-tasks to. When provided, this overrides
+                  the ``get_user_boards`` workspace scoping — required for per-board reports
+                  (e.g. AI Resource Optimization) that need this user's workload on a
+                  specific board even when the user isn't in their own demo session.
         """
         from kanban.models import Task
-        
+        from kanban.utils.demo_protection import get_user_boards
+
+        if board is not None:
+            board_filter = {'column__board': board}
+        else:
+            # Scope to boards visible in the user's current workspace/demo context,
+            # consistent with Dashboard "My Tasks" scoping.
+            user_boards = get_user_boards(self.user)
+            board_filter = {'column__board__in': user_boards}
+
         active_tasks = Task.objects.filter(
             assigned_to=self.user,
-            completed_at__isnull=True
+            item_type='task',
+            completed_at__isnull=True,
+            **board_filter,
         ).exclude(column__name__icontains='done')
         
         self.current_active_tasks = active_tasks.count()
@@ -170,7 +193,7 @@ class UserPerformanceProfile(models.Model):
         from collections import Counter
         
         if not self.skill_keywords:
-            return 50.0  # Neutral score if no skill data
+            return 0.0  # No skill data — cannot assess match
         
         # Extract words from task text
         words = re.findall(r'\b[a-z]{3,}\b', task_text.lower())
@@ -187,10 +210,13 @@ class UserPerformanceProfile(models.Model):
                 total_score += min(skill_freq, 10)  # Cap at 10 to avoid over-weighting
             max_possible += 10
         
-        if max_possible == 0 or total_score == 0:
-            # No keywords to match, or no overlap found
-            # Return neutral score (50) instead of 0 to avoid penalizing unrelated tasks
-            return 50.0
+        if max_possible == 0:
+            # No keywords to match — return low score
+            return 10.0
+        
+        if total_score == 0:
+            # User has skills but none match this task
+            return 10.0
         
         # Convert to 0-100 scale
         match_percentage = (total_score / max_possible) * 100
@@ -311,7 +337,9 @@ class ResourceLevelingSuggestion(models.Model):
     Stores AI-generated resource leveling suggestions
     """
     task = models.ForeignKey('kanban.Task', on_delete=models.CASCADE, related_name='leveling_suggestions')
-    # Organization is optional - simplified mode doesn't require it
+    # Workspace is the tenant scope now. Optional — simplified mode doesn't require it.
+    workspace = models.ForeignKey('kanban.Workspace', on_delete=models.SET_NULL, null=True, blank=True, related_name='leveling_suggestions')
+    # DEPRECATED: kept nullable for back-compat only; Workspace is the scope now.
     organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='leveling_suggestions')
     
     # Current state

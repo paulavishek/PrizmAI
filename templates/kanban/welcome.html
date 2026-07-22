@@ -8,7 +8,7 @@
     <title>PrizmAI - AI-Powered Project Intelligence Platform</title>
 
     <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{% static 'vendor/bootstrap.min.css' %}?v={{ STATIC_VERSION|default:'12' }}" rel="stylesheet">
 
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -268,7 +268,7 @@
         .section-subtitle {
             text-align: center;
             font-size: 1.25rem;
-            color: #6b7280;
+            color: var(--text-muted);
             margin-bottom: 0;
             font-weight: 500;
             max-width: 600px;
@@ -290,7 +290,7 @@
         }
 
         .feature-category {
-            background: white;
+            background: var(--card-bg);
             border-radius: 24px;
             padding: 2rem;
             box-shadow: 0 4px 24px rgba(102, 126, 234, 0.08);
@@ -399,13 +399,13 @@
         .category-title {
             font-size: 1.25rem;
             font-weight: 700;
-            color: #1f2937;
+            color: var(--text-primary);
             margin-bottom: 0.25rem;
         }
 
         .category-desc {
             font-size: 0.9rem;
-            color: #6b7280;
+            color: var(--text-muted);
             margin: 0;
         }
 
@@ -414,7 +414,7 @@
             top: -8px;
             right: 0;
             background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-            color: #000;
+            color: var(--text-primary);
             font-size: 0.7rem;
             font-weight: 700;
             padding: 0.25rem 0.75rem;
@@ -466,7 +466,7 @@
 
         .mini-icon.ai {
             background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-            color: #000;
+            color: var(--text-primary);
         }
 
         .feature-category.core-pm .mini-icon {
@@ -487,13 +487,13 @@
         .mini-content h4 {
             font-size: 0.95rem;
             font-weight: 600;
-            color: #1f2937;
+            color: var(--text-primary);
             margin-bottom: 0.25rem;
         }
 
         .mini-content p {
             font-size: 0.8rem;
-            color: #6b7280;
+            color: var(--text-muted);
             margin: 0;
             line-height: 1.4;
         }
@@ -786,7 +786,7 @@
             align-items: center;
             gap: 0.5rem;
             background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-            color: #000;
+            color: var(--text-primary);
             padding: 0.875rem 2rem;
             border-radius: 50px;
             font-weight: 700;
@@ -799,7 +799,7 @@
         .btn-ai-demo:hover {
             transform: translateY(-3px);
             box-shadow: 0 12px 32px rgba(251, 191, 36, 0.4);
-            color: #000;
+            color: var(--text-primary);
         }
 
         /* Keep legacy styles for other potential usages */
@@ -811,7 +811,7 @@
         }
 
         .feature-card {
-            background: white;
+            background: var(--card-bg);
             border-radius: 20px;
             padding: 2.5rem;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
@@ -883,12 +883,12 @@
             font-size: 1.5rem;
             font-weight: 700;
             margin-bottom: 1rem;
-            color: #1f2937;
+            color: var(--text-primary);
         }
 
         .feature-description {
             font-size: 1.05rem;
-            color: #6b7280;
+            color: var(--text-muted);
             line-height: 1.7;
             margin-bottom: 1.5rem;
         }
@@ -905,7 +905,7 @@
 
         .badge-ai {
             background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-            color: #000;
+            color: var(--text-primary);
         }
 
         .badge-core {
@@ -915,7 +915,7 @@
 
         .badge-collab {
             background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-            color: #000;
+            color: var(--text-primary);
         }
 
         .badge-analytics {
@@ -1541,7 +1541,7 @@
         .demo-tag {
             display: inline-block;
             background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-            color: #000;
+            color: var(--text-primary);
             padding: 0.5rem 1.5rem;
             border-radius: 50px;
             font-size: 0.9rem;
@@ -1563,7 +1563,7 @@
 
         .demo-banner-subtitle {
             font-size: 1.2rem;
-            color: #6b7280;
+            color: var(--text-muted);
             max-width: 700px;
             margin: 0 auto 2rem;
             line-height: 1.6;
@@ -1583,7 +1583,7 @@
         }
 
         .demo-user-card {
-            background: white;
+            background: var(--card-bg);
             border-radius: 20px;
             padding: 2rem;
             border: 2px solid rgba(102, 126, 234, 0.1);
@@ -1671,7 +1671,7 @@
         .demo-user-name {
             font-size: 1.5rem;
             font-weight: 700;
-            color: #1f2937;
+            color: var(--text-primary);
             margin-bottom: 0.5rem;
         }
 
@@ -1692,15 +1692,15 @@
         }
 
         .demo-credential-label {
-            color: #6b7280;
+            color: var(--text-muted);
             font-weight: 600;
         }
 
         .demo-credential-value {
-            color: #1f2937;
+            color: var(--text-primary);
             font-family: 'Courier New', monospace;
             font-weight: 600;
-            background: white;
+            background: var(--card-bg);
             padding: 0.3rem 0.8rem;
             border-radius: 6px;
             border: 1px solid rgba(102, 126, 234, 0.1);
@@ -1714,7 +1714,7 @@
 
         .demo-skills-list p {
             font-size: 0.85rem;
-            color: #6b7280;
+            color: var(--text-muted);
             margin-bottom: 0.5rem;
             font-weight: 600;
         }
@@ -1760,7 +1760,7 @@
         .demo-boards-title {
             font-size: 1.3rem;
             font-weight: 700;
-            color: #1f2937;
+            color: var(--text-primary);
             margin-bottom: 1.5rem;
             text-align: center;
         }
@@ -1778,7 +1778,7 @@
         }
 
         .demo-board-item {
-            background: white;
+            background: var(--card-bg);
             padding: 1.5rem;
             border-radius: 12px;
             border: 2px solid rgba(102, 126, 234, 0.1);
@@ -1819,19 +1819,19 @@
         .demo-board-name {
             font-size: 1.1rem;
             font-weight: 700;
-            color: #1f2937;
+            color: var(--text-primary);
             margin-bottom: 0.5rem;
         }
 
         .demo-board-desc {
             font-size: 0.85rem;
-            color: #6b7280;
+            color: var(--text-muted);
             line-height: 1.4;
         }
         /* Product Showcase Section */
         .product-showcase-section {
             padding: 80px 0;
-            background: #ffffff;
+            background: var(--card-bg);
         }
 
         .product-showcase-section .section-header {
@@ -1863,14 +1863,14 @@
 
         .showcase-caption {
             padding: 1.25rem 1.5rem;
-            background: #f8fafc;
+            background: var(--bg-tertiary);
             border-top: 1px solid #e5e7eb;
         }
 
         .showcase-caption-title {
             font-size: 1rem;
             font-weight: 700;
-            color: #1f2937;
+            color: var(--text-primary);
             margin-bottom: 0.35rem;
         }
 
@@ -1880,7 +1880,7 @@
 
         .showcase-caption-text {
             font-size: 0.875rem;
-            color: #6b7280;
+            color: var(--text-muted);
             margin: 0;
             line-height: 1.5;
         }
@@ -2417,7 +2417,7 @@
                 <div class="ai-showcase-header">
                     <div class="gemini-badge">
                         <i class="fas fa-robot"></i>
-                        <span>Powered by Google Gemini</span>
+                        <span>Powered by Gemini · OpenAI · Claude</span>
                     </div>
                     <h2 class="ai-showcase-title">AI That Actually Understands Your Projects</h2>
                     <p class="ai-showcase-subtitle">Not just another chatbot — a true AI partner that explains every decision with confidence scores and reasoning, predicts risks before they escalate, generates board-ready presentations, and continuously learns from your team's unique patterns.</p>
@@ -2630,13 +2630,13 @@
                             </div>
                         </div>
                         <p class="distinguished-card-desc">
-                            Before a project is underway, AI plays devil's advocate and simulates five distinct ways it could fail — drawing on the live board data, dependencies, team capacity, and historical risk patterns. Each scenario comes with a risk level, root-cause breakdown, and a concrete mitigation strategy. Team members acknowledge each risk scenario, and unresolved high-risk items surface automatically in the Decision Center so nothing critical slips through.
+                            Before a project is underway, AI plays devil's advocate and simulates five distinct ways it could fail — drawing on the live board data, dependencies, team capacity, and historical risk patterns. Each scenario comes with a risk level, root-cause breakdown, and a concrete mitigation strategy. Team members acknowledge each risk scenario, and unresolved high-risk items surface automatically in Focus Today so nothing critical slips through.
                         </p>
                         <div class="distinguished-feature-pills">
                             <span class="feature-pill"><i class="fas fa-exclamation-triangle"></i> 5 failure scenarios</span>
                             <span class="feature-pill"><i class="fas fa-check-double"></i> Team acknowledgment</span>
                             <span class="feature-pill"><i class="fas fa-fire"></i> Risk-level scoring</span>
-                            <span class="feature-pill"><i class="fas fa-gavel"></i> Decision Center integration</span>
+                            <span class="feature-pill"><i class="fas fa-gavel"></i> Focus Today integration</span>
                         </div>
                     </div>
 
@@ -2781,7 +2781,7 @@
     </script>
 
     <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{% static 'vendor/bootstrap.bundle.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 
 </body>
 

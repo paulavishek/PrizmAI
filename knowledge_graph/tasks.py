@@ -62,19 +62,18 @@ def generate_memory_connections():
         ']}'
     )
 
-    from ai_assistant.utils.ai_clients import GeminiClient
-    client = GeminiClient(default_model='gemini-2.5-flash-lite')
+    from ai_assistant.utils.ai_router import AIRouter
+    router = AIRouter()
     start_time = time.time()
 
-    response = client.get_response(
+    response = router.complete(
         prompt=user_prompt,
+        user=None,  # Celery background task — no user context
         system_prompt=system_prompt,
-        task_complexity='simple',
-        temperature=0.3,
+        complexity='simple',
     )
-
     elapsed_ms = int((time.time() - start_time) * 1000)
-    raw = response.get('content', '')
+    raw = response.get('text', '')
 
     try:
         cleaned = raw.strip()
@@ -132,17 +131,27 @@ def check_missed_deadlines():
     now = timezone.now()
     yesterday = now - timezone.timedelta(hours=24)
 
+    # Task has no `status` field — workflow status is the column. Consider a
+    # task "missed" only if it's NOT in a Done-type column (structural marker or
+    # name heuristic — see kanban.column_semantics).
+    from kanban.column_semantics import column_type_q
     overdue_tasks = (
         Task.objects
         .filter(
             due_date__range=(yesterday, now),
-            status__in=['todo', 'in_progress', 'review'],
+            item_type='task',
         )
-        .select_related('board', 'assigned_to')
+        .exclude(column_type_q('done'))
+        .select_related('column', 'column__board', 'assigned_to')
     )
+
+    from knowledge_graph.demo_guard import is_demo_board
 
     created = 0
     for task in overdue_tasks:
+        board = task.column.board if task.column_id else None
+        if board is None or is_demo_board(board):
+            continue  # demo memory is curated/deterministic — no live auto-capture
         # Skip if a risk_event for this task already exists
         exists = MemoryNode.objects.filter(
             source_object_type='Task',
@@ -156,21 +165,22 @@ def check_missed_deadlines():
         if task.assigned_to:
             assignee = task.assigned_to.get_full_name() or task.assigned_to.username
 
+        column_name = task.column.name if task.column_id else 'Unknown'
         MemoryNode.objects.create(
-            board=task.board,
+            board=board,
             node_type='risk_event',
             title=f"Missed deadline: {task.title[:150]}",
             content=(
                 f"Task '{task.title}' missed its deadline of "
                 f"{task.due_date.strftime('%b %d, %Y')}. "
-                f"Status at deadline: {task.get_status_display()}."
+                f"Status at deadline: {column_name}."
                 + (f" Assigned to: {assignee}." if assignee else "")
             ),
             context_data={
                 'task_id': task.pk,
                 'task_title': task.title,
                 'due_date': task.due_date.isoformat(),
-                'status': task.status,
+                'status': column_name,
             },
             tags=['missed-deadline', 'risk'],
             importance_score=0.7,
@@ -195,10 +205,14 @@ def check_budget_thresholds():
     from kanban.budget_models import ProjectBudget
     from knowledge_graph.models import MemoryNode
 
+    from knowledge_graph.demo_guard import is_demo_board
+
     budgets = ProjectBudget.objects.select_related('board').all()
     created = 0
 
     for budget in budgets:
+        if is_demo_board(budget.board):
+            continue  # demo memory is curated/deterministic — no live auto-capture
         status = budget.get_status()
         if status == 'ok':
             continue
@@ -244,3 +258,56 @@ def check_budget_thresholds():
 
     logger.info(f"check_budget_thresholds: captured {created} budget alerts.")
     return {'status': 'success', 'budget_alerts_captured': created}
+
+
+# ── Task 4: Analyze Memory Gaps (Spectra Gap Analysis) ──────────────────────
+
+@shared_task(name='knowledge_graph.analyze_memory_gaps')
+def analyze_memory_gaps(memory_node_id):
+    """
+    Lazily review a single memory node for missing context using Gemini.
+    Dispatched (at most 5 per /memory/ page load) for memories that have not
+    been analysed yet — especially thin auto-captured ones. Never retries and
+    never crashes the worker.
+    """
+    from knowledge_graph.models import MemoryNode
+    from knowledge_graph.views import gap_analysis_system_prompt, parse_gap_questions
+
+    try:
+        node = MemoryNode.objects.filter(pk=memory_node_id).first()
+        if node is None or node.gaps_analyzed:
+            return {'status': 'skipped', 'reason': 'missing_or_already_analyzed'}
+
+        from ai_assistant.utils.ai_router import AIRouter
+        response = AIRouter().complete(
+            prompt='Generate the JSON array of questions now.',
+            user=None,  # Celery background task — no user context
+            system_prompt=gap_analysis_system_prompt(node.node_type, node.content),
+            complexity='simple',
+        )
+        questions = parse_gap_questions(response.get('text', ''))
+
+        if questions:
+            node.gap_questions = questions
+            node.has_gaps = True
+            # Freeze the canonical checklist the first time gaps are detected;
+            # later edits only mark which of these remain (anchored tracking).
+            if not node.gap_questions_original:
+                node.gap_questions_original = questions
+        else:
+            node.has_gaps = False
+        node.gaps_analyzed = True
+        node.save(update_fields=[
+            'gap_questions', 'gap_questions_original', 'has_gaps', 'gaps_analyzed',
+        ])
+        return {'status': 'success', 'has_gaps': node.has_gaps, 'node_id': node.pk}
+    except Exception as exc:
+        # Never crash the worker; mark analysed so we don't retry in a loop.
+        logger.warning(f"analyze_memory_gaps failed for node {memory_node_id}: {exc}")
+        try:
+            MemoryNode.objects.filter(pk=memory_node_id).update(
+                gaps_analyzed=True, has_gaps=False
+            )
+        except Exception:
+            pass
+        return {'status': 'error', 'node_id': memory_node_id}

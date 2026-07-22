@@ -6,6 +6,7 @@ All views require @login_required.
 """
 import json
 import logging
+import re
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -14,6 +15,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from kanban.onboarding_models import OnboardingWorkspacePreview
 from kanban.onboarding_utils import commit_onboarding_workspace
+from kanban.decorators import demo_write_guard, demo_ai_guard
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,62 @@ def _is_v2(profile):
     return profile.onboarding_version >= 2
 
 
+def _can_create_workspace(user):
+    """Return True if the user is allowed to create a new workspace/goal.
+
+    Rules:
+    - Users without an organization can always create (first-time setup).
+    - Demo-exploring users can create (they need to escape the demo).
+    - Only the organization creator can create additional workspaces.
+    - All other org members (admins, members) are blocked.
+    """
+    profile = getattr(user, 'profile', None)
+    if not profile:
+        return True
+    org = profile.organization
+    if not org:
+        return True  # No org yet — first-time user
+    # Users currently viewing a demo sandbox don't own that org — always let
+    # them escape into setting up their own workspace, regardless of
+    # onboarding_status (real users landing in demo default to 'completed',
+    # never having gone through the v2 wizard).
+    if getattr(profile, 'is_viewing_demo', False):
+        return True
+    return org.created_by_id == user.id
+
+
+# Patterns that indicate malicious or non-goal input
+_MALICIOUS_PATTERNS = [
+    # XSS / HTML injection
+    re.compile(r'<\s*script', re.IGNORECASE),
+    re.compile(r'on(?:error|load|click|mouseover|focus|blur)\s*=', re.IGNORECASE),
+    re.compile(r'javascript\s*:', re.IGNORECASE),
+    re.compile(r'<\s*(?:img|iframe|object|embed|svg|link|meta|base)\b[^>]*>', re.IGNORECASE),
+    re.compile(r'<\s*/?\s*(?:script|style|iframe|object|embed|applet|form)\b', re.IGNORECASE),
+    # SQL injection
+    re.compile(r"(?:'\s*;\s*DROP\s|--\s*SELECT|UNION\s+SELECT|OR\s+'1'\s*=\s*'1)", re.IGNORECASE),
+    re.compile(r";\s*(?:DROP|DELETE|INSERT|UPDATE|ALTER|CREATE|EXEC)\s", re.IGNORECASE),
+    # Code injection / shell commands
+    re.compile(r'(?:__|import\s*\(|eval\s*\(|exec\s*\(|system\s*\(|subprocess)', re.IGNORECASE),
+    re.compile(r'\$\{.*\}', re.IGNORECASE),  # Template injection
+]
+
+
+def _detect_malicious_input(text: str) -> bool:
+    """Return True if the text contains patterns suggesting injection attacks."""
+    for pattern in _MALICIOUS_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False
+
+
+def _sanitize_goal_text(text: str) -> str:
+    """Strip HTML tags and collapse whitespace from goal text for safe storage."""
+    clean = re.sub(r'<[^>]+>', '', text)
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    return clean
+
+
 # ---------------------------------------------------------------------------
 # Welcome
 # ---------------------------------------------------------------------------
@@ -59,7 +117,14 @@ def onboarding_welcome(request):
     """
     profile = _get_profile(request)
 
-    if profile.onboarding_status in ('completed', 'skipped'):
+    # Guard: only org creators (or users without an org) can create workspaces
+    if not _can_create_workspace(request.user):
+        from django.contrib import messages
+        messages.info(
+            request,
+            'Only the workspace creator can set up new workspaces. '
+            'Contact your workspace admin if you need a new goal created.'
+        )
         return redirect('dashboard')
 
     # Resume mid-flow states
@@ -68,7 +133,14 @@ def onboarding_welcome(request):
     if profile.onboarding_status == 'workspace_generated':
         return redirect('onboarding_review')
 
-    return render(request, 'kanban/onboarding/welcome.html')
+    from_dashboard = request.GET.get('from') in ('dashboard', 'sidebar')
+    # Detect returning users who already have a workspace
+    from kanban.models import OrganizationGoal
+    has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
+    return render(request, 'kanban/onboarding/welcome.html', {
+        'from_dashboard': from_dashboard or has_workspace,
+        'has_workspace': has_workspace,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +148,7 @@ def onboarding_welcome(request):
 # ---------------------------------------------------------------------------
 
 @login_required
+@demo_ai_guard
 def onboarding_goal_input(request):
     """
     GET  /onboarding/goal/ — render goal input form
@@ -83,14 +156,29 @@ def onboarding_goal_input(request):
     """
     profile = _get_profile(request)
 
+    # Guard: only org creators (or users without an org) can create workspaces
+    if not _can_create_workspace(request.user):
+        from django.contrib import messages
+        messages.info(
+            request,
+            'Only the workspace creator can create new goals. '
+            'Contact your workspace admin if you need a new goal created.'
+        )
+        return redirect('goal_list')
+
     if not _is_v2(profile):
         return redirect('dashboard')
 
     if request.method == 'GET':
         # Pre-fill with previous goal text if resuming
         prefill = request.GET.get('goal', '') or (profile.onboarding_goal_text or '')
+        from_dashboard = request.GET.get('from') == 'dashboard'
+        # Also detect returning users who already have a workspace
+        from kanban.models import OrganizationGoal
+        has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
         return render(request, 'kanban/onboarding/goal_input.html', {
             'prefill_goal': prefill,
+            'from_dashboard': from_dashboard or has_workspace,
         })
 
     # POST — submit goal
@@ -101,12 +189,31 @@ def onboarding_goal_input(request):
             'error': f'Please enter at least {MIN_GOAL_CHARS} characters.',
         })
 
+    # Reject input containing injection patterns (XSS, SQL, code injection)
+    if _detect_malicious_input(goal_text):
+        logger.warning(
+            "Malicious input detected in onboarding goal from user %s",
+            request.user.username,
+        )
+        return render(request, 'kanban/onboarding/goal_input.html', {
+            'prefill_goal': '',
+            'error': (
+                'Your input contains code or markup that cannot be used as '
+                'an organization goal. Please describe your business objective '
+                'in plain text.'
+            ),
+        })
+
+    # Sanitize: strip any residual HTML tags before storage & AI processing
+    goal_text = _sanitize_goal_text(goal_text)
+
     # Save goal text on profile
     profile.onboarding_goal_text = goal_text
     profile.onboarding_status = 'goal_submitted'
     profile.save(update_fields=['onboarding_goal_text', 'onboarding_status'])
 
     # Create or replace preview
+    from django.utils import timezone as _tz
     preview, _created = OnboardingWorkspacePreview.objects.update_or_create(
         user=request.user,
         defaults={
@@ -115,6 +222,7 @@ def onboarding_goal_input(request):
             'edited_data': None,
             'status': 'generating',
             'error_message': None,
+            'created_at': _tz.now(),
         },
     )
 
@@ -185,8 +293,11 @@ def onboarding_generating(request):
                 return redirect('onboarding_review')
 
     profile = _get_profile(request)
+    from kanban.models import OrganizationGoal
+    has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
     return render(request, 'kanban/onboarding/generating.html', {
         'goal_text': preview.goal_text,
+        'has_workspace': has_workspace,
     })
 
 
@@ -207,7 +318,7 @@ def onboarding_status(request):
     """
     from django.utils import timezone
 
-    STALE_THRESHOLD_SECONDS = 120  # 2 minutes
+    STALE_THRESHOLD_SECONDS = 300  # 5 minutes
 
     try:
         preview = OnboardingWorkspacePreview.objects.get(user=request.user)
@@ -295,6 +406,9 @@ def onboarding_review(request):
     GET /onboarding/review/
     Show the review page with the generated hierarchy.
     """
+    from django.utils import timezone
+    import datetime
+
     try:
         preview = OnboardingWorkspacePreview.objects.get(user=request.user)
     except OnboardingWorkspacePreview.DoesNotExist:
@@ -307,10 +421,32 @@ def onboarding_review(request):
 
     data = preview.edited_data if preview.edited_data else preview.generated_data
 
+    # Detect stale previews (generated >6 hours ago and never committed)
+    age = timezone.now() - preview.updated_at
+    is_stale = age > datetime.timedelta(hours=6)
+
+    from kanban.models import OrganizationGoal
+    has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
+
+    # Warn when the goal name matches an existing workspace goal
+    goal_name = ''
+    if data and 'goal' in data:
+        goal_name = (data['goal'].get('name', '') or '').strip()
+    duplicate_goal = None
+    if goal_name and has_workspace:
+        duplicate_goal = OrganizationGoal.objects.filter(
+            created_by=request.user,
+            name__iexact=goal_name,
+        ).first()
+
     return render(request, 'kanban/onboarding/review.html', {
         'preview': preview,
         'data': data,
         'data_json': json.dumps(data),
+        'is_stale': is_stale,
+        'preview_age_hours': int(age.total_seconds() // 3600),
+        'has_workspace': has_workspace,
+        'duplicate_goal': duplicate_goal,
     })
 
 
@@ -320,6 +456,7 @@ def onboarding_review(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def onboarding_commit(request):
     """
     POST /onboarding/commit/
@@ -353,10 +490,39 @@ def onboarding_commit(request):
             'commit_error': 'Something went wrong while creating your workspace. Please try again.',
         })
 
+    # Switch out of demo mode so the dashboard shows the user's own workspace.
+    # Also sync profile.organization to the newly-created real org (it may still
+    # point at the shared demo org if the user was in demo mode during onboarding).
+    profile = request.user.profile
+    profile.refresh_from_db()  # pick up org change made inside commit_onboarding_workspace
+    save_fields = []
+    if profile.is_viewing_demo:
+        profile.is_viewing_demo = False
+        save_fields.append('is_viewing_demo')
+    if profile.organization and getattr(profile.organization, 'is_demo', False):
+        # commit_onboarding_workspace created a new real org; find it
+        from kanban.models import Workspace
+        from accounts.models import Organization
+        real_ws = Workspace.objects.filter(
+            created_by=request.user, is_demo=False, is_active=True,
+        ).order_by('-created_at').first()
+        real_org = (
+            real_ws.organization
+            if real_ws and real_ws.organization and not real_ws.organization.is_demo
+            else Organization.objects.filter(
+                created_by=request.user, is_demo=False,
+            ).order_by('-id').first()
+        )
+        if real_org:
+            profile.organization = real_org
+            save_fields.append('organization')
+    if save_fields:
+        profile.save(update_fields=save_fields)
+
     # Show a one-time banner on the dashboard reminding the user to assign tasks
     request.session['show_onboarding_assign_banner'] = True
 
-    return redirect('dashboard')
+    return redirect('onboarding_invite')
 
 
 # ---------------------------------------------------------------------------
@@ -365,6 +531,7 @@ def onboarding_commit(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def onboarding_start_over(request):
     """
     POST /onboarding/start-over/
@@ -391,6 +558,7 @@ def onboarding_start_over(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def onboarding_skip(request):
     """
     POST /onboarding/skip/
@@ -401,9 +569,200 @@ def onboarding_skip(request):
     if not _is_v2(profile):
         return redirect('dashboard')
 
+    # Auto-create an Organization even when skipping, so user has a workspace.
+    # Also create a new org if the user's current org is the shared demo org.
+    if not profile.organization or getattr(profile.organization, 'is_demo', False):
+        from accounts.models import Organization
+        first_name = (request.user.first_name or request.user.username).strip()
+        org_name = f"{first_name}'s Workspace"
+        org = Organization.objects.create(
+            name=org_name,
+            created_by=request.user,
+        )
+        profile.organization = org
+
+    # Ensure the org creator is in the OrgAdmin group
+    from django.contrib.auth.models import Group
+    org_admin_group, _ = Group.objects.get_or_create(name='OrgAdmin')
+    request.user.groups.add(org_admin_group)
+
     profile.onboarding_status = 'skipped'
-    profile.save(update_fields=['onboarding_status'])
+    profile.save(update_fields=['onboarding_status', 'organization'])
+
+    # Create a real workspace so the user can start adding boards immediately
+    from kanban.workspace_utils import get_or_create_real_workspace
+    get_or_create_real_workspace(request.user)
+
     return redirect('dashboard')
+
+
+# ---------------------------------------------------------------------------
+# Invite Team Members (post-commit step)
+# ---------------------------------------------------------------------------
+
+@login_required
+def onboarding_invite(request):
+    """
+    GET  /onboarding/invite/  — show invite page with workspace name + email form
+    POST /onboarding/invite/  — parse emails, create OrgInvitations, send emails, redirect to dashboard
+    """
+    import re
+    from accounts.models import Organization, OrganizationInvitation
+
+    profile = _get_profile(request)
+
+    # Guard: only accessible after workspace commit or skip (user must have an org)
+    org = profile.organization
+    if not org:
+        return redirect('onboarding_welcome')
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'invite')
+
+        # Handle workspace rename (inline) — never rename the shared demo org
+        new_name = request.POST.get('workspace_name', '').strip()
+        if new_name and new_name != org.name and not getattr(org, 'is_demo', False):
+            org.name = new_name[:100]
+            org.save(update_fields=['name'])
+            # Keep the active workspace name in sync
+            from kanban.models import Workspace
+            Workspace.objects.filter(
+                organization=org, is_demo=False,
+            ).update(name=new_name[:200])
+
+        if action == 'skip':
+            return redirect('dashboard')
+
+        # Parse emails
+        raw = request.POST.get('invite_emails', '').strip()
+        if not raw:
+            return redirect('dashboard')
+
+        raw_emails = re.split(r'[,;\n]+', raw)
+        emails = list(dict.fromkeys(
+            e.strip().lower() for e in raw_emails if e.strip()
+        ))
+
+        sent_list, skipped_list = [], []
+
+        for email in emails:
+            if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+                skipped_list.append(f"{email} (invalid format)")
+                continue
+
+            # Already an org member? Add directly as workspace member instead of skipping.
+            from accounts.models import UserProfile
+            from kanban.models import WorkspaceMembership, Workspace
+            existing_profile = UserProfile.objects.filter(
+                organization=org, user__email__iexact=email
+            ).select_related('user').first()
+            if existing_profile:
+                active_ws = getattr(profile, 'active_workspace', None)
+                if not active_ws:
+                    active_ws = Workspace.objects.filter(
+                        organization=org, is_demo=False, is_active=True,
+                    ).first()
+                if active_ws:
+                    _, created = WorkspaceMembership.objects.get_or_create(
+                        workspace=active_ws,
+                        user=existing_profile.user,
+                        defaults={'role': 'member', 'added_by': request.user},
+                    )
+                    if created:
+                        sent_list.append(email)
+                    else:
+                        skipped_list.append(f"{email} (already a workspace member)")
+                else:
+                    skipped_list.append(f"{email} (already a member)")
+                continue
+
+            # Revoke any previous pending invite for this email+org
+            OrganizationInvitation.objects.filter(
+                organization=org, email=email,
+                status=OrganizationInvitation.STATUS_PENDING,
+            ).update(status=OrganizationInvitation.STATUS_REVOKED)
+
+            invitation = OrganizationInvitation.objects.create(
+                organization=org,
+                invited_by=request.user,
+                email=email,
+            )
+
+            _send_org_invitation_email(request, invitation)
+
+            # Also create a workspace-level invitation so accepted users
+            # get WorkspaceMembership (with board sync) in addition to org access.
+            from kanban.models import WorkspaceInvitation
+            active_ws = getattr(profile, 'active_workspace', None)
+            if not active_ws:
+                active_ws = Workspace.objects.filter(
+                    organization=org, is_demo=False, is_active=True,
+                ).first()
+            if active_ws:
+                WorkspaceInvitation.objects.filter(
+                    workspace=active_ws, email=email,
+                    status=WorkspaceInvitation.STATUS_PENDING,
+                ).update(status=WorkspaceInvitation.STATUS_REVOKED)
+                WorkspaceInvitation.objects.create(
+                    workspace=active_ws,
+                    invited_by=request.user,
+                    email=email,
+                    role='member',
+                )
+
+            sent_list.append(email)
+
+        from django.contrib import messages
+        if sent_list:
+            count = len(sent_list)
+            if count == 1:
+                messages.success(request, f"Invitation sent to {sent_list[0]}.")
+            else:
+                messages.success(request, f"Invitations sent to {count} team members.")
+        for note in skipped_list:
+            messages.info(request, f"Skipped: {note}")
+
+        return redirect('dashboard')
+
+    # GET: render the invite page
+    return render(request, 'kanban/onboarding/invite.html', {
+        'organization': org,
+    })
+
+
+def _send_org_invitation_email(request, invitation):
+    """Send organization invitation email."""
+    from django.core.mail import send_mail
+    from django.template.loader import render_to_string
+    from django.urls import reverse
+
+    accept_url = request.build_absolute_uri(
+        reverse('accept_org_invitation', args=[invitation.token])
+    )
+    context = {
+        'invitation': invitation,
+        'organization': invitation.organization,
+        'invited_by': invitation.invited_by,
+        'accept_url': accept_url,
+        'expires_hours': 48,
+    }
+    subject = f"You're invited to join '{invitation.organization.name}' on PrizmAI"
+    body_text = render_to_string('kanban/email/org_invitation.txt', context)
+    body_html = render_to_string('kanban/email/org_invitation.html', context)
+
+    try:
+        send_mail(
+            subject=subject,
+            message=body_text,
+            from_email=None,
+            recipient_list=[invitation.email],
+            html_message=body_html,
+            fail_silently=False,
+        )
+        return True
+    except Exception as exc:
+        logger.warning(f"Failed to send org invitation email to {invitation.email}: {exc}")
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +771,7 @@ def onboarding_skip(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def onboarding_explore_demo(request):
     """
     POST /onboarding/demo/
@@ -427,3 +787,169 @@ def onboarding_explore_demo(request):
         profile.onboarding_status = 'demo_exploring'
     profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
     return redirect('dashboard')
+
+
+# ---------------------------------------------------------------------------
+# HITL: Validate workspace coherence (Phase 3)
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_POST
+@demo_ai_guard
+def onboarding_validate(request):
+    """
+    POST /onboarding/validate/
+    Accept the edited workspace JSON and run an AI coherence check.
+    Returns JSON: {status, flags[]}.
+    """
+    from kanban.utils.ai_utils import validate_workspace_coherence
+    from api.ai_usage_utils import track_ai_request
+    from kanban.audit_utils import log_audit
+    import time
+
+    try:
+        workspace_data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    if not workspace_data.get('goal') or not workspace_data.get('missions'):
+        return JsonResponse({
+            'status': 'structural_issue',
+            'flags': [{
+                'level': 'goal',
+                'item_title': '',
+                'message': 'Workspace must have a goal and at least one mission.',
+                'suggested_fix': 'Add a goal and missions before validating.'
+            }]
+        })
+
+    mission_names = [m.get('name', '') for m in workspace_data.get('missions', [])]
+    logger.info(f"[validate] user={request.user.username} missions={mission_names}")
+
+    start_time = time.time()
+    try:
+        result = validate_workspace_coherence(workspace_data)
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+        logger.info(f"[validate] result status={result.get('status')} flags={len(result.get('flags', []))}")
+        track_ai_request(
+            user=request.user,
+            feature='onboarding_validation',
+            request_type='validate',
+            success=True,
+            response_time_ms=response_time_ms,
+        )
+        log_audit(
+            'system.warning',
+            user=request.user,
+            message=f"Onboarding workspace validated: {result.get('status', 'unknown')}",
+        )
+
+        return JsonResponse(result)
+
+    except Exception as exc:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        logger.error(f"[validate] Workspace validation error: {exc}", exc_info=True)
+        track_ai_request(
+            user=request.user,
+            feature='onboarding_validation',
+            request_type='validate',
+            success=False,
+            error_message=str(exc),
+            response_time_ms=response_time_ms,
+        )
+        # Return service_error so the frontend shows a warning rather than faking 'clear'
+        return JsonResponse({'status': 'service_error', 'flags': []})
+
+
+# ---------------------------------------------------------------------------
+# HITL: Regenerate child titles (Phase 4)
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_POST
+@demo_ai_guard
+def onboarding_regenerate_children(request):
+    """
+    POST /onboarding/regenerate-children/
+    Accept a renamed parent's new title and current child titles,
+    return updated child titles from Gemini.
+
+    Request body: {
+        "parent_title": "string",
+        "parent_level": "mission" | "strategy",
+        "current_children": ["title1", "title2", ...]
+    }
+
+    Response: {
+        "success": true,
+        "titles": ["new1", "new2", ...]
+    }
+    """
+    from kanban.utils.ai_utils import regenerate_child_titles
+    from api.ai_usage_utils import track_ai_request
+    from kanban.audit_utils import log_audit
+    import time
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    parent_title = (body.get('parent_title') or '').strip()
+    parent_level = (body.get('parent_level') or '').strip()
+    current_children = body.get('current_children', [])
+
+    if not parent_title or parent_level not in ('mission', 'strategy'):
+        return JsonResponse({'success': False, 'error': 'Invalid parent_title or parent_level'}, status=400)
+    if not isinstance(current_children, list) or len(current_children) == 0:
+        return JsonResponse({'success': False, 'error': 'current_children must be a non-empty list'}, status=400)
+
+    start_time = time.time()
+    try:
+        titles = regenerate_child_titles(parent_title, parent_level, current_children)
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+        if titles:
+            track_ai_request(
+                user=request.user,
+                feature='onboarding_regeneration',
+                request_type='regenerate',
+                success=True,
+                response_time_ms=response_time_ms,
+            )
+            log_audit(
+                'system.warning',
+                user=request.user,
+                message=f"Onboarding children regenerated: {len(titles)} titles for {parent_level}: {parent_title}",
+            )
+            return JsonResponse({'success': True, 'titles': titles})
+        else:
+            track_ai_request(
+                user=request.user,
+                feature='onboarding_regeneration',
+                request_type='regenerate',
+                success=False,
+                error_message='Regeneration returned None',
+                response_time_ms=response_time_ms,
+            )
+            return JsonResponse({
+                'success': False,
+                'error': 'Could not generate new titles. Please try again.'
+            }, status=500)
+
+    except Exception as exc:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='onboarding_regeneration',
+            request_type='regenerate',
+            success=False,
+            error_message=str(exc),
+            response_time_ms=response_time_ms,
+        )
+        logger.error(f"Child title regeneration error: {exc}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Something went wrong. Please try again.'
+        }, status=500)

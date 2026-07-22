@@ -186,6 +186,15 @@ SECRET_KEY=your-production-secret-key
 GEMINI_API_KEY=your-production-gemini-key
 ```
 
+### Static Files (IMPORTANT for deploy)
+The deploy pipeline **must** run `python manage.py collectstatic --noinput` so that
+CSS/JS are served in production. Frontend libraries (Chart.js, Bootstrap, jQuery,
+Quill, marked, DOMPurify, highlight.js, jquery-tagsinput, frappe-gantt, htmx) are
+**self-hosted** under `static/vendor/` — they are no longer loaded from public CDNs,
+so a CDN outage cannot break features. If `collectstatic` is skipped, these files
+404 in production and pages break. See `PRE_LAUNCH_TODO.md` for the one remaining
+CDN dependency (icon fonts) still to be self-hosted.
+
 ## Project Structure
 
 ```

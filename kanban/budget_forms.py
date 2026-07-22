@@ -16,6 +16,7 @@ class ProjectBudgetForm(forms.ModelForm):
     """
     Form for creating/editing project budgets
     """
+    required_css_class = 'required'
     class Meta:
         model = ProjectBudget
         fields = [
@@ -83,6 +84,7 @@ class TaskCostForm(forms.ModelForm):
     """
     Form for tracking task costs
     """
+    required_css_class = 'required'
     class Meta:
         model = TaskCost
         fields = [
@@ -137,12 +139,14 @@ class TimeEntryForm(forms.ModelForm):
     """
     Form for logging time spent on tasks
     """
+    required_css_class = 'required'
     class Meta:
         model = TimeEntry
         fields = [
             'hours_spent',
             'work_date',
             'description',
+            'is_billable',
         ]
         widgets = {
             'hours_spent': forms.NumberInput(attrs={
@@ -161,6 +165,9 @@ class TimeEntryForm(forms.ModelForm):
                 'class': 'form-control',
                 'placeholder': 'What did you work on? (optional)',
                 'rows': 3,
+            }),
+            'is_billable': forms.CheckboxInput(attrs={
+                'class': 'form-check-input',
             }),
         }
         help_texts = {
@@ -227,6 +234,7 @@ class ProjectROIForm(forms.ModelForm):
     """
     Form for creating ROI snapshots
     """
+    required_css_class = 'required'
     class Meta:
         model = ProjectROI
         fields = [
@@ -342,5 +350,13 @@ class QuickTimeEntryForm(forms.Form):
         widget=forms.TextInput(attrs={
             'class': 'form-control form-control-sm',
             'placeholder': 'What did you work on?',
+        }),
+    )
+
+    is_billable = forms.BooleanField(
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={
+            'class': 'form-check-input',
         }),
     )

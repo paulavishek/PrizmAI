@@ -11,7 +11,9 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 import json
 
-from kanban.models import Board
+from kanban.models import Board, Task
+from kanban.decorators import demo_write_guard
+from kanban.utils.demo_protection import get_user_boards
 from kanban.favorite_views import is_user_favorite as _is_fav
 from kanban.conflict_models import (
     ConflictDetection, ConflictResolution, ConflictNotification, ResolutionPattern
@@ -29,10 +31,8 @@ def conflict_dashboard(request):
     Optional board_id parameter to filter by specific board.
     """
     try:
-        # Get boards user has access to
-        boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        boards = get_user_boards(request.user)
         
         # Check if filtering by specific board
         board_filter_id = request.GET.get('board_id')
@@ -46,25 +46,66 @@ def conflict_dashboard(request):
         else:
             boards_to_show = boards
         
-        # Get active conflicts
-        active_conflicts = ConflictDetection.objects.filter(
-            board__in=boards_to_show,
-            status='active'
-        ).select_related('board').prefetch_related(
-            'tasks', 'affected_users', 'resolutions'
-        ).order_by('-severity', '-detected_at')
-        
+        # Order by logical severity priority (critical -> low), not the raw
+        # string value — alphabetical ordering would push 'critical' to the
+        # bottom. Newest first within each severity tier.
+        from django.db.models import Case, When, IntegerField, Value
+        severity_rank = Case(
+            When(severity='critical', then=Value(0)),
+            When(severity='high', then=Value(1)),
+            When(severity='medium', then=Value(2)),
+            When(severity='low', then=Value(3)),
+            default=Value(4),
+            output_field=IntegerField(),
+        )
+
+        def _active_conflicts_qs():
+            return ConflictDetection.objects.filter(
+                board__in=boards_to_show,
+                status='active'
+            ).select_related('board').prefetch_related(
+                'tasks', 'affected_users', 'resolutions'
+            ).annotate(severity_rank=severity_rank).order_by(
+                'severity_rank', '-detected_at'
+            )
+
+        active_conflicts = _active_conflicts_qs()
+
+        # Demo workspace only: behave like every other pre-populated demo
+        # feature. If the demo sandbox has no conflicts yet, run detection
+        # synchronously on first visit so the dashboard isn't empty. This
+        # NEVER runs for real workspaces — they keep the manual "Scan Now"
+        # empty state.
+        is_demo = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+        if is_demo and active_conflicts.count() == 0:
+            for board in boards_to_show:
+                try:
+                    ConflictDetectionService(board=board).detect_all_conflicts()
+                except Exception as detect_err:
+                    logger.warning(
+                        f"Demo auto-detection failed for board {board.id}: {detect_err}"
+                    )
+            # Re-query now that detection has populated conflicts.
+            active_conflicts = _active_conflicts_qs()
+
         # Ensure notifications exist for all active conflicts (safety check)
         for conflict in active_conflicts:
             conflict.ensure_notifications()
         
-        # Get user's notifications
-        # Filter by board if a specific board is selected
+        # Get the user's notifications for conflicts that are STILL ACTIVE.
+        #
+        # We intentionally do NOT filter on ``acknowledged`` here. Acknowledging
+        # a notification is not the same as resolving the conflict — a user who
+        # has merely opened (or dismissed) an alert should still see it while the
+        # underlying conflict remains active and unresolved. Once a conflict is
+        # resolved or ignored its status changes and the notification naturally
+        # drops out of this list. The ``acknowledged`` flag is still used purely
+        # for read/unread styling in the template.
         user_notifications = ConflictNotification.objects.filter(
             user=request.user,
-            acknowledged=False,
+            conflict__status='active',
             conflict__board__in=boards_to_show  # Filter by selected board(s)
-        ).select_related('conflict').order_by('-sent_at')[:10]
+        ).select_related('conflict').order_by('acknowledged', '-conflict__detected_at')[:10]
         
         # Statistics
         stats = {
@@ -112,10 +153,8 @@ def conflict_detail(request, conflict_id):
     Detailed view of a specific conflict with resolution options.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         conflict = get_object_or_404(
             ConflictDetection.objects.select_related('board', 'chosen_resolution').prefetch_related(
@@ -127,7 +166,56 @@ def conflict_detail(request, conflict_id):
         
         # Get resolutions sorted by confidence
         resolutions = conflict.resolutions.all().order_by('-ai_confidence')
-        
+
+        # Remove any placeholder "AI Analysis Completed" records that were created
+        # by the old fallback code path when AI JSON parsing failed. These records
+        # carry no useful information (title='AI Analysis Completed',
+        # ai_reasoning='Generated from AI analysis') and should not be shown to
+        # users. The new code no longer generates them, but legacy records may
+        # still exist in the database.
+        stale_fallback_ids = [
+            r.pk for r in resolutions
+            if r.title.strip().lower() == 'ai analysis completed'
+            and (r.ai_reasoning or '').strip().lower() in ('generated from ai analysis', '')
+        ]
+        if stale_fallback_ids:
+            conflict.resolutions.filter(pk__in=stale_fallback_ids).delete()
+            resolutions = conflict.resolutions.all().order_by('-ai_confidence')
+            logger.info(
+                f"Removed {len(stale_fallback_ids)} stale AI fallback resolution(s) for conflict {conflict.id}"
+            )
+
+        # Detect resolutions with stale/missing substantive reasoning.
+        # A resolution has only a historical note (or nothing) when its ai_reasoning
+        # is either empty or starts with "Based on" (the pattern appended by
+        # _apply_learned_patterns). Any resolution with real substantive text begins
+        # with a sentence about the action itself, not a historical reference.
+        # This silently self-heals for any user on first visit without requiring a
+        # manual demo reset.
+        def _has_stale_reasoning(resolution):
+            text = (resolution.ai_reasoning or '').strip()
+            return not text or text.startswith('Based on')
+
+        if (
+            conflict.status == 'active'
+            and resolutions.exists()
+            and all(_has_stale_reasoning(r) for r in resolutions)
+        ):
+            try:
+                from kanban.utils.conflict_detection import ConflictResolutionSuggester
+                logger.info(
+                    f"Stale reasoning detected for conflict {conflict.id} — regenerating resolutions"
+                )
+                conflict.resolutions.all().delete()
+                suggester = ConflictResolutionSuggester(conflict)
+                suggester.generate_suggestions()
+                resolutions = conflict.resolutions.all().order_by('-ai_confidence')
+            except Exception as regen_error:
+                logger.error(
+                    f"Failed to regenerate stale resolutions for conflict {conflict.id}: {regen_error}",
+                    exc_info=True,
+                )
+
         # Generate resolutions on-demand if none exist
         if not resolutions.exists() and conflict.status == 'active':
             try:
@@ -146,6 +234,19 @@ def conflict_detail(request, conflict_id):
             conflict=conflict,
             user=request.user
         ).update(read_at=timezone.now())
+
+        # Display-side deduplication safety net: if the DB somehow still contains
+        # duplicate suggestions (same resolution_type + title), keep only the first
+        # one seen (highest confidence wins because the queryset is ordered by
+        # -ai_confidence).
+        deduplicated_resolutions = []
+        seen_dedup_keys = set()
+        for resolution in resolutions:
+            dedup_key = (resolution.resolution_type, resolution.title.strip().lower())
+            if dedup_key in seen_dedup_keys:
+                continue
+            seen_dedup_keys.add(dedup_key)
+            deduplicated_resolutions.append(resolution)
         
         # Get similar past conflicts for context
         similar_conflicts = ConflictDetection.objects.filter(
@@ -156,7 +257,7 @@ def conflict_detail(request, conflict_id):
         
         context = {
             'conflict': conflict,
-            'resolutions': resolutions,
+            'resolutions': deduplicated_resolutions,
             'similar_conflicts': similar_conflicts,
             'can_resolve': True,
             'is_favorited': _is_fav(request.user, 'conflict', conflict.pk),
@@ -172,15 +273,14 @@ def conflict_detail(request, conflict_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def apply_resolution(request, conflict_id, resolution_id):
     """
     Apply a specific resolution to resolve a conflict.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         conflict = get_object_or_404(
             ConflictDetection,
@@ -210,17 +310,49 @@ def apply_resolution(request, conflict_id, resolution_id):
         
         # Apply resolution
         resolution.apply(request.user)
-        
+
         # Update conflict with feedback
         conflict.resolve(resolution, request.user, feedback, effectiveness)
-        
+
         messages.success(request, f"Resolution applied successfully: {resolution.title}")
-        
-        return JsonResponse({
+
+        response_data = {
             'success': True,
             'message': 'Resolution applied successfully',
             'redirect': f'/kanban/conflicts/{conflict.id}/'
-        })
+        }
+
+        # Rescheduling a task's dates here does NOT cascade to tasks that
+        # depend on it (that only happens via the Gantt drag "Shift N tasks"
+        # banner/cascade endpoint). Surface the same affected-dependents info
+        # so the frontend can offer that cascade right after applying.
+        if resolution.resolution_type in ('reschedule', 'adjust_dates'):
+            task_id = resolution.implementation_data.get('task_id')
+            if task_id:
+                task = Task.objects.filter(id=task_id).first()
+                if task and task.due_date:
+                    effective_due_date = task.due_date.date()
+                    dependents = task.dependent_tasks.filter(
+                        start_date__isnull=False,
+                        start_date__lt=effective_due_date
+                    ).values('id', 'title', 'start_date')
+                    response_data['rescheduled_task'] = {
+                        'id': task.id,
+                        'title': task.title,
+                        'start_date': task.start_date.isoformat() if task.start_date else None,
+                        'due_date': effective_due_date.isoformat(),
+                    }
+                    response_data['affected_dependents'] = [
+                        {
+                            'id': d['id'],
+                            'title': d['title'],
+                            'start_date': d['start_date'].isoformat() if d['start_date'] else None,
+                        }
+                        for d in dependents
+                    ]
+                    response_data['total_dependents'] = task.dependent_tasks.count()
+
+        return JsonResponse(response_data)
         
     except Exception as e:
         logger.error(f"Error applying resolution: {e}", exc_info=True)
@@ -232,15 +364,14 @@ def apply_resolution(request, conflict_id, resolution_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def ignore_conflict(request, conflict_id):
     """
     Mark a conflict as ignored.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         conflict = get_object_or_404(
             ConflictDetection,
@@ -270,6 +401,7 @@ def ignore_conflict(request, conflict_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def acknowledge_notification(request, notification_id):
     """
     Acknowledge a conflict notification.
@@ -298,15 +430,14 @@ def acknowledge_notification(request, notification_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def conflict_feedback(request, conflict_id):
     """
     Add feedback and effectiveness rating to a resolved conflict.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         conflict = get_object_or_404(
             ConflictDetection,
@@ -353,47 +484,44 @@ def conflict_feedback(request, conflict_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def trigger_detection_all(request):
     """
     Manually trigger conflict detection for all accessible boards.
+    Always runs synchronously so results are immediately visible. Also
+    queues a Celery task (fire-and-forget) when workers are available so
+    that resolution suggestions can be generated in the background.
     """
     try:
-        # Get all accessible boards
-        boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
-        
-        # Trigger detection for each board
+        # Get all accessible boards (demo-aware)
+        boards = get_user_boards(request.user)
+
         count = 0
         total_conflicts = 0
-        sync_mode = False
-        
+
         for board in boards:
+            # Run detection synchronously — guarantees immediate results
+            # regardless of whether Celery workers are running.
+            service = ConflictDetectionService(board=board)
+            results = service.detect_all_conflicts()
+            total_conflicts += results['total_conflicts']
+
+            # Also enqueue for background resolution-suggestion generation.
             try:
                 detect_board_conflicts_task.delay(board.id)
-            except Exception as celery_error:
-                # Fallback to synchronous detection if Celery/Redis unavailable
-                if not sync_mode:
-                    logger.warning(f"Celery unavailable, switching to sync detection: {celery_error}")
-                    sync_mode = True
-                
-                service = ConflictDetectionService(board=board)
-                results = service.detect_all_conflicts()
-                total_conflicts += results['total_conflicts']
-            
+            except Exception:
+                pass  # Workers unavailable — sync results are already committed
+
             count += 1
-        
-        if sync_mode:
-            message = f'Conflict detection completed for {count} board(s). Found {total_conflicts} conflicts.'
-        else:
-            message = f'Conflict detection started for {count} board(s). Results will appear shortly.'
-        
+
+        message = f'Conflict detection completed for {count} board(s). Found {total_conflicts} new conflict(s).'
         messages.success(request, message)
-        
+
         return JsonResponse({
             'success': True,
             'message': message,
-            'boards_scanned': count
+            'boards_scanned': count,
+            'conflicts_found': total_conflicts,
         })
         
     except Exception as e:
@@ -406,40 +534,42 @@ def trigger_detection_all(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def trigger_detection(request, board_id):
     """
     Manually trigger conflict detection for a specific board.
+    Always runs synchronously so results are immediately visible.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
-        
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
+
         board = get_object_or_404(
             Board,
             id=board_id,
             id__in=accessible_boards.values_list('id', flat=True)
         )
-        
-        # Try async detection first, fallback to sync if Redis unavailable
+
+        # Run synchronously — immediate results guaranteed
+        service = ConflictDetectionService(board=board)
+        results = service.detect_all_conflicts()
+        total_conflicts = results['total_conflicts']
+        message = f"Conflict detection completed for '{board.name}': {total_conflicts} new conflict(s) found."
+
+        # Also enqueue for background resolution-suggestion generation
         try:
             detect_board_conflicts_task.delay(board.id)
-            message = 'Conflict detection started. Results will appear shortly.'
-        except Exception as celery_error:
-            # Fallback to synchronous detection if Celery/Redis unavailable
-            logger.warning(f"Celery unavailable, running sync detection: {celery_error}")
-            service = ConflictDetectionService(board=board)
-            results = service.detect_all_conflicts()
-            message = f"Conflict detection completed: {results['total_conflicts']} conflicts found"
-        
-        messages.success(request, f"Conflict detection started for {board.name}")
-        
+        except Exception:
+            pass
+
+        messages.success(request, message)
+
         return JsonResponse({
             'success': True,
             'message': message,
             'board_id': board.id,
-            'board_name': board.name
+            'board_name': board.name,
+            'conflicts_found': total_conflicts,
         })
         
     except Exception as e:
@@ -456,15 +586,23 @@ def conflict_analytics(request):
     Analytics view showing conflict patterns and resolution effectiveness.
     """
     try:
-        # Get boards user has access to
-        boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        boards = get_user_boards(request.user)
         
-        # Get resolution patterns
+        # Get resolution patterns (board-specific + global) for the learned
+        # patterns list. The global ones are pre-seeded and shipped with the
+        # system, which is why this list looks populated even for brand-new
+        # users.
         patterns = ResolutionPattern.objects.filter(
             Q(board__in=boards) | Q(board__isnull=True)
         ).order_by('-success_rate', '-times_used')[:20]
+
+        # Personal patterns only (board-specific = learned from THIS user's own
+        # resolutions). Used for the Quick Stats panel so we never present a
+        # global-derived success rate as if it were the user's own.
+        personal_patterns = list(
+            ResolutionPattern.objects.filter(board__in=boards)
+        )
         
         # Historical data
         resolved_conflicts = ConflictDetection.objects.filter(
@@ -559,12 +697,27 @@ def conflict_analytics(request):
             trend_detected.append(daily_detected)
             trend_resolved.append(daily_resolved)
         
+        # Quick Stats — user's OWN history only. If the user has resolved
+        # nothing (or has no personal patterns), show "No data yet" rather than
+        # a percentage derived from the global seeded patterns.
+        personal_success_rate = None  # float 0..1 or None
+        personal_most_used = None     # display string or None
+        if total_resolved > 0 and personal_patterns:
+            total_used = sum(p.times_used for p in personal_patterns)
+            if total_used > 0:
+                total_successful = sum(p.times_successful for p in personal_patterns)
+                personal_success_rate = total_successful / total_used
+                most_used = max(personal_patterns, key=lambda p: p.times_used)
+                personal_most_used = most_used.get_resolution_type_display()
+
         context = {
             'patterns': patterns,
             'total_resolved': total_resolved,
             'avg_resolution_time': avg_resolution_time,
             'avg_effectiveness': avg_effectiveness,
             'rated_count': rated_conflicts.count(),
+            'personal_success_rate': personal_success_rate,
+            'personal_most_used': personal_most_used,
             'trend_labels_json': json.dumps(trend_labels),
             'trend_detected_json': json.dumps(trend_detected),
             'trend_resolved_json': json.dumps(trend_resolved),
@@ -584,9 +737,12 @@ def get_conflict_notifications(request):
     API endpoint to get user's unread conflict notifications.
     """
     try:
+        # RBAC: only show notifications for boards the user has access to
+        accessible_boards = get_user_boards(request.user)
         notifications = ConflictNotification.objects.filter(
             user=request.user,
-            acknowledged=False
+            acknowledged=False,
+            conflict__board__in=accessible_boards
         ).select_related('conflict__board').order_by('-sent_at')[:10]
         
         data = [{

@@ -8,11 +8,12 @@
     <!-- Favicon -->
     {% load static %}
     {% load analytics_filters %}
+    {% load avatar_tags %}
     <link rel="icon" type="image/svg+xml" href="{% static 'kanban/images/favicon.svg' %}">
     <link rel="icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}">
     
     <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{% static 'vendor/bootstrap.min.css' %}?v={{ STATIC_VERSION|default:'12' }}" rel="stylesheet">
     
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -26,6 +27,8 @@
     <link rel="stylesheet" href="{% static 'css/theme.css' %}">
     <link rel="stylesheet" href="{% static 'css/accessibility.css' %}">
     <link rel="stylesheet" href="{% static 'css/ai_explainability.css' %}">
+    <link rel="stylesheet" href="{% static 'css/prizm_loading.css' %}">
+    <link rel="stylesheet" href="{% static 'css/prizm-ui.css' %}">
     
     <style>
         /* Fix alert close button visibility */
@@ -44,17 +47,10 @@
             filter: brightness(0) saturate(100%);
         }
         .share-nav-btn {
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-            animation: sharePulse 2.5s ease-in-out infinite;
+            transition: background-color 0.15s ease;
         }
         .share-nav-btn:hover {
-            transform: scale(1.07);
-            box-shadow: 0 4px 14px rgba(239,68,68,0.6) !important;
-            color: #fff !important;
-        }
-        @keyframes sharePulse {
-            0%, 100% { box-shadow: 0 2px 8px rgba(239,68,68,0.45); }
-            50%       { box-shadow: 0 2px 16px rgba(239,68,68,0.75); }
+            background-color: var(--bg-tertiary) !important;
         }
         /* ════ Quick-View Drawer (shared) ════ */
         .task-drawer {
@@ -116,7 +112,14 @@
     })();
     </script>
 </head>
-<body data-demo-mode="{% if request.session.is_demo_mode %}true{% else %}false{% endif %}" data-user-timezone="{{ user_timezone }}" data-display-mode="{{ user_display_mode }}">
+<body data-demo-mode="{% if is_viewing_demo %}true{% else %}false{% endif %}" data-user-timezone="{{ user_timezone }}" data-display-mode="{{ user_display_mode }}">
+    <!-- Display Mode Anti-Flicker (body): the <head> script can only mark <html>,
+         but accessibility.css keys off body.colorblind-mode. Set the body class
+         before first paint so accessibility/dark styles apply without a flash.
+         display-mode.js re-applies this idempotently on load. -->
+    <script>(function(){var b=document.body,m=b.getAttribute('data-display-mode');
+        if(m==='accessibility')b.classList.add('colorblind-mode');
+        else if(m==='dark')b.classList.add('dark-mode');})();</script>
     <!-- Google Tag Manager (noscript) -->
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N4RMZ4SN"
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
@@ -168,21 +171,121 @@
                     <i class="fas fa-bars"></i>
                 </button>
                 <h1 class="topbar-page-title">{% block page_title %}Dashboard{% endblock %}</h1>
-                {% if request.session.is_demo_mode %}
-                    <span class="topbar-demo-badge"><i class="fas fa-graduation-cap me-1"></i>DEMO</span>
+                {% if is_viewing_demo %}
+                <span class="tws-sandbox-badge" style="font-size:0.72rem;padding:3px 10px;margin-left:6px;">SANDBOX</span>
+                {% endif %}
+                {% if user.is_authenticated and nav_ai_provider_key %}
+                <a href="{% url 'profile' %}#ai-provider-preferences"
+                   class="tws-ai-provider-pill nav-ai-{{ nav_ai_provider_key }}"
+                   title="AI Provider: {{ nav_ai_provider_name }} — click to change settings">
+                    <i class="fas fa-robot"></i> {{ nav_ai_provider_name }}
+                </a>
                 {% endif %}
             </div>
+            <!-- Workspace Indicator — absolutely centered in topbar -->
+            {% if user.is_authenticated %}
+            <div class="topbar-workspace-switcher" style="position:absolute;left:50%;transform:translateX(-50%);">
+                {% if active_workspace and not active_workspace.is_demo %}
+                <span class="tws-btn tws-btn-active tws-ws-display" id="ws-name-display" title="Current workspace">
+                    <i class="fas fa-briefcase me-1"></i><span id="ws-name-text">{{ active_workspace.name|truncatechars:24 }}</span>
+                </span>
+                {% if workspace_member_users %}
+                <span class="ms-1">{% avatar_stack workspace_member_users max_avatars=3 size="sm" %}</span>
+                {% endif %}
+                {% if can_rename_workspace %}
+                {# ── Workspace Settings gear dropdown ── #}
+                <div class="dropdown d-inline-block" id="ws-settings-dropdown">
+                    <button type="button" class="tws-ws-edit-btn" id="ws-settings-btn" title="Workspace settings"
+                            data-bs-toggle="dropdown" aria-expanded="false"
+                            style="background:none;border:none;color:var(--text-secondary,#6b7280);cursor:pointer;padding:2px 6px;font-size:0.75rem;margin-left:4px;transition:color 0.15s;"
+                            onmouseenter="this.style.color='#6366f1'" onmouseleave="this.style.color='var(--text-secondary,#6b7280)'">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width:200px;font-size:0.82rem;">
+                        <li><h6 class="dropdown-header" style="font-size:0.7rem;"><i class="fas fa-briefcase me-1"></i>Workspace Settings</h6></li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'workspace_preset_settings' %}">
+                                <i class="fas fa-sliders-h me-2 text-muted"></i>Workspace Settings
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'custom_field_list' active_workspace.pk %}">
+                                <i class="fas fa-tags me-2 text-muted"></i>Custom Fields
+                            </a>
+                        </li>
+                        <li>
+                            <button class="dropdown-item" onclick="wsStartEdit(); document.getElementById('ws-settings-dropdown').querySelector('.dropdown-menu').classList.remove('show');">
+                                <i class="fas fa-pencil-alt me-2 text-muted"></i>Rename Workspace
+                            </button>
+                        </li>
+                        {% if can_manage_ws_members %}
+                        <li>
+                            <a class="dropdown-item" href="{% url 'manage_workspace_members' %}">
+                                <i class="fas fa-users me-2 text-muted"></i>Manage Members
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_delete_workspace %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item text-danger" onclick="confirmDeleteWorkspaceTopbar()">
+                                <i class="fas fa-trash-alt me-2"></i>Delete Workspace
+                            </button>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+                <script>
+                function confirmDeleteWorkspaceTopbar() {
+                    var wsName = document.getElementById('ws-name-text').textContent.trim();
+                    if (!confirm('Delete workspace "' + wsName + '"?\n\nThis will remove the workspace and all its boards, tasks, and data. This action cannot be undone.')) return;
+                    var fd = new FormData();
+                    fd.append('workspace_id', '{{ active_workspace.pk }}');
+                    var csrf = document.querySelector('[name=csrfmiddlewaretoken]');
+                    if (csrf) fd.append('csrfmiddlewaretoken', csrf.value);
+                    fetch('{% url "delete_workspace" %}', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) { if (data.ok) { window.location.href = '/dashboard/'; } else { alert(data.error || 'Failed to delete'); } })
+                        .catch(function() { alert('Network error'); });
+                }
+                </script>
+                <form method="post" action="{% url 'rename_workspace' %}" class="d-inline" id="ws-rename-form"
+                      style="display:none!important;" onsubmit="return wsSubmitRename(event)">
+                    {% csrf_token %}
+                    <input type="text" name="name" id="ws-rename-input" value="{{ active_workspace.name }}"
+                           maxlength="60" class="form-control form-control-sm d-inline-block"
+                           style="width:180px;font-size:0.78rem;padding:2px 8px;"
+                           onkeydown="if(event.key==='Escape'){wsCancelEdit();}">
+                    <button type="submit" class="btn btn-sm btn-primary" style="font-size:0.7rem;padding:1px 8px;margin-left:2px;">
+                        <i class="fas fa-check"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:0.7rem;padding:1px 8px;margin-left:1px;"
+                            onclick="wsCancelEdit()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </form>
+                {% endif %}
+                {% elif active_workspace and active_workspace.is_demo %}
+                <span class="tws-btn tws-btn-active" title="Demo workspace" style="border-color:#f59e0b44;">
+                    <i class="fas fa-flask me-1 text-warning"></i>{{ active_workspace.name|truncatechars:24 }}
+                </span>
+                {% elif is_viewing_demo %}
+                <span class="tws-btn tws-btn-active" title="Demo workspace">
+                    <i class="fas fa-flask me-1 text-warning"></i>Demo Workspace
+                </span>
+                {% else %}
+                <span class="tws-btn tws-btn-active" title="Current workspace">
+                    <i class="fas fa-briefcase me-1"></i>My Workspace
+                </span>
+                {% endif %}
+            </div>
+            {% endif %}
+
             <div class="topbar-right">
                 {% if is_demo_account and request.session.real_user_username %}
                 <a href="{% url 'return_to_real_account' %}" class="btn btn-sm btn-warning fw-semibold topbar-return-btn" title="Switch back to your real account">
                     <i class="fas fa-arrow-left me-1"></i>Back to {{ request.session.real_user_username }}
                 </a>
-                {% endif %}
-                {% if user.is_authenticated and not is_demo_account %}
-                <button type="button" class="topbar-icon-btn share-nav-btn" data-bs-toggle="modal" data-bs-target="#shareModal" title="Share PrizmAI"
-                        style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border-radius:8px;">
-                    <i class="fas fa-share-alt"></i>
-                </button>
                 {% endif %}
                 <!-- Display Mode Dropdown -->
                 <div class="dropdown" id="display-mode-dropdown">
@@ -217,6 +320,71 @@
                         </li>
                     </ul>
                 </div>
+                {% if is_viewing_demo %}
+                <div class="demo-info-dropdown" id="demoInfoDropdown">
+                    <button type="button" id="demo-info-btn" class="tws-btn" onclick="toggleDemoInfo(event)" title="Demo workspace info"
+                            style="border:1px solid var(--tws-chip-indigo);color:var(--tws-chip-indigo);background:transparent;font-weight:600;font-size:0.78rem;">
+                        <i class="fas fa-info-circle me-1"></i>Demo Info
+                    </button>
+                    {% include 'demo/partials/demo_info_dropdown.html' %}
+                </div>
+                {% endif %}
+                {% if is_viewing_demo %}
+                <button type="button" id="reset-demo-btn" class="tws-btn tws-btn-reset" onclick="resetMyDemo()" title="Reset demo to fresh state"
+                        style="border:1.5px solid var(--tws-chip-amber) !important;background:transparent !important;color:var(--tws-chip-amber) !important;font-weight:600 !important;">
+                    <i class="fas fa-redo me-1"></i>Reset Demo
+                </button>
+                {% endif %}
+                {% if is_viewing_demo and real_workspaces %}
+                <!-- In demo — show "Back to My Workspace" -->
+                <form method="post" action="{% url 'switch_workspace' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="workspace_id" value="{{ real_workspaces.0.pk }}">
+                    <button type="submit" class="tws-btn" title="Return to your workspace"
+                            style="border:1px solid var(--tws-chip-indigo);color:var(--tws-chip-indigo);background:transparent;font-weight:600;font-size:0.78rem;">
+                        <i class="fas fa-briefcase me-1"></i>My Workspace
+                    </button>
+                </form>
+                {% elif not is_viewing_demo %}
+                <!-- Not in demo — show "Try Demo" button (uses toggle_demo_mode which handles provisioning) -->
+                <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="tws-btn" title="Explore the demo workspace"
+                            style="border:1px solid var(--tws-chip-amber-alt);color:var(--tws-chip-amber-alt);background:transparent;font-weight:500;font-size:0.78rem;">
+                        <i class="fas fa-flask me-1"></i>Demo
+                    </button>
+                </form>
+                {% endif %}
+                {% if can_setup_workspace|default:False %}
+                {% if is_viewing_demo %}
+                <a href="{% url 'onboarding_welcome' %}?from=dashboard" class="tws-btn tws-btn-setup-primary"
+                   style="background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;color:#fff;font-size:0.82rem;font-weight:600;padding:6px 14px;border-radius:6px;box-shadow:0 2px 8px rgba(99,102,241,0.3);"
+                   onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(99,102,241,0.4)';"
+                   onmouseout="this.style.transform='';this.style.boxShadow='0 2px 8px rgba(99,102,241,0.3)';">
+                    <i class="fas fa-rocket me-1"></i>Create New Workspace
+                </a>
+                {% else %}
+                <a href="{% url 'onboarding_goal' %}?from=dashboard" class="tws-btn tws-btn-setup-muted"
+                   style="background:transparent;border:1px solid var(--border-color, #d1d5db);color:var(--text-secondary, #6b7280);font-size:0.78rem;font-weight:500;opacity:0.85;">
+                    <i class="fas fa-rocket me-1"></i>Create New Workspace
+                </a>
+                {% endif %}
+                {% endif %}
+                {% if user.is_authenticated and not is_demo_account %}
+                <button type="button" class="topbar-icon-btn share-nav-btn" data-bs-toggle="modal" data-bs-target="#shareModal" title="Share PrizmAI"
+                        style="background:var(--card-bg);color:var(--text-primary);border:1px solid var(--border-color);border-radius:6px;">
+                    <i class="fas fa-share-alt"></i>
+                </button>
+                {% endif %}
+                <!-- Notification Bell -->
+                {% if user.is_authenticated %}
+                <a href="{% url 'messaging:notifications' %}" class="topbar-icon-btn" id="topbar-notif-btn" title="Notifications" style="position:relative; text-decoration:none;">
+                    <i class="fas fa-bell"></i>
+                    <span class="topbar-badge" id="topbar-notif-badge" style="display:none;">
+                        <span id="topbar-notif-count">0</span>
+                    </span>
+                </a>
+                {% endif %}
                 <!-- Timezone Selector -->
                 {% if user.is_authenticated %}
                 <div id="timezone-dropdown">
@@ -226,27 +394,6 @@
                     </button>
                 </div>
                 {% endif %}
-                <div class="dropdown">
-                    <button class="topbar-icon-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="topbarNotifBell" title="Notifications">
-                        <i class="fas fa-bell"></i>
-                        <span class="topbar-badge" id="topbar-notif-badge" style="display:none;"><span id="topbar-notif-count">0</span></span>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end" style="z-index: 1050; min-width: 300px;">
-                        <li id="dc-notif-entry" style="display:none;">
-                            <a class="dropdown-item py-2" href="{% url 'decision_center:decision_center' %}">
-                                <i class="fas fa-bolt text-warning me-2"></i>
-                                <strong>Decision Center</strong>
-                                <br><small class="text-muted" id="dc-notif-text"></small>
-                            </a>
-                        </li>
-                        <li id="dc-notif-divider" style="display:none;"><hr class="dropdown-divider"></li>
-                        <li>
-                            <a class="dropdown-item py-2" href="{% url 'messaging:notifications' %}">
-                                <i class="fas fa-list me-2"></i> View all notifications
-                            </a>
-                        </li>
-                    </ul>
-                </div>
             </div>
         </header>
 
@@ -266,8 +413,8 @@
         </div>
         {% endif %}
 
-        <!-- Demo Limitation Modal (available globally for demo mode) -->
-        {% if request.session.is_demo_mode %}
+        <!-- Demo Limitation Modal (legacy — kept for demo accounts) -->
+        {% if is_demo_account %}
             {% include 'demo/partials/limitation_modal.html' %}
         {% endif %}
 
@@ -280,8 +427,16 @@
             <div class="container-fluid px-0 mb-2">
                 {% for message in messages %}
                     {% if 'success' not in message.tags and 'info' not in message.tags %}
-                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show border-0 shadow-sm" role="alert"
+                         style="{% if 'danger' in message.tags %}border-left: 5px solid #dc3545 !important; font-size: 0.95rem; padding: 1rem 1.25rem;{% endif %}">
+                        {% if 'danger' in message.tags %}
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fas fa-lock fa-lg text-danger flex-shrink-0"></i>
+                            <span><strong>Access Denied.</strong> {{ message }}</span>
+                        </div>
+                        {% else %}
                         {{ message }}
+                        {% endif %}
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
                     {% endif %}
@@ -353,6 +508,29 @@
     <main class="container my-4">
     {% endif %}
 
+    {# ── Personal Sandbox Banner (single-tier) ── #}
+    {% if is_viewing_demo %}
+    <div class="sandbox-active-banner" role="status">
+        <div class="sandbox-active-inner">
+            <div class="sandbox-active-icon">
+                <i class="fas fa-flask"></i>
+            </div>
+            <div class="sandbox-active-text">
+                <strong>You're in the demo workspace</strong>
+                <span class="sandbox-active-detail">
+                    &mdash; You have full edit access. Changes here won't affect anyone else's data.
+                    <span class="d-block mt-1" style="font-size:0.82rem;opacity:0.85;">
+                        <i class="fas fa-lock me-1"></i>Member management &amp; RBAC are disabled in demo mode. Create your own workspace to invite team members and manage roles.
+                    </span>
+                </span>
+            </div>
+            <button type="button" class="sandbox-active-dismiss" onclick="this.closest('.sandbox-active-banner').classList.add('d-none')" aria-label="Dismiss notice">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
     {% block content %}{% endblock %}
 
     {% if user.is_authenticated and not force_auth_layout %}
@@ -378,13 +556,16 @@
     {% endif %}
 
     <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{% static 'vendor/bootstrap.bundle.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
     
     <!-- HTMX (lightweight hypermedia — used for quick-view drawer etc.) -->
-    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
+    <script src="{% static 'vendor/htmx.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
     
     <!-- jQuery -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="{% static 'vendor/jquery-3.6.0.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
+
+    <!-- Feature Guide — contextual help popovers + modals -->
+    <script src="{% static 'js/feature_guide.js' %}"></script>
     
 
     
@@ -464,6 +645,26 @@
                     }
                 })
                 .catch(error => console.error('Error fetching notification count:', error));
+
+            // Poll pending access request count for board owners
+            fetch('{% url "get_pending_access_request_count" %}')
+                .then(response => response.json())
+                .then(data => {
+                    const arEntry = document.getElementById('ar-notif-entry');
+                    const arDivider = document.getElementById('ar-notif-divider');
+                    const arText = document.getElementById('ar-notif-text');
+                    if (arEntry && arText) {
+                        if (data.count > 0) {
+                            arEntry.style.display = '';
+                            if (arDivider) arDivider.style.display = '';
+                            arText.textContent = data.count + ' pending request' + (data.count !== 1 ? 's' : '');
+                        } else {
+                            arEntry.style.display = 'none';
+                            if (arDivider) arDivider.style.display = 'none';
+                        }
+                    }
+                })
+                .catch(error => console.error('Error fetching access request count:', error));
             {% endif %}
         }
 
@@ -565,9 +766,6 @@
     </script>
     {% endif %}
 
-    <!-- Navigation Utilities JS (goBack function) -->
-    <script src="{% static 'js/navigation.js' %}"></script>
-    
     <!-- Sidebar JS -->
     <script src="{% static 'js/sidebar.js' %}"></script>
     
@@ -576,17 +774,27 @@
     
     <!-- AI Explainability JS -->
     <script src="{% static 'js/ai_explainability.js' %}"></script>
+
+    <!-- AI Progressive Disclosure (WebSocket streaming) -->
+    <script src="{% static 'js/ai_progressive.js' %}"></script>
+
+    <!-- Centralized loading spinner & rotating messages -->
+    <script src="{% static 'js/prizm_loading.js' %}"></script>
     
     <!-- Unified Display Mode JS -->
     <script src="{% static 'js/display-mode.js' %}"></script>
-    
+
+    <!-- Shared Chart.js theming (getChartTheme + recolor-on-toggle).
+         Loads before any page's chart scripts so PrizmCharts.register() exists. -->
+    <script src="{% static 'js/chart-theme.js' %}"></script>
+
     <!-- Timezone Selector JS -->
     {% if user.is_authenticated %}
     <script src="{% static 'js/timezone-selector.js' %}"></script>
     {% endif %}
     
     <!-- Demo Mode GA4 Analytics -->
-    {% if request.session.is_demo_mode %}
+    {% if is_viewing_demo %}
     <script src="{% static 'js/demo_ga4_analytics.js' %}"></script>
     {% endif %}
     
@@ -625,7 +833,190 @@
 <div id="task-drawer" class="task-drawer">
     <div id="task-drawer-body"></div>
 </div>
+<script>
+/* Workspace inline rename */
+function wsStartEdit(){
+    var d=document.getElementById('ws-name-display'),
+        b=document.getElementById('ws-settings-dropdown'),
+        f=document.getElementById('ws-rename-form'),
+        i=document.getElementById('ws-rename-input');
+    if(d)d.style.display='none';
+    if(b)b.style.display='none';
+    if(f){f.style.display='inline-flex';f.style.setProperty('display','inline-flex','important');}
+    if(i){i.focus();i.select();}
+}
+function wsCancelEdit(){
+    var d=document.getElementById('ws-name-display'),
+        b=document.getElementById('ws-settings-dropdown'),
+        f=document.getElementById('ws-rename-form');
+    if(d)d.style.display='';
+    if(b)b.style.display='';
+    if(f){f.style.display='none';f.style.setProperty('display','none','important');}
+}
+function wsSubmitRename(e){
+    e.preventDefault();
+    var f=document.getElementById('ws-rename-form'),
+        i=document.getElementById('ws-rename-input'),
+        t=document.getElementById('ws-name-text'),
+        name=i.value.trim();
+    if(!name)return false;
+    var fd=new FormData(f);
+    fetch(f.action,{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'}})
+    .then(function(r){return r.json();})
+    .then(function(d){
+        if(d.ok&&t){t.textContent=d.name;}
+        wsCancelEdit();
+    })
+    .catch(function(){wsCancelEdit();});
+    return false;
+}
+</script>
+<!-- Required-field validation: show warnings on submit for empty required inputs -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('form').forEach(function(form) {
+        // Skip forms that are purely search/filter/delete confirmation
+        if (form.classList.contains('no-validate')) return;
+
+        form.addEventListener('submit', function(e) {
+            var firstInvalid = null;
+            form.querySelectorAll('input[required], select[required], textarea[required]').forEach(function(field) {
+                var wrapper = field.closest('.mb-3') || field.parentElement;
+                var msg = wrapper ? wrapper.querySelector('.field-validation-msg') : null;
+                if (!field.value || !field.value.trim()) {
+                    field.classList.add('is-invalid');
+                    if (msg) msg.style.display = 'block';
+                    if (!firstInvalid) firstInvalid = field;
+                } else {
+                    field.classList.remove('is-invalid');
+                    if (msg) msg.style.display = 'none';
+                }
+            });
+            if (firstInvalid) {
+                e.preventDefault();
+                firstInvalid.focus();
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+
+        // Clear validation state on input
+        form.querySelectorAll('input[required], select[required], textarea[required]').forEach(function(field) {
+            field.addEventListener('input', function() {
+                if (field.value && field.value.trim()) {
+                    field.classList.remove('is-invalid');
+                    var wrapper = field.closest('.mb-3') || field.parentElement;
+                    var msg = wrapper ? wrapper.querySelector('.field-validation-msg') : null;
+                    if (msg) msg.style.display = 'none';
+                }
+            });
+            field.addEventListener('change', function() {
+                if (field.value && field.value.trim()) {
+                    field.classList.remove('is-invalid');
+                    var wrapper = field.closest('.mb-3') || field.parentElement;
+                    var msg = wrapper ? wrapper.querySelector('.field-validation-msg') : null;
+                    if (msg) msg.style.display = 'none';
+                }
+            });
+        });
+    });
+});
+</script>
     {% block extra_js %}{% endblock %}
+{% if user.is_authenticated %}
+<script>
+(function() {
+    function getCsrfToken() {
+        var match = document.cookie.split(';').map(function(c) { return c.trim().split('='); }).find(function(p) { return p[0] === 'csrftoken'; });
+        return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    window.resetMyDemo = function() {
+        if (!confirm('Reset your sandbox? This re-copies the demo data from scratch. All your current edits will be lost.')) return;
+
+        // Disable button and show a spinner in place of the icon (same label, so
+        // the button width is unchanged and the centered workspace pill is never
+        // overlapped).
+        var btn = document.getElementById('reset-demo-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Reset Demo';
+        }
+
+        // Show an in-page info banner for the duration of the request.
+        var banner = document.createElement('div');
+        banner.id = 'reset-demo-banner';
+        banner.className = 'alert alert-info mx-3 mt-2';
+        banner.setAttribute('role', 'alert');
+        banner.innerHTML = '<i class="fas fa-info-circle me-2"></i><strong>Resetting your demo workspace</strong> — this usually takes 10–20 seconds. Please don’t close this tab.';
+        var mainContent = document.querySelector('.prizm-main-content');
+        if (mainContent) {
+            mainContent.insertBefore(banner, mainContent.firstChild);
+        } else {
+            document.body.insertBefore(banner, document.body.firstChild);
+        }
+
+        function failReset(message) {
+            banner.className = 'alert alert-danger mx-3 mt-2';
+            banner.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i><strong>Reset failed.</strong> ' +
+                (message || 'Please click Reset Demo again.');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-redo me-1"></i>Reset Demo';
+            }
+        }
+
+        // The reset now runs SYNCHRONOUSLY on the server (no Celery task, no
+        // WebSocket): the deep-copy is ~10s and the request simply doesn't return
+        // until it's done. So the POST response IS the completion signal — on
+        // success we redirect; on failure we surface a retry. This removes the
+        // queue/worker/WebSocket round-trip that previously left resets hung.
+        fetch('/demo/reset-mine/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(function(r) {
+            return r.json().then(function(data) { return { ok: r.ok, data: data }; });
+        })
+        .then(function(res) {
+            var data = res.data || {};
+            if (res.ok && data.status !== 'error') {
+                window.location.href = data.redirect_url || '/dashboard/';
+            } else {
+                failReset(data.message);
+            }
+        })
+        .catch(function() {
+            failReset('Could not reach the server.');
+        });
+    };
+
+    // Demo Info navbar dropdown: toggle on click, close on outside click / Escape.
+    window.toggleDemoInfo = function(e) {
+        if (e) { e.stopPropagation(); }
+        var panel = document.getElementById('demoInfoPanel');
+        if (panel) { panel.classList.toggle('show'); }
+    };
+
+    document.addEventListener('click', function(e) {
+        var dropdown = document.getElementById('demoInfoDropdown');
+        var panel = document.getElementById('demoInfoPanel');
+        if (panel && dropdown && !dropdown.contains(e.target)) {
+            panel.classList.remove('show');
+        }
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            var panel = document.getElementById('demoInfoPanel');
+            if (panel) { panel.classList.remove('show'); }
+        }
+    });
+})();
+</script>
+{% endif %}
 {% if is_demo_account %}
 <script>
 function demoResetFromNav(e) {

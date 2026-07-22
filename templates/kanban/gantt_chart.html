@@ -4,7 +4,7 @@
 {% block title %}{{ board.name }} - Gantt Chart{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.css">
+<link rel="stylesheet" href="{% static 'vendor/frappe-gantt.min.css' %}?v={{ STATIC_VERSION|default:'12' }}">
 <style>
     /* ============================================
        PROFESSIONAL GANTT CHART STYLES
@@ -35,7 +35,7 @@
         margin: 0;
         font-size: 1.5rem;
         font-weight: 600;
-        color: #1e293b;
+        color: var(--text-primary);
         display: flex;
         align-items: center;
         gap: 10px;
@@ -158,7 +158,7 @@
     .view-buttons {
         display: flex;
         gap: 4px;
-        background: #f1f5f9;
+        background: var(--bg-tertiary);
         padding: 4px;
         border-radius: 8px;
     }
@@ -171,13 +171,13 @@
         cursor: pointer;
         transition: all 0.2s ease;
         font-weight: 500;
-        color: #64748b;
+        color: var(--text-muted);
         font-size: 0.875rem;
     }
 
     .view-buttons button:hover {
-        background: #e2e8f0;
-        color: #334155;
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
     }
 
     .view-buttons button.active {
@@ -213,6 +213,13 @@
         rx: 6;
         ry: 6;
     }
+
+    /* Priority colours via Frappe Gantt custom_class (applied at first render,
+       before any JS post-processing — eliminates the grey → colour flash). */
+    .gantt .bar-wrapper.priority-low .bar        { fill: #94a3b8 !important; }
+    .gantt .bar-wrapper.priority-medium .bar      { fill: #3b82f6 !important; }
+    .gantt .bar-wrapper.priority-high .bar        { fill: #f59e0b !important; }
+    .gantt .bar-wrapper.priority-urgent .bar      { fill: #ef4444 !important; }
 
     /* ============================================
        MILESTONE STYLING - GLOWING DIAMOND EFFECT
@@ -324,45 +331,40 @@
     .critical-path-toggle {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
-        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-        border: 1px solid #fecaca;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        user-select: none;
-    }
-
-    .critical-path-toggle:hover {
-        background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-        border-color: #f87171;
+        gap: 0;
     }
 
     .critical-path-toggle input[type="checkbox"] {
-        width: 16px;
-        height: 16px;
-        accent-color: #dc2626;
-        cursor: pointer;
+        display: none;
     }
 
     .critical-path-toggle label {
         font-size: 0.875rem;
         font-weight: 500;
-        color: #991b1b;
+        color: var(--text-secondary);
         cursor: pointer;
         display: flex;
         align-items: center;
         gap: 6px;
+        padding: 4px 12px;
+        background: var(--card-bg);
+        border: 1px solid #D1D5DB;
+        border-radius: 6px;
+        transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
 
-    .critical-path-toggle .cp-indicator {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        background: #dc2626;
-        border-radius: 3px;
-        border: 1px solid #991b1b;
+    .critical-path-toggle input:checked + label {
+        background: #5046e5;
+        color: #fff;
+        border-color: #5046e5;
+    }
+
+    .critical-path-toggle label:hover {
+        background: var(--bg-tertiary);
+    }
+
+    .critical-path-toggle input:checked + label:hover {
+        background: #4338ca;
     }
 
     /* Show in-bar progress fill — complements the split-view table Progress column */
@@ -378,7 +380,10 @@
         rx: 6;
         ry: 6;
         filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
-        transition: all 0.2s ease;
+        /* Only transition filter/transform on hover — NOT fill/width/x/y.
+           Transitioning all properties caused a visible colour spring on load
+           because priority fills were applied after Frappe Gantt's initial grey render. */
+        transition: filter 0.2s ease, transform 0.2s ease;
     }
     
     /* Month view: enhance bar visibility with stronger shadows and borders */
@@ -482,6 +487,13 @@
     }
     .gantt-dep-banner i { color: #fbbf24; }
     .gantt-dep-banner .dep-banner-msg { flex: 1; }
+    .gantt-dep-banner .dep-banner-note {
+        display: block;
+        margin-top: 2px;
+        font-size: 0.85em;
+        font-style: italic;
+        opacity: 0.75;
+    }
     .gantt-dep-banner .dep-banner-btn {
         background: #3b82f6;
         color: #fff;
@@ -493,10 +505,12 @@
         font-weight: 600;
     }
     .gantt-dep-banner .dep-banner-btn:hover { background: #2563eb; }
+    .gantt-dep-banner .dep-banner-btn-primary { background: #f59e0b; }
+    .gantt-dep-banner .dep-banner-btn-primary:hover { background: #d97706; }
     .gantt-dep-banner .dep-banner-close {
         background: none;
         border: none;
-        color: #94a3b8;
+        color: var(--text-muted);
         cursor: pointer;
         font-size: 16px;
         padding: 0 4px;
@@ -504,6 +518,40 @@
     @keyframes bannerSlideIn {
         from { opacity: 0; transform: translateY(-10px); }
         to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Dependency highlight ("Review Dependencies"): make affected tasks pop and
+       fade everything else, until the user clicks away. */
+    #gantt.dep-focus-mode .bar-wrapper:not(.gantt-dep-highlight) { opacity: 0.18; }
+    #gantt .bar-wrapper { transition: opacity 0.2s ease; }
+    .bar-wrapper.gantt-dep-highlight { filter: drop-shadow(0 0 7px rgba(245,158,11,0.95)); }
+    .bar-wrapper.gantt-dep-highlight .bar {
+        stroke: #f59e0b;
+        stroke-width: 3px;
+        animation: depHighlightPulse 1.2s ease-in-out infinite;
+    }
+    @keyframes depHighlightPulse {
+        0%, 100% { stroke-opacity: 1; }
+        50%      { stroke-opacity: 0.35; }
+    }
+    .gantt-table-row.gantt-dep-highlight-row {
+        background: rgba(245,158,11,0.22) !important;
+        box-shadow: inset 4px 0 0 #f59e0b;
+    }
+
+    /* Info toast (cascade success) — mirrors the error toast, green accent. */
+    .gantt-info-toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 10000;
+        background: #16a34a;
+        color: #fff;
+        font-size: 13px;
+        padding: 10px 18px;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        animation: toastFadeIn 0.25s ease;
     }
 
     /* Error toast */
@@ -529,7 +577,7 @@
     .empty-state {
         text-align: center;
         padding: 80px 20px;
-        color: #64748b;
+        color: var(--text-muted);
         background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
         border-radius: 12px;
         border: 2px dashed #cbd5e1;
@@ -539,11 +587,11 @@
         font-size: 4rem;
         margin-bottom: 24px;
         opacity: 0.4;
-        color: #94a3b8;
+        color: var(--text-muted);
     }
 
     .empty-state h3 {
-        color: #475569;
+        color: var(--text-secondary);
         margin-bottom: 12px;
     }
 
@@ -554,7 +602,7 @@
     }
 
     .board-tabs .nav-link {
-        color: #64748b;
+        color: var(--text-muted);
         border: none;
         border-bottom: 3px solid transparent;
         padding: 0.75rem 1.25rem;
@@ -590,7 +638,7 @@
     }
 
     .gantt-legend strong {
-        color: #475569;
+        color: var(--text-secondary);
         font-size: 0.875rem;
         margin-right: 8px;
     }
@@ -600,7 +648,7 @@
         align-items: center;
         gap: 8px;
         font-size: 0.875rem;
-        color: #64748b;
+        color: var(--text-muted);
     }
 
     .legend-color {
@@ -632,6 +680,35 @@
         font-weight: 700;
     }
 
+    /* Phase bar labels: frappe-gantt positions x at bar centre, so use middle anchor
+       to keep the text properly centred inside the bar in all view modes.
+       The "unphased" bucket bar is a phase bar too but its id isn't "phase-…". */
+    .gantt .bar-wrapper[data-id^="phase-"] .bar-label,
+    .gantt .bar-wrapper[data-id="unphased"] .bar-label {
+        text-anchor: middle !important;
+        fill: rgba(255, 255, 255, 0.92) !important;
+        font-size: 12px;
+        font-weight: 700;
+        filter: none;
+    }
+
+    /* Narrow phase bars (e.g. an unphased/undated task that collapses to a
+       single day) can't fit their label inside. polishPhaseBarLabels() then
+       renders the label to the right of the bar inside this gradient pill.
+       Scoped under the phase/unphased parents so it out-specifies the centred
+       rule above (which also uses !important). */
+    .gantt .bar-wrapper[data-id^="phase-"] .bar-label.phase-label-outside,
+    .gantt .bar-wrapper[data-id="unphased"] .bar-label.phase-label-outside {
+        text-anchor: start !important;
+        fill: #ffffff !important;
+        font-size: 12px;
+        font-weight: 700;
+        filter: none;
+    }
+    .gantt .phase-label-pill {
+        filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.35));
+    }
+
     .gantt .bar-label.outside-left,
     .gantt .bar-label.outside-right {
         fill: #334155 !important;
@@ -650,13 +727,13 @@
         width: 24px;
         height: 24px;
         border-radius: 50%;
-        background: white;
+        background: var(--card-bg);
         display: inline-flex;
         align-items: center;
         justify-content: center;
         font-size: 10px;
         font-weight: 600;
-        color: #374151;
+        color: var(--text-secondary);
         border: 2px solid rgba(255,255,255,0.3);
         position: absolute;
         right: 4px;
@@ -718,7 +795,7 @@
 
     .gantt-tooltip .tooltip-row i {
         width: 14px;
-        color: #94a3b8;
+        color: var(--text-muted);
     }
 
     /* ============================================
@@ -856,30 +933,21 @@
     }
 
     /* IMPORTANT: Default blue color for ALL bars to prevent grey flash */
-    /* Priority colors below use !important and will override this for tasks */
-    /* Phase bars without data-priority will remain blue (phase-1, phase-2, etc.) */
+    /* Priority colors via custom_class or data-priority will override this */
+    /* Phase bars without a priority class will remain blue */
     .gantt .bar-wrapper .bar:not([data-priority]) {
         fill: #6366f1 !important;
     }
 
-    /* Gantt chart wrapper - hide until chart is ready to prevent shrink/expand animation */
+    /* Gantt chart wrapper — hidden via visibility (not opacity) so there is
+       zero visible transition.  The chart is revealed only after all styling
+       (priority colours, milestones, critical path) has been applied. */
     #gantt-chart-wrapper {
-        opacity: 0;
-        transition: opacity 0.2s ease-in-out;
+        visibility: hidden;
     }
 
     #gantt-chart-wrapper.chart-ready {
-        opacity: 1;
-    }
-    
-    /* While transitioning views, keep the wrapper visible but prevent flash */
-    #gantt-chart-wrapper.transitioning {
-        opacity: 1;
-    }
-    
-    /* Ensure bars inside transitioning wrapper maintain their colors */
-    #gantt-chart-wrapper.transitioning .gantt .bar-wrapper .bar:not([data-priority]) {
-        fill: #6366f1 !important;
+        visibility: visible;
     }
 
     /* Phase collapse indicator */
@@ -893,7 +961,7 @@
 
     /* Phase info panel */
     .phase-info-panel {
-        background: #f8fafc;
+        background: var(--bg-tertiary);
         border: 1px solid #e2e8f0;
         border-radius: 8px;
         padding: 16px;
@@ -906,7 +974,7 @@
         align-items: center;
         padding: 8px 12px;
         margin-bottom: 4px;
-        background: white;
+        background: var(--card-bg);
         border-radius: 6px;
         border: 1px solid #e2e8f0;
         cursor: pointer;
@@ -914,7 +982,7 @@
     }
 
     .phase-info-panel .phase-item:hover {
-        background: #f1f5f9;
+        background: var(--bg-tertiary);
         border-color: #cbd5e1;
     }
 
@@ -964,7 +1032,7 @@
     .gantt-filters .form-select,
     .gantt-filters .form-control {
         font-size: 0.875rem;
-        border-color: #e2e8f0;
+        border-color: var(--border-color);
         border-radius: 6px;
         transition: all 0.2s ease;
     }
@@ -976,7 +1044,7 @@
     }
 
     .gantt-filters .input-group-text {
-        border-color: #e2e8f0;
+        border-color: var(--border-color);
         border-radius: 6px 0 0 6px;
     }
 
@@ -997,14 +1065,14 @@
     }
 
     .gantt-filters .btn-outline-secondary {
-        border-color: #e2e8f0;
-        color: #64748b;
+        border-color: var(--border-color);
+        color: var(--text-muted);
     }
 
     .gantt-filters .btn-outline-secondary:hover {
-        background: #f1f5f9;
+        background: var(--bg-tertiary);
         border-color: #cbd5e1;
-        color: #475569;
+        color: var(--text-secondary);
     }
 
     .active-filters {
@@ -1137,6 +1205,34 @@
         stroke: #ef4444;
         stroke-width: 3;
     }
+
+    /* Chevron arrowhead (fixed size, does not scale with stroke-width) */
+    .fc-chevron {
+        stroke: none;
+    }
+
+    /* Hover focus mode: fade unrelated, highlight neighbours */
+    .fc-task-node,
+    .fc-dependency-arrow,
+    .fc-chevron {
+        transition: opacity 0.15s ease, stroke-width 0.15s ease;
+    }
+
+    .fc-task-node.fc-dimmed,
+    .fc-dependency-arrow.fc-dimmed,
+    .fc-chevron.fc-dimmed {
+        opacity: 0.12;
+    }
+
+    .fc-dependency-arrow.fc-active {
+        opacity: 1;
+        stroke: #fbbf24;
+        stroke-width: 3.5;
+    }
+
+    .fc-dependency-arrow.fc-active.critical-arrow {
+        stroke: #f87171;
+    }
     
     /* Phase separator lines */
     .fc-phase-separator {
@@ -1211,15 +1307,15 @@
         border: 1px solid #e2e8f0;
         border-radius: 8px;
         overflow: hidden;
-        background: #fff;
+        background: var(--card-bg);
     }
 
-    /* ── Left: Task Table Panel ── */
+    /* â”€â”€ Left: Task Table Panel â”€â”€ */
     #gantt-table-panel {
         flex-shrink: 0;
         overflow-y: hidden;
         overflow-x: hidden;
-        background: #f8fafc;
+        background: var(--bg-tertiary);
         border-right: none;
         z-index: 2;
         display: flex;
@@ -1260,7 +1356,7 @@
         flex: 1;
     }
 
-    /* ── Table rows ── */
+    /* â”€â”€ Table rows â”€â”€ */
     .gantt-table-row {
         display: flex;
         align-items: center;
@@ -1281,7 +1377,7 @@
         height: 100%;
         overflow: hidden;
         font-size: 0.82rem;
-        color: #334155;
+        color: var(--text-secondary);
     }
 
     .gantt-table-row .td-activity {
@@ -1378,7 +1474,7 @@
 
     .table-assignee-avatar.unassigned {
         background: #cbd5e1;
-        color: #94a3b8;
+        color: var(--text-muted);
     }
 
     /* Mini progress bar */
@@ -1392,7 +1488,7 @@
     .mini-progress-track {
         flex: 1;
         height: 6px;
-        background: #e2e8f0;
+        background: var(--bg-tertiary);
         border-radius: 3px;
         overflow: hidden;
     }
@@ -1410,16 +1506,16 @@
     .mini-progress-text {
         font-size: 10px;
         font-weight: 600;
-        color: #64748b;
+        color: var(--text-muted);
         min-width: 28px;
         text-align: right;
     }
 
-    /* ── Resizable divider between panels ── */
+    /* â”€â”€ Resizable divider between panels â”€â”€ */
     .gantt-split-divider {
         width: 5px;
         cursor: col-resize;
-        background: #e2e8f0;
+        background: var(--bg-tertiary);
         flex-shrink: 0;
         z-index: 4;
         transition: background 0.15s ease;
@@ -1443,10 +1539,10 @@
 
     .gantt-split-divider:hover::after,
     .gantt-split-divider.dragging::after {
-        background: white;
+        background: var(--card-bg);
     }
 
-    /* ── Right: Timeline Panel ── */
+    /* â”€â”€ Right: Timeline Panel â”€â”€ */
     #gantt-timeline-panel {
         flex: 1;
         overflow-x: auto;
@@ -1454,7 +1550,7 @@
         min-width: 0;
     }
 
-    /* ── Responsive: collapse table columns ── */
+    /* â”€â”€ Responsive: collapse table columns â”€â”€ */
     @media (max-width: 768px) {
         #gantt-table-panel .th-responsible,
         #gantt-table-panel .th-progress,
@@ -1490,7 +1586,7 @@
         background: #fee2e2;
     }
 
-    /* ── Task ID Prefix ── */
+    /* â”€â”€ Task ID Prefix â”€â”€ */
     .task-id-prefix {
         color: #8b95a5;
         font-size: 10px;
@@ -1501,11 +1597,11 @@
         letter-spacing: 0.02em;
     }
 
-    /* ── Status Column ── */
+    /* â”€â”€ Status Column â”€â”€ */
     #gantt-table-panel .th-status { width: 90px; justify-content: center; }
     .gantt-table-row .td-status { width: 90px; justify-content: center; }
 
-    /* ── Status Lozenges ── */
+    /* â”€â”€ Status Lozenges â”€â”€ */
     .status-lozenge {
         display: inline-block;
         padding: 2px 8px;
@@ -1521,7 +1617,7 @@
     .status-lozenge.status-in-progress { background: rgba(0,101,255,0.14); color: #0065ff; }
     .status-lozenge.status-done        { background: rgba(0,135,90,0.14); color: #00875a; }
 
-    /* ── Triage Drawer ── */
+    /* â”€â”€ Triage Drawer â”€â”€ */
     .triage-overlay {
         position: fixed;
         inset: 0;
@@ -1567,7 +1663,7 @@
     .drawer-task-id {
         font-size: 13px;
         font-weight: 700;
-        color: #94a3b8;
+        color: var(--text-muted);
         letter-spacing: 0.03em;
     }
     .drawer-actions {
@@ -1594,7 +1690,7 @@
     .drawer-btn-close {
         background: none;
         border: none;
-        color: #94a3b8;
+        color: var(--text-muted);
         font-size: 20px;
         cursor: pointer;
         padding: 2px 6px;
@@ -1618,7 +1714,7 @@
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: #64748b;
+        color: var(--text-muted);
         margin-bottom: 6px;
     }
     .drawer-field .drawer-value {
@@ -1663,30 +1759,90 @@
     /* Make table rows clickable for tasks */
     .gantt-table-row.clickable-row { cursor: pointer; }
 
+    /* ============================================
+       STICKY DATE HEADER OVERLAY
+       (position: fixed div appended to body)
+       Shows the Gantt timeline date bar AND
+       the table column header at the top of the
+       viewport whenever the actual headers
+       scroll out of view.
+       ============================================ */
+    #gantt-sticky-header-bar {
+        position: fixed;
+        z-index: 110;
+        display: none;
+        overflow: visible;
+        pointer-events: none;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.10);
+    }
+    #gantt-sticky-header-bar .sticky-table-part {
+        flex-shrink: 0;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        color: #f1f5f9;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    #gantt-sticky-header-bar .sticky-table-part .th-cell {
+        padding: 0 10px;
+        display: flex;
+        align-items: center;
+        height: 100%;
+    }
+    #gantt-sticky-header-bar .sticky-table-part .th-activity { flex: 1; min-width: 0; }
+    #gantt-sticky-header-bar .sticky-table-part .th-status   { width: 90px; justify-content: center; }
+    #gantt-sticky-header-bar .sticky-table-part .th-responsible { width: 100px; justify-content: center; }
+    #gantt-sticky-header-bar .sticky-table-part .th-progress { width: 90px; justify-content: center; }
+    #gantt-sticky-header-bar .sticky-divider {
+        width: 5px;
+        flex-shrink: 0;
+        background: var(--bg-tertiary);
+    }
+    #gantt-sticky-header-bar .sticky-date-part {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        background: var(--bg-tertiary);
+    }
+
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid">
+    <div class="mb-2">
+        <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back btn-sm">
+            <i class="fas fa-arrow-left"></i> Back to Board
+        </a>
+    </div>
     <div class="row mb-2">
         <div class="col">
-            <h1>
+            <h1 style="font-size:20px;font-weight:500;margin-bottom:0;">
                 <i class="fas fa-project-diagram me-2"></i>{{ board.name }}
             </h1>
         </div>
     </div>
 
-    <!-- View Mode Tabs (consistent with board kanban/calendar views) -->
+    <!-- View Mode Tabs (consistent with board kanban/calendar/list views) -->
     <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
-        <li class="nav-item"><a class="nav-link" href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+        {% if features.show_gantt %}
         <li class="nav-item"><a class="nav-link active" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
+        {% endif %}
         <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'commitment_dashboard' board.id %}"><i class="fas fa-shield-halved me-1"></i>Commitments</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'board_list_view' board.id %}"><i class="fas fa-list me-1"></i>List</a></li>
+        {% if board.has_epics %}
+        <li class="nav-item"><a class="nav-link" href="{% url 'board_epics' board.id %}"><i class="fas fa-layer-group me-1"></i>Epics</a></li>
+        {% endif %}
     </ul>
 
     <div class="gantt-container" style="position: relative;">
         <div class="gantt-header">
-            <h2>📊 Project Timeline</h2>
+            <h2><i class="fas fa-chart-gantt me-2"></i>Project Timeline</h2>
             <div class="d-flex align-items-center gap-3">
                 <div class="view-buttons">
                     <button class="view-btn" data-mode="Day">Day</button>
@@ -1700,15 +1856,16 @@
         <div class="gantt-filters mb-3">
             <form method="GET" action="" class="d-flex flex-wrap align-items-center gap-2" id="gantt-filter-form">
                 <!-- Search Input -->
-                <div class="filter-group flex-grow-1" style="min-width: 200px; max-width: 300px;">
+                <div class="filter-group flex-grow-1" style="min-width: 200px; max-width: 340px;">
                     <div class="input-group">
                         <span class="input-group-text bg-white border-end-0">
                             <i class="fas fa-search text-muted"></i>
                         </span>
-                        <input type="text" name="search" class="form-control border-start-0" 
-                               placeholder="Search tasks..." 
+                        <input type="text" name="search" class="form-control border-start-0"
+                               placeholder="Search tasks..."
                                value="{{ search_query }}"
                                id="gantt-search-input">
+                        <button type="submit" class="btn btn-primary" id="gantt-search-btn">Search</button>
                     </div>
                 </div>
                 
@@ -1716,10 +1873,9 @@
                 <div class="filter-group">
                     <select name="status" class="form-select" id="gantt-status-filter" onchange="this.form.submit()">
                         <option value="">All Status</option>
-                        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>🟢 Active Only</option>
-                        <option value="todo" {% if status_filter == 'todo' %}selected{% endif %}>📋 To Do</option>
-                        <option value="in_progress" {% if status_filter == 'in_progress' %}selected{% endif %}>🔄 In Progress</option>
-                        <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✅ Done</option>
+                        {% for col in board_columns %}
+                        <option value="{{ col.0 }}" {% if status_filter == col.0|stringformat:"s" %}selected{% endif %}>{{ col.1 }}</option>
+                        {% endfor %}
                     </select>
                 </div>
                 
@@ -1746,11 +1902,6 @@
                     </select>
                 </div>
                 
-                <!-- Search Button -->
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-filter me-1"></i> Apply
-                </button>
-                
                 <!-- Clear Filters -->
                 {% if search_query or status_filter or priority_filter or assignee_filter %}
                 <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-secondary">
@@ -1766,7 +1917,7 @@
                     <i class="fas fa-filter me-1"></i>
                     Showing {{ tasks.count }} task{{ tasks.count|pluralize }}
                     {% if search_query %} matching "{{ search_query }}"{% endif %}
-                    {% if status_filter %} with status: {{ status_filter }}{% endif %}
+                    {% if status_filter_column_name %} in column: {{ status_filter_column_name }}{% endif %}
                     {% if priority_filter %} with priority: {{ priority_filter }}{% endif %}
                 </small>
             </div>
@@ -1790,16 +1941,16 @@
             <!-- Critical Path Toggle, Flowchart Button, and Add Milestone -->
             <div class="d-flex justify-content-end mb-3 gap-2 align-items-center flex-wrap">
                 <button class="btn btn-sm" id="add-milestone-btn" title="Add a milestone marker to the Gantt chart"
-                        style="background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); border: none; color: white; font-weight: 500;">
+                        style="background:var(--card-bg);color:var(--text-secondary);border:1px solid #D1D5DB;border-radius:6px;font-weight:500;" onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='#fff'">
                     <i class="fas fa-diamond me-1"></i> Add Milestone
                 </button>
-                <button class="btn btn-outline-primary btn-sm" id="show-critical-path-flowchart" title="View Critical Path Network Diagram">
+                <button class="btn btn-sm" id="show-critical-path-flowchart" title="View Critical Path Network Diagram"
+                        style="background:var(--card-bg);color:var(--text-secondary);border:1px solid #D1D5DB;border-radius:6px;" onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='#fff'">
                     <i class="fas fa-sitemap me-1"></i> View Network Diagram
                 </button>
                 <div class="critical-path-toggle">
                     <input type="checkbox" id="critical-path-toggle">
                     <label for="critical-path-toggle">
-                        <span class="cp-indicator"></span>
                         Show Critical Path
                     </label>
                 </div>
@@ -1937,7 +2088,7 @@
                 <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-secondary me-2">
                     <i class="fas fa-times me-1"></i> Clear Filters
                 </a>
-                <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-primary">
+                <a href="{% url 'board_detail' board.id %}" class="btn btn-primary">
                     <i class="fas fa-arrow-left me-1"></i> Go to Board
                 </a>
             </div>
@@ -1946,7 +2097,7 @@
                 <i class="fas fa-calendar-times"></i>
                 <h3>No Tasks with Dates</h3>
                 <p>Add start dates and due dates to your tasks to see them on the Gantt chart.</p>
-                <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-primary">
+                <a href="{% url 'board_detail' board.id %}" class="btn btn-primary">
                     <i class="fas fa-arrow-left me-1"></i> Go to Board
                 </a>
             </div>
@@ -2031,12 +2182,13 @@
                 <h5 class="modal-title" id="criticalPathFlowchartModalLabel">
                     <i class="fas fa-sitemap me-2"></i>Critical Path Network Diagram
                 </h5>
-                <div class="d-flex align-items-center gap-3 ms-auto">
-                    <div class="form-check form-switch text-white">
-                        <input class="form-check-input" type="checkbox" id="flowchart-phase-filter" checked>
-                        <label class="form-check-label small" for="flowchart-phase-filter">Show All Phases</label>
-                    </div>
-                    <select class="form-select form-select-sm bg-dark text-white border-secondary" id="flowchart-phase-select" style="width: auto;">
+                <div class="d-flex align-items-center gap-2 ms-auto">
+                    <select class="form-select form-select-sm bg-dark text-white border-secondary" id="flowchart-path-select" style="width: auto;" title="Filter by path type">
+                        <option value="all">All Paths</option>
+                        <option value="critical">Critical Path only</option>
+                        <option value="non-critical">Non-Critical only</option>
+                    </select>
+                    <select class="form-select form-select-sm bg-dark text-white border-secondary" id="flowchart-phase-select" style="width: auto;" title="Filter by phase">
                         <option value="all">All Phases</option>
                     </select>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -2053,6 +2205,14 @@
                         <div class="legend-item-fc d-flex align-items-center gap-2">
                             <div class="legend-box non-critical"></div>
                             <span class="text-white small">Non-Critical (has slack)</span>
+                        </div>
+                        <div class="legend-item-fc d-flex align-items-center gap-2">
+                            <div class="legend-box start-node"></div>
+                            <span class="text-white small">Start (no predecessors)</span>
+                        </div>
+                        <div class="legend-item-fc d-flex align-items-center gap-2">
+                            <div class="legend-box end-node"></div>
+                            <span class="text-white small">End (no successors)</span>
                         </div>
                         <div class="legend-item-fc d-flex align-items-center gap-2">
                             <svg width="40" height="20">
@@ -2085,7 +2245,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+<script src="{% static 'vendor/frappe-gantt.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
     // Suppress known Frappe Gantt library errors related to $bar
     // These occur during mouse interactions when bars are not yet rendered
@@ -2114,7 +2274,7 @@
     const hasPhases = {{ has_phases|yesno:"true,false" }};
     const numPhases = {{ num_phases|default:0 }};
 
-    // ── Task ID prefix & triage drawer reference data ──
+    // â”€â”€ Task ID prefix & triage drawer reference data â”€â”€
     const TASK_PREFIX = '{{ task_prefix|escapejs }}';
     const BOARD_ID = {{ board.id }};
     const BOARD_COLUMNS = [{% for col in board_columns %}{id:{{ col.0 }}, name:'{{ col.1|escapejs }}'}{% if not forloop.last %},{% endif %}{% endfor %}];
@@ -2139,7 +2299,7 @@
             end: '{{ task.due_date|date:"Y-m-d" }}',
             progress: {{ task.progress|default:0 }},
             dependencies: '{% for dep in task.dependencies.all %}{{ dep.id }}{% if not forloop.last %},{% endif %}{% endfor %}',
-            custom_class: 'status-{{ task.column.name|lower|cut:" "}}',
+            custom_class: 'status-{{ task.column.name|lower|cut:" "}} priority-{{ task.priority }}',
             status: '{% if "done" in task.column.name|lower %}done{% elif "progress" in task.column.name|lower %}in_progress{% else %}todo{% endif %}',
             priority: '{{ task.priority }}',
             assigned_to: '{% if task.assigned_to %}{{ task.assigned_to.username }}{% else %}Unassigned{% endif %}',
@@ -2249,9 +2409,9 @@
         return d.toISOString().split('T')[0];
     }
 
-    // Fix milestone dates (start == end → extend end by 1 day for visible bar width)
+    // Fix milestone dates (start == end â†’ extend end by 1 day for visible bar width)
     // IMPORTANT: use UTC arithmetic only — setDate()+toISOString() shifts the date in
-    // positive-offset timezones (e.g. IST +5:30 turns Mar 21 → Mar 22).
+    // positive-offset timezones (e.g. IST +5:30 turns Mar 21 â†’ Mar 22).
     ganttMilestones.forEach(m => {
         const startDate = new Date(m.start);
         const endDate = new Date(m.end);
@@ -2302,6 +2462,43 @@
     function topologicalSortTasks(taskList) {
         if (!taskList || taskList.length <= 1) return taskList;
 
+        // ── Phase-aware sorting ──
+        // Tasks may carry a .phase attribute (e.g. "Phase 1", "Phase 2") even
+        // when the board's phase display is turned off.  Preserve that grouping
+        // so that removing phases doesn't scramble the task order — tasks stay
+        // in their original phase groups, each group topologically sorted.
+        const phaseGroups = new Map();   // phaseName -> [task, ...]
+        const phaseOrder  = [];          // ordered unique phase names
+        taskList.forEach(t => {
+            const ph = (t.phase || '').trim();
+            if (!phaseGroups.has(ph)) {
+                phaseGroups.set(ph, []);
+                phaseOrder.push(ph);
+            }
+            phaseGroups.get(ph).push(t);
+        });
+
+        // If every task is in the same group (including all-blank), fall through
+        // to the original global sort.  Otherwise sort per-group.
+        if (phaseGroups.size > 1) {
+            const result = [];
+            phaseOrder.forEach(ph => {
+                const group = phaseGroups.get(ph);
+                result.push(..._topoSortGroup(group));
+            });
+            return result;
+        }
+
+        return _topoSortGroup(taskList);
+    }
+
+    /**
+     * Topological sort a single group of tasks (Kahn's algorithm).
+     * Predecessors always appear before successors; ties broken by start date.
+     */
+    function _topoSortGroup(taskList) {
+        if (!taskList || taskList.length <= 1) return taskList;
+
         const taskMap = new Map();
         const taskIdSet = new Set();
         taskList.forEach(t => {
@@ -2328,42 +2525,48 @@
             });
         });
 
-        // Kahn's algorithm with start-date priority queue
-        // Tasks with zero in-degree are ready; among them, earliest start date goes first
-        const queue = [];
-        taskIdSet.forEach(id => {
-            if (inDegree.get(id) === 0) queue.push(id);
-        });
-        // Sort initial queue by start date
-        queue.sort((a, b) => {
+        // Hybrid ordering: date-primary, dependencies respected.
+        // Stable comparator — start date, then due/end date, then numeric id.
+        // A task only becomes "ready" once all its predecessors are placed, so a
+        // successor can never appear above its predecessor; among ready tasks we
+        // always emit the earliest-dated one, giving a chronological read-down.
+        const orderCmp = (a, b) => {
             const ta = taskMap.get(a), tb = taskMap.get(b);
-            return new Date(ta.start) - new Date(tb.start);
+            const sa = new Date(ta.start), sb = new Date(tb.start);
+            if (sa - sb !== 0) return sa - sb;
+            const ea = new Date(ta.end), eb = new Date(tb.end);
+            if (ea - eb !== 0) return ea - eb;
+            return (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0);
+        };
+
+        // Kahn's algorithm over a re-sorted "ready" frontier
+        const ready = [];
+        taskIdSet.forEach(id => {
+            if (inDegree.get(id) === 0) ready.push(id);
         });
 
         const sorted = [];
-        while (queue.length > 0) {
-            const id = queue.shift();
+        while (ready.length > 0) {
+            // Re-sort the whole frontier each step so the globally-earliest
+            // available task is emitted next (not just the earliest of a batch).
+            ready.sort(orderCmp);
+            const id = ready.shift();
             sorted.push(taskMap.get(id));
             const succs = successors.get(id) || [];
-            // Collect newly-ready successors, then sort by start date before adding
-            const newlyReady = [];
             succs.forEach(succId => {
                 inDegree.set(succId, inDegree.get(succId) - 1);
-                if (inDegree.get(succId) === 0) newlyReady.push(succId);
+                if (inDegree.get(succId) === 0) ready.push(succId);
             });
-            newlyReady.sort((a, b) => {
-                const ta = taskMap.get(a), tb = taskMap.get(b);
-                return new Date(ta.start) - new Date(tb.start);
-            });
-            newlyReady.forEach(id => queue.push(id));
         }
 
-        // If any tasks weren't reached (cycle), append them at the end by start date
+        // If any tasks weren't reached (cycle), append them ordered the same way
         if (sorted.length < taskList.length) {
             const sortedIds = new Set(sorted.map(t => String(t.id)));
-            const remaining = taskList.filter(t => !sortedIds.has(String(t.id)));
-            remaining.sort((a, b) => new Date(a.start) - new Date(b.start));
-            remaining.forEach(t => sorted.push(t));
+            const remaining = taskList
+                .filter(t => !sortedIds.has(String(t.id)))
+                .map(t => String(t.id))
+                .sort(orderCmp);
+            remaining.forEach(id => sorted.push(taskMap.get(id)));
         }
 
         return sorted;
@@ -2657,7 +2860,7 @@
                     console.log(`  ✅ Applied to task ${taskId}`);
                 }
             } else {
-                console.log(`  ❌ Bar wrapper not found for task ${taskId}`);
+                console.log(`  âŒ Bar wrapper not found for task ${taskId}`);
             }
         });
         console.log(`Applied critical path styling to ${appliedCount} tasks`);
@@ -2669,7 +2872,8 @@
     function toggleCriticalPath(enabled) {
         showCriticalPath = enabled;
         applyCriticalPathStyling();
-        
+        buildTaskTable();
+
         // Update legend visibility
         const legend = document.getElementById('critical-path-legend');
         if (legend) {
@@ -2693,6 +2897,24 @@
     let ganttChart = null;
     let currentViewMode = 'Week';
 
+    // Strip Frappe Gantt's built-in <animate> elements that expand bars from
+    // width 0 → final over 0.4 s.  We want bars to appear at full size instantly.
+    function stripBarAnimations() {
+        const svg = document.querySelector('#gantt');
+        if (!svg) return;
+        svg.querySelectorAll('animate').forEach(el => {
+            // Set the parent element's attribute to the animation's target value
+            // so the bar keeps its correct final width, then remove the <animate>.
+            const parent = el.parentElement;
+            const attr = el.getAttribute('attributeName');
+            const to = el.getAttribute('to');
+            if (parent && attr && to) {
+                parent.setAttribute(attr, to);
+            }
+            el.remove();
+        });
+    }
+
     // Initialize Gantt chart
     function initGantt(viewMode = 'Week') {
         const chartWrapper = document.getElementById('gantt-chart-wrapper');
@@ -2706,34 +2928,22 @@
         const barPadding = viewMode === 'Month' ? 24 : 20;
         
         if (ganttChart) {
-            // If chart exists and we're just changing view mode, use the built-in method
+            // If chart exists and we're just changing view mode, use the built-in method.
+            // All post-processing runs synchronously so the browser never paints an
+            // intermediate grey/unstyled frame.
             try {
-                // Add transitioning class to maintain visibility during view change
-                chartWrapper.classList.add('transitioning');
-                
-                // Apply styling BEFORE view mode change to prevent color flash
-                applyCustomStyling();
-                
                 ganttChart.change_view_mode(viewMode);
-                
-                // After changing view mode, reapply custom attributes and enhancements
-                // Use requestAnimationFrame for smoother rendering
-                requestAnimationFrame(() => {
-                    applyCustomStyling();
-                    // Second pass to ensure all elements are styled
-                    requestAnimationFrame(() => {
-                        applyCustomStyling();
-                        drawCustomDependencyLines();
-                        // Rebuild the split-view table with updated row heights
-                        refreshSplitView();
-                        // Remove transitioning class after styling is complete
-                        chartWrapper.classList.remove('transitioning');
-                    });
-                });
+                // Kill Frappe Gantt's 0→width entry animations immediately
+                stripBarAnimations();
+                // Synchronous: reapply priority attrs, milestones, critical path, etc.
+                applyCustomStyling();
+                drawCustomDependencyLines();
+                refreshSplitView();
+                // Keep today visible after view mode change
+                scrollToToday();
                 return;
             } catch (e) {
                 console.warn('Error changing view mode, reinitializing chart:', e);
-                // If there's an error, fall through to recreate the chart
                 ganttChart = null;
             }
         }
@@ -2807,35 +3017,24 @@
                 }
             });
 
-        // Apply custom styling for the first time - use requestAnimationFrame for smoother rendering
-        requestAnimationFrame(() => {
-            applyCustomStyling();
-            
-            // Show chart with smooth transition after initial styling
-            requestAnimationFrame(() => {
-                applyCustomStyling();
-                const chartWrapper = document.getElementById('gantt-chart-wrapper');
-                if (chartWrapper) {
-                    chartWrapper.classList.add('chart-ready');
-                }
-                
-                // Set up arrow polygon observer for this chart instance
-                setupArrowPolygonObserver();
-                
-                // Draw custom dependency lines after chart is visible
-                requestAnimationFrame(() => {
-                    drawCustomDependencyLines();
+        // Kill Frappe Gantt's built-in 0→width <animate> elements so bars
+        // appear at full size instantly (no contraction/expansion flash).
+        stripBarAnimations();
 
-                    // Build/refresh the split-view table
-                    _lastRenderedItems = buildOrderedTaskList(topologicalSortTasks(tasks), visibleMilestones);
-                    refreshSplitView();
-                    
-                    // Final cleanup pass
-                    setTimeout(() => {
-                        drawCustomDependencyLines();
-                    }, 200);
-                });
-            });
+        // Apply all styling synchronously BEFORE revealing the chart so the
+        // browser never paints an intermediate grey / compressed frame.
+        applyCustomStyling();
+        drawCustomDependencyLines();
+        _lastRenderedItems = buildOrderedTaskList(topologicalSortTasks(tasks), visibleMilestones);
+        refreshSplitView();
+
+        // Reveal the fully-styled chart in one shot (visibility: hidden → visible)
+        chartWrapper.classList.add('chart-ready');
+
+        // Set up observer + one deferred cleanup pass for dependency lines
+        setupArrowPolygonObserver();
+        requestAnimationFrame(() => {
+            drawCustomDependencyLines();
         });
     }
 
@@ -2853,7 +3052,7 @@
             }
         });
 
-        // PASS 1 – mark data attributes only (needed by CSS to hide the native rect/progress).
+        // PASS 1 â€“ mark data attributes only (needed by CSS to hide the native rect/progress).
         // Diamond drawing deliberately happens in PASS 2, after cloneNode replaces wrappers.
         ganttMilestones.forEach(milestone => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${milestone.id}"]`);
@@ -2896,7 +3095,9 @@
                 }
                 e.stopPropagation();
                 if (!taskId) return;
-                if (taskId.startsWith('phase-')) {
+                if (taskId === 'unphased') {
+                    togglePhase('Unphased', e);
+                } else if (taskId.startsWith('phase-')) {
                     const phaseIdPart = taskId.replace('phase-', '');
                     const phaseName = 'Phase ' + phaseIdPart.split('-').map(word => 
                         word.charAt(0).toUpperCase() + word.slice(1)
@@ -2912,7 +3113,7 @@
             });
         });
 
-        // PASS 2 – draw diamond markers on the final barWrapper nodes.
+        // PASS 2 â€“ draw diamond markers on the final barWrapper nodes.
         // Always remove any stale diamond first so re-renders stay clean.
         ganttMilestones.forEach(milestone => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${milestone.id}"]`);
@@ -2935,7 +3136,7 @@
             const isCompleted = milestone.milestoneStatus === 'completed';
             const cx = bx;              // left edge of bar = due-date column
             const cy = by + bh / 2;    // vertical centre of the row
-            const halfSide = 10;       // 10 px gives a prominent 20×20 diamond
+            const halfSide = 10;       // 10 px gives a prominent 20Ã—20 diamond
 
             const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
             diamond.setAttribute('points',
@@ -2982,6 +3183,9 @@
 
         // Draw today line on top of everything
         drawTodayLine();
+
+        // Auto-scroll so today's date is visible in the viewport
+        scrollToToday();
     }
 
     // ============================================
@@ -3155,13 +3359,56 @@
     }
 
     // ============================================
+    // SCROLL-TO-TODAY — centre the timeline on today's date after render
+    // ============================================
+    function scrollToToday() {
+        const timelinePanel = document.getElementById('gantt-timeline-panel');
+        if (!timelinePanel || !ganttChart) return;
+
+        const ganttStart = ganttChart.gantt_start;
+        if (!ganttStart) return;
+        const columnWidth = (ganttChart.options && ganttChart.options.column_width) || 38;
+        const step = (ganttChart.options && ganttChart.options.step) || 24;
+
+        const today = new Date();
+        const hoursDiff = (today - ganttStart) / (1000 * 60 * 60);
+        const todayX = (hoursDiff / step) * columnWidth;
+
+        // Scroll so today is roughly one-third from the left edge of the viewport
+        const viewportWidth = timelinePanel.clientWidth;
+        const targetScroll = Math.max(0, todayX - viewportWidth / 3);
+        timelinePanel.scrollLeft = targetScroll;
+    }
+
+    // ============================================
+    // SCROLL-TO-TASK — centre the timeline on a specific task's bar
+    // ============================================
+    function scrollToTaskBar(taskId) {
+        const timelinePanel = document.getElementById('gantt-timeline-panel');
+        if (!timelinePanel) return;
+
+        const barWrapper = document.querySelector(`.bar-wrapper[data-id="${taskId}"]`);
+        if (!barWrapper) return;
+        const bar = barWrapper.querySelector('.bar');
+        if (!bar) return;
+
+        const barX = parseFloat(bar.getAttribute('x') || 0);
+        const barW = parseFloat(bar.getAttribute('width') || 0);
+        const barCenter = barX + barW / 2;
+
+        const viewportWidth = timelinePanel.clientWidth;
+        const targetScroll = Math.max(0, barCenter - viewportWidth / 2);
+        timelinePanel.scrollLeft = targetScroll;
+    }
+
+    // ============================================
     // CUSTOM DEPENDENCY LINES — ELBOW CONNECTORS WITH MID-LINE CHEVRONS
     // ============================================
     function drawCustomDependencyLines() {
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
 
-        // ── Cleanup ──
+        // â”€â”€ Cleanup â”€â”€
         ganttSvg.querySelectorAll('.custom-dep-group').forEach(el => el.remove());
         ganttSvg.querySelectorAll('g.arrow, path.arrow').forEach(el => {
             el.style.display = 'none';
@@ -3179,7 +3426,7 @@
             try { rect.remove(); } catch (e) { rect.style.display = 'none'; }
         });
 
-        // ── Build bar geometry for dependency line endpoints ──
+        // â”€â”€ Build bar geometry for dependency line endpoints â”€â”€
         const barGeo = {};      // keyed by task id — endpoint geometry
         const allItems = [...tasks, ...ganttMilestones];
 
@@ -3227,7 +3474,7 @@
             });
         });
 
-        // ── Monday.com-style dependency routing ──
+        // â”€â”€ Monday.com-style dependency routing â”€â”€
         // With topological sort ensuring predecessors are above successors,
         // we use simple L-shape / S-shape connectors — no collision avoidance needed.
         // Each line is O(1) to compute, scaling cleanly to 100+ tasks.
@@ -3240,7 +3487,7 @@
         const firstBarEl = ganttSvg.querySelector('.bar-wrapper');
         const insertParent = firstBarEl ? firstBarEl.parentNode : ganttSvg;
 
-        // ── Draw each dependency ──
+        // â”€â”€ Draw each dependency â”€â”€
         depPairs.forEach(dep => {
             const pred = barGeo[dep.from];
             const succ = barGeo[dep.to];
@@ -3261,12 +3508,12 @@
             const succIsRight = entryX > exitX + GAP;
 
             if (sameRow && succIsRight) {
-                // ── Case 1: Straight horizontal (same row, successor to the right) ──
+                // â”€â”€ Case 1: Straight horizontal (same row, successor to the right) â”€â”€
                 pathD = `M ${exitX},${exitY} L ${entryX},${entryY}`;
                 segments = [{ x1: exitX, y1: exitY, x2: entryX, y2: entryY, dir: 'right', len: entryX - exitX }];
 
             } else if (succIsRight) {
-                // ── Case 2: L-shape (successor to the right, different row) ──
+                // â”€â”€ Case 2: L-shape (successor to the right, different row) â”€â”€
                 // Monday.com style: horizontal to midpoint, vertical drop, horizontal to entry
                 const goingDown = entryY > exitY;
                 let midX = (exitX + entryX) / 2;
@@ -3282,8 +3529,8 @@
                 ];
 
             } else {
-                // ── Case 3: S-shape (successor to the left or overlapping — rare after topo sort) ──
-                // Route: right stub → vertical past both bars → horizontal left → vertical to entry row → short entry
+                // â”€â”€ Case 3: S-shape (successor to the left or overlapping — rare after topo sort) â”€â”€
+                // Route: right stub â†’ vertical past both bars â†’ horizontal left â†’ vertical to entry row â†’ short entry
                 const goingDown = entryY >= exitY;
                 const stubX = exitX + GAP;
                 // Go below or above both bars
@@ -3313,7 +3560,7 @@
             pathEl.setAttribute('data-to', dep.to);
             group.appendChild(pathEl);
 
-            // ── Chevron near the successor entry (right-pointing, on last horizontal segment) ──
+            // â”€â”€ Chevron near the successor entry (right-pointing, on last horizontal segment) â”€â”€
             const lastSeg = segments[segments.length - 1];
             if (lastSeg && lastSeg.dir === 'right' && lastSeg.len >= 8) {
                 // Place chevron CHEVRON_OFFSET px before entry, or midway if segment is short
@@ -3743,7 +3990,7 @@
             return;
         }
 
-        // ── Fallback: position labels inline (small screens or no table) ──
+        // â”€â”€ Fallback: position labels inline (small screens or no table) â”€â”€
         const vSegs = window._depVerticalSegments || [];
         const hSegs = window._depHorizontalSegments || [];
         const BUFFER = 12;
@@ -3898,6 +4145,9 @@
         document.getElementById('drawer-assignee').value = task.assigned_to_id ? String(task.assigned_to_id) : '';
         document.getElementById('drawer-start-date').value = task.start || '';
         document.getElementById('drawer-due-date').value = task.end || '';
+
+        // Scroll timeline so the selected task's bar is visible
+        scrollToTaskBar(taskId);
     }
 
     function closeTriageDrawer() {
@@ -3979,7 +4229,7 @@
                 // Refresh left table to show updated lozenge/assignee
                 buildTaskTable();
 
-                saveStatus.textContent = 'Saved ✓';
+                saveStatus.textContent = 'Saved âœ“';
                 saveStatus.style.color = '#22c55e';
             } else {
                 saveStatus.textContent = 'Error: ' + (data.error || 'Save failed');
@@ -4026,7 +4276,7 @@
             if (isMilestone) rowClass += ' milestone-row';
             if (isCritical) rowClass += ' critical-row';
 
-            // ── Activity cell ──
+            // â”€â”€ Activity cell â”€â”€
             let activityHTML = '';
             if (isPhase) {
                 const isExpanded = expandedPhases.has(item.phaseName);
@@ -4042,15 +4292,17 @@
                 activityHTML += `<span title="${escapeHTML(item.fullName || item.name)}">${escapeHTML(truncate(item.fullName || item.name, 40))}</span>`;
             }
 
-            // ── Status cell ──
+            // â”€â”€ Status cell â”€â”€
             let statusHTML = '';
             if (!isPhase && !isMilestone && item.status) {
                 const statusClass = 'status-' + (item.status || 'todo').replace('_', '-');
-                const statusLabel = STATUS_LABELS[item.status] || item.status;
+                // Show the real column name (Backlog, In Review, …) so the Gantt
+                // matches the board & detail drawer; fall back to the 3-state label.
+                const statusLabel = item.column_name || STATUS_LABELS[item.status] || item.status;
                 statusHTML = `<span class="status-lozenge ${escapeHTML(statusClass)}">${escapeHTML(statusLabel)}</span>`;
             }
 
-            // ── Responsible cell ──
+            // â”€â”€ Responsible cell â”€â”€
             let responsibleHTML = '';
             if (!isPhase) {
                 const fname = item.assignee_first_name || '';
@@ -4067,7 +4319,7 @@
                 }
             }
 
-            // ── Progress cell ──
+            // â”€â”€ Progress cell â”€â”€
             let progressHTML = '';
             if (isPhase) {
                 progressHTML = '';
@@ -4082,7 +4334,7 @@
                 progressHTML = `<div class="mini-progress-bar"><div class="mini-progress-track"><div class="mini-progress-fill ${fillClass}" style="width:${pct}%"></div></div><span class="mini-progress-text">${pct}%</span></div>`;
             }
 
-            // ── Build row ──
+            // â”€â”€ Build row â”€â”€
             const isClickable = !isPhase && !isMilestone;
             const clickAttr = isPhase
                 ? ` onclick="togglePhase('${escapeHTML((item.phaseName || '').replace(/'/g, "\\'"))}', event)"`
@@ -4119,6 +4371,7 @@
      * Sync HTML table row heights with SVG bar Y-positions.
      * Strictly separates DOM reads from DOM writes to prevent layout thrashing.
      */
+    let _syncRowHeightsRetries = 0;
     function syncTableRowHeights() {
         const tableBody = document.getElementById('gantt-table-body');
         const ganttSvg = document.querySelector('#gantt');
@@ -4127,7 +4380,26 @@
         const tableRows = tableBody.querySelectorAll('.gantt-table-row');
         if (tableRows.length === 0) return;
 
-        // ── PASS 1: READ all SVG Y-positions into an array (no DOM writes) ──
+        // Readiness guard: Frappe Gantt commits bar geometry asynchronously after
+        // it constructs the SVG. If we run before the bars are painted, their
+        // measured positions are stale and we'd write row heights that leave the
+        // left labels misaligned with the right bars (the intermittent drift seen
+        // after a drag/cascade). Defer to the next frame until the chart is laid
+        // out, bounded so we never loop forever.
+        const probeBar = ganttSvg.querySelector('.bar-wrapper .bar');
+        const notReady = !probeBar ||
+            probeBar.getBoundingClientRect().height === 0 ||
+            ganttSvg.getBoundingClientRect().height === 0;
+        if (notReady) {
+            if (_syncRowHeightsRetries < 10) {
+                _syncRowHeightsRetries++;
+                requestAnimationFrame(syncTableRowHeights);
+            }
+            return;
+        }
+        _syncRowHeightsRetries = 0;
+
+        // â”€â”€ PASS 1: READ all SVG Y-positions into an array (no DOM writes) â”€â”€
         const yPositions = [];
 
         ganttSvg.querySelectorAll('.bar-wrapper').forEach(wrapper => {
@@ -4179,7 +4451,7 @@
         const barPadding = currentViewMode === 'Month' ? 24 : 20;
         headerHeight = Math.max(0, headerHeight - barPadding / 2);
 
-        // Build a map: data-id → computed row height
+        // Build a map: data-id â†’ computed row height
         const heightMap = {};
         for (let i = 0; i < yPositions.length; i++) {
             const item = yPositions[i];
@@ -4192,7 +4464,7 @@
             heightMap[item.id] = Math.max(rowH, 28);
         }
 
-        // ── PASS 1.5: REORDER table rows to match SVG bar order ──
+        // â”€â”€ PASS 1.5: REORDER table rows to match SVG bar order â”€â”€
         // Frappe Gantt internally sorts bars by start date, which may differ
         // from the topological order used to build the table. Reorder the DOM
         // children so each table row lines up with its corresponding SVG bar.
@@ -4213,7 +4485,7 @@
         // Append any remaining rows that had no SVG match (unmapped)
         Object.values(rowsByTid).forEach(row => tableBody.appendChild(row));
 
-        // ── PASS 2: WRITE heights to table rows (no DOM reads) ──
+        // â”€â”€ PASS 2: WRITE heights to table rows (no DOM reads) â”€â”€
         const tableHeaderEl = document.querySelector('#gantt-table-panel .table-header');
         if (tableHeaderEl) {
             tableHeaderEl.style.height = headerHeight + 'px';
@@ -4327,6 +4599,8 @@
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
             localStorage.setItem('ganttTablePanelWidth', tablePanel.offsetWidth);
+            // Refresh sticky header width after divider drag
+            _updateStickyHdr();
         });
     }
 
@@ -4335,7 +4609,173 @@
      */
     function refreshSplitView() {
         buildTaskTable();
+        // Re-build the sticky date-header overlay after every render so it
+        // always mirrors the latest SVG header content (e.g. after view-mode change).
+        buildStickyDateHeader();
     }
+
+    /* ============================================================
+       STICKY HEADER BAR — combined fixed overlay shown while the
+       Gantt's native header rows have scrolled above the topbar.
+       Mirrors both the table column header (left) and the SVG
+       date row (right) as one seamless bar.
+       ============================================================ */
+    let _stickyBar = null;
+    let _stickyDateSvg = null;
+    let _stickyPanelScrollFn = null;
+
+    function buildStickyDateHeader() {
+        const splitView     = document.getElementById('gantt-split-view');
+        const tablePanel    = document.getElementById('gantt-table-panel');
+        const timelinePanel = document.getElementById('gantt-timeline-panel');
+        const ganttSvg      = document.querySelector('#gantt');
+        if (!splitView || !tablePanel || !timelinePanel || !ganttSvg || !ganttChart) return;
+
+        // Use the actual rendered table header height so the sticky bar
+        // matches the real header row (syncTableRowHeights may have resized it).
+        const tableHdr = tablePanel.querySelector('.table-header');
+        const headerHeight = (tableHdr && tableHdr.offsetHeight > 0)
+            ? tableHdr.offsetHeight
+            : (ganttChart.options && ganttChart.options.header_height) || 50;
+
+        // Frappe-gantt's grid-header rect is header_height + 10, and lower-text
+        // sits at y = header_height.  Use the full rect height for the SVG so
+        // nothing is clipped.  Extra 5px for text descenders (letters like y, g, p).
+        const svgHeaderHeight = headerHeight + 15;
+
+        // --- Create the overlay once, reuse it ---
+        if (!_stickyBar) {
+            _stickyBar = document.createElement('div');
+            _stickyBar.id = 'gantt-sticky-header-bar';
+            _stickyBar.style.display = 'none';
+            document.body.appendChild(_stickyBar);
+        }
+
+        // Rebuild content from scratch to match the current render
+        _stickyBar.innerHTML = '';
+        // Use svgHeaderHeight (headerHeight + 10) so the lower date text
+        // (which sits at y = headerHeight) is fully visible, not clipped.
+        _stickyBar.style.height = svgHeaderHeight + 'px';
+
+        // --- Left: table column header replica ---
+        const tablePart = document.createElement('div');
+        tablePart.className = 'sticky-table-part';
+        if (tableHdr) {
+            tablePart.innerHTML = tableHdr.innerHTML;
+        }
+        _stickyBar.appendChild(tablePart);
+
+        // --- Divider ---
+        const divider = document.createElement('div');
+        divider.className = 'sticky-divider';
+        _stickyBar.appendChild(divider);
+
+        // --- Right: SVG date header replica ---
+        const datePart = document.createElement('div');
+        datePart.className = 'sticky-date-part';
+
+        const svgNS = 'http://www.w3.org/2000/svg';
+        _stickyDateSvg = document.createElementNS(svgNS, 'svg');
+        _stickyDateSvg.setAttribute('height', svgHeaderHeight);
+        _stickyDateSvg.setAttribute('preserveAspectRatio', 'xMinYMin meet');
+        _stickyDateSvg.classList.add('gantt');  // inherit .gantt CSS rules for grid-header, date text etc.
+        _stickyDateSvg.style.display = 'block';
+        _stickyDateSvg.style.overflow = 'hidden';
+
+        const gridHeader = ganttSvg.querySelector('.grid-header');
+        // frappe-gantt 0.6.1 names its date layer "date" (singular)
+        const datesGroup = ganttSvg.querySelector('g.date');
+        if (gridHeader) _stickyDateSvg.appendChild(gridHeader.cloneNode(true));
+        if (datesGroup)  _stickyDateSvg.appendChild(datesGroup.cloneNode(true));
+        datePart.appendChild(_stickyDateSvg);
+        _stickyBar.appendChild(datePart);
+
+        // Store the SVG-coordinate header height for viewBox calculations
+        _stickyBar._svgHeaderHeight = svgHeaderHeight;
+
+        // --- Rebind panel-scroll listener ---
+        // Frappe-gantt wraps the SVG in its own .gantt-container div
+        // (with padding + overflow-x:auto), so horizontal scrolling can
+        // happen there instead of on #gantt-timeline-panel.  Listen on
+        // both so the sticky header always stays synced.
+        if (_stickyPanelScrollFn) {
+            timelinePanel.removeEventListener('scroll', _stickyPanelScrollFn);
+            const prevGC = timelinePanel.querySelector('.gantt-container');
+            if (prevGC) prevGC.removeEventListener('scroll', _stickyPanelScrollFn);
+        }
+        _stickyPanelScrollFn = function () { _updateStickyHdr(); };
+        timelinePanel.addEventListener('scroll', _stickyPanelScrollFn, { passive: true });
+        const ganttContainer = timelinePanel.querySelector('.gantt-container');
+        if (ganttContainer) {
+            ganttContainer.addEventListener('scroll', _stickyPanelScrollFn, { passive: true });
+        }
+
+        // Initial update
+        _updateStickyHdr();
+    }
+
+    function _updateStickyHdr() {
+        if (!_stickyBar || !_stickyDateSvg) return;
+
+        const splitView     = document.getElementById('gantt-split-view');
+        const tablePanel    = document.getElementById('gantt-table-panel');
+        const timelinePanel = document.getElementById('gantt-timeline-panel');
+        const ganttSvg      = document.querySelector('#gantt');
+        if (!splitView || !tablePanel || !timelinePanel || !ganttSvg) {
+            _stickyBar.style.display = 'none'; return;
+        }
+
+        const splitRect  = splitView.getBoundingClientRect();
+        const panelRect  = timelinePanel.getBoundingClientRect();
+
+        // Effective top below the fixed topbar
+        const topbarEl  = document.querySelector('.prizm-topbar');
+        const topOffset = topbarEl ? Math.round(topbarEl.getBoundingClientRect().bottom) : 48;
+
+        // Show only when the split view header has scrolled above the topbar
+        const shouldShow = splitRect.top < topOffset && panelRect.height > 0;
+
+        if (!shouldShow) {
+            _stickyBar.style.display = 'none';
+            return;
+        }
+
+        const headerHeight = _stickyBar.offsetHeight || 50;
+        const tableW       = tablePanel.offsetWidth;
+        const dividerW     = 5;  // matches CSS
+
+        _stickyBar.style.display    = 'flex';
+        _stickyBar.style.left       = splitRect.left + 'px';
+        _stickyBar.style.top        = topOffset + 'px';
+        _stickyBar.style.width      = splitRect.width + 'px';
+        _stickyBar.style.height     = headerHeight + 'px';
+
+        // Size the left table part to match the actual table panel width
+        const tablePart = _stickyBar.querySelector('.sticky-table-part');
+        if (tablePart) {
+            tablePart.style.width = tableW + 'px';
+            tablePart.style.height = headerHeight + 'px';
+        }
+
+        // Sync the inner SVG viewBox with the actual visible portion of the
+        // Gantt SVG.  Compute the offset from the sticky-date-part's own screen
+        // position to the main SVG's screen position so the dates line up
+        // pixel-perfectly — immune to nested containers, padding, and rounding.
+        const svgRect      = ganttSvg.getBoundingClientRect();
+        const datePart     = _stickyBar.querySelector('.sticky-date-part');
+        const datePartRect = datePart ? datePart.getBoundingClientRect() : panelRect;
+        const scrollLeft   = datePartRect.left - svgRect.left;  // SVG x at date-part left edge
+        const visibleW     = datePartRect.width;
+        // Use the SVG-coordinate header height (includes the +10 rect padding)
+        // so lower date labels at y = header_height are not clipped.
+        const svgH = _stickyBar._svgHeaderHeight || (headerHeight + 10);
+        _stickyDateSvg.setAttribute('width', visibleW);
+        _stickyDateSvg.setAttribute('viewBox', `${scrollLeft} 0 ${visibleW} ${svgH}`);
+    }
+
+    // Wire global scroll / resize listeners once
+    window.addEventListener('scroll', _updateStickyHdr, { passive: true });
+    window.addEventListener('resize', _updateStickyHdr, { passive: true });
 
     // Initialize split-view infrastructure once on page load
     document.addEventListener('DOMContentLoaded', function () {
@@ -4482,15 +4922,26 @@
     function updatePhaseBarForTask(taskId) {
         if (!ganttChart || currentView !== 'phases') return;
         const task = tasks.find(t => String(t.id) === String(taskId));
-        if (!task || !task.phase) return;
+        if (!task) return;
 
-        const phaseName = task.phase;
-        const phaseId = phaseName.replace(/\s+/g, '-').toLowerCase();
+        // Work out which bucket this task belongs to. Tasks with no numbered
+        // phase live in the "unphased" bar (id="unphased"), which must resize
+        // from its members just like the numbered phases do.
+        const phasedNames = new Set();
+        for (let i = 1; i <= numPhases; i++) phasedNames.add(`Phase ${i}`);
+        const taskPhase = (task.phase || '').trim();
+        const isUnphased = !phasedNames.has(taskPhase);
+
+        const phaseId = isUnphased ? 'unphased' : taskPhase.replace(/\s+/g, '-').toLowerCase();
         const phaseWrapper = document.querySelector(`.bar-wrapper[data-id="${phaseId}"]`);
         if (!phaseWrapper) return;
 
-        // Gather all tasks in this phase that have valid dates
-        const phaseTasks = tasks.filter(t => t.phase === phaseName && t.start && t.end && t.start !== '' && t.end !== '');
+        // Gather all tasks in this bucket that have valid dates
+        const phaseTasks = tasks.filter(t => {
+            const tp = (t.phase || '').trim();
+            const inBucket = isUnphased ? !phasedNames.has(tp) : (tp === taskPhase);
+            return inBucket && t.start && t.end && t.start !== '' && t.end !== '';
+        });
         if (phaseTasks.length === 0) return;
 
         const starts = phaseTasks.map(t => new Date(t.start)).filter(d => !isNaN(d.getTime()));
@@ -4500,7 +4951,7 @@
         const minStart = new Date(Math.min(...starts));
         const maxEnd   = new Date(Math.max(...ends));
 
-        // Convert dates → SVG x using the same math as svgXToDate (inverse)
+        // Convert dates â†’ SVG x using the same math as svgXToDate (inverse)
         const opts = ganttChart.options || ganttChart.config;
         const colW = opts ? opts.column_width : 30;
         const step = opts ? (opts.step || 24) : 24;
@@ -4574,6 +5025,13 @@
                         task.end = data.task.due_date;
                         task._origEnd = data.task.due_date;
                     }
+                    // Update the DOM data-* attributes so hover tooltips
+                    // show the new dates instead of the stale originals.
+                    const barWrapper = document.querySelector(`.bar-wrapper[data-id="${taskId}"]`);
+                    if (barWrapper) {
+                        if (data.task.start_date) barWrapper.setAttribute('data-start', data.task.start_date);
+                        if (data.task.due_date) barWrapper.setAttribute('data-end', data.task.due_date);
+                    }
                 }
                 // Refresh split-view table row
                 refreshSplitView();
@@ -4581,11 +5039,19 @@
                 // Update phase bar if we're in phase view
                 updatePhaseBarForTask(taskId);
 
-                // Redraw custom dependency lines and priority dots to match new bar positions
+                // Redraw custom dependency lines and priority dots to match new bar positions.
+                // syncTableRowHeights() must run FIRST: it re-reads the SVG bar Y-positions
+                // and re-applies the matching row heights + scroll sync to the left table.
+                // Without it the left labels and right bars drift out of alignment after a
+                // drag (the redraw moved a bar but never reconciled the two panels).
                 requestAnimationFrame(() => {
                     enhanceBarsWithPriorityDots();
+                    syncTableRowHeights();
                     drawCustomDependencyLines();
                     positionBarLabels();
+                    // Re-flow phase-bar labels (inside vs gradient pill) now that
+                    // the phase bar has been resized to its members' span.
+                    if (currentView === 'phases') polishPhaseBarLabels();
                 });
 
                 // Sync triage drawer if it's open for this task
@@ -4598,7 +5064,7 @@
 
                 // Dependency cascade notification
                 if (data.affected_dependents && data.affected_dependents.length > 0) {
-                    showDependencyCascadeBanner(data.affected_dependents);
+                    showDependencyCascadeBanner(data.affected_dependents, taskId, data.total_dependents);
                 }
             } else {
                 console.error('Reschedule failed:', data.error);
@@ -4613,16 +5079,149 @@
         });
     }
 
+    // Elements currently carrying a dependency highlight, plus the outside-click
+    // listener that clears them. Kept at module scope so a second drag clears the
+    // previous highlight first.
+    let _depHighlightEls = [];
+    let _depOutsideHandler = null;
+
+    /** Remove the dependency highlight and exit focus mode. */
+    function clearDependencyHighlight() {
+        const svg = document.querySelector('#gantt');
+        if (svg) svg.classList.remove('dep-focus-mode');
+        _depHighlightEls.forEach(function(el) {
+            el.classList.remove('gantt-dep-highlight');
+            el.classList.remove('gantt-dep-highlight-row');
+        });
+        _depHighlightEls = [];
+        if (_depOutsideHandler) {
+            document.removeEventListener('click', _depOutsideHandler, true);
+            _depOutsideHandler = null;
+        }
+    }
+
     /**
-     * Show a non-blocking dependency cascade notification banner.
+     * Prominently highlight every affected dependent (bar + table row), dim
+     * everything else, scroll both panels in lockstep to the first one, and keep
+     * the highlight up until the user clicks away. Lockstep scroll (not
+     * scrollIntoView) keeps the left table aligned with the right bars.
      */
-    function showDependencyCascadeBanner(dependents) {
-        // Remove any existing banner
+    function highlightDependents(dependents, firstId) {
+        clearDependencyHighlight();
+        const svg = document.querySelector('#gantt');
+        if (svg) svg.classList.add('dep-focus-mode');
+
+        dependents.forEach(function(dep) {
+            const bw = document.querySelector('.bar-wrapper[data-id="' + dep.id + '"]');
+            if (bw) { bw.classList.add('gantt-dep-highlight'); _depHighlightEls.push(bw); }
+            const row = document.querySelector('.gantt-table-row[data-table-id="' + dep.id + '"]')
+                      || document.querySelector('.split-view-row[data-task-id="' + dep.id + '"]');
+            if (row) { row.classList.add('gantt-dep-highlight-row'); _depHighlightEls.push(row); }
+        });
+
+        const timelinePanel = document.getElementById('gantt-timeline-panel');
+        const tableBody = document.getElementById('gantt-table-body');
+        const firstBar = document.querySelector('.bar-wrapper[data-id="' + firstId + '"] .bar');
+        if (timelinePanel && firstBar) {
+            const barY = parseFloat(firstBar.getAttribute('y') || 0);
+            const target = Math.max(0, barY - timelinePanel.clientHeight / 2);
+            timelinePanel.scrollTop = target;
+            if (tableBody) tableBody.scrollTop = target;
+        }
+
+        // Clear on the next click that isn't on a highlighted bar or the banner.
+        // Deferred so the current "Review Dependencies" click doesn't clear it.
+        setTimeout(function() {
+            _depOutsideHandler = function(e) {
+                if (e.target.closest &&
+                    (e.target.closest('.gantt-dep-highlight') ||
+                     e.target.closest('#gantt-dep-banner'))) {
+                    return; // clicking a highlighted task or the banner keeps focus
+                }
+                clearDependencyHighlight();
+            };
+            document.addEventListener('click', _depOutsideHandler, true);
+        }, 0);
+    }
+
+    /**
+     * Push every transitive downstream dependent forward so the schedule stays
+     * valid (Finish-to-Start), preserving each task's duration. Gated behind a
+     * confirm by the caller. Re-renders the chart from the updated `tasks` array.
+     */
+    function cascadeReschedule(sourceTaskId) {
+        // Send the source task's authoritative new dates so the cascade is
+        // self-contained — it re-applies them in its own transaction and never
+        // depends on the earlier reschedule request being visible to it. The
+        // local `tasks` entry was updated to the new dates by rescheduleTask().
+        const srcTask = tasks.find(t => String(t.id) === String(sourceTaskId));
+        const body = {};
+        if (srcTask) {
+            if (srcTask.start) body.start_date = srcTask.start;
+            if (srcTask.end) body.due_date = srcTask.end;
+        }
+        fetch(`/api/tasks/${sourceTaskId}/cascade-reschedule/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify(body)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(d => { throw new Error(d.error || 'Cascade failed'); });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (!data.success) {
+                showGanttErrorToast(data.error || 'Could not shift dependent tasks.');
+                return;
+            }
+            const moved = data.updated || [];
+            clearDependencyHighlight();
+            // Reload so the moved dependents are read back from the authoritative
+            // server state and the chart re-aligns via the normal init path. An
+            // in-place re-render here repainted unreliably (bars looked unmoved)
+            // and could leave rows misaligned, so we take the robust route. Carry
+            // the confirmation toast across the reload via sessionStorage.
+            try {
+                sessionStorage.setItem('ganttCascadeToast', moved.length
+                    ? (moved.length + ' dependent task' + (moved.length > 1 ? 's' : '') + ' rescheduled.')
+                    : 'No dependent tasks needed shifting.');
+            } catch (e) { /* sessionStorage unavailable — toast is non-essential */ }
+            window.location.reload();
+        })
+        .catch(error => {
+            console.error('Cascade reschedule error:', error);
+            showGanttErrorToast(error.message || 'Could not shift dependent tasks.');
+        });
+    }
+
+    /**
+     * Dependency cascade notification banner. Offers two actions:
+     *   • Review Dependencies — prominently highlight affected tasks (persists).
+     *   • Shift N tasks       — confirm, then cascade-reschedule downstream.
+     */
+    function showDependencyCascadeBanner(dependents, sourceTaskId, totalDependents) {
         const old = document.getElementById('gantt-dep-banner');
         if (old) old.remove();
 
         const count = dependents.length;
         const firstId = dependents[0].id;
+
+        // Some downstream tasks (linked by arrows) may already start after the new
+        // due date and so don't need shifting. When that's the case, explain the
+        // gap between the arrows shown and the smaller number we offer to shift —
+        // otherwise new users wonder why "Shift N" is fewer than the arrows.
+        const skipped = (typeof totalDependents === 'number')
+            ? Math.max(0, totalDependents - count) : 0;
+        const skippedNote = skipped > 0
+            ? '<span class="dep-banner-note">' + skipped + ' other dependent' +
+              (skipped > 1 ? 's' : '') + ' already start' + (skipped > 1 ? '' : 's') +
+              ' after the new date — no shift needed.</span>'
+            : '';
 
         const banner = document.createElement('div');
         banner.id = 'gantt-dep-banner';
@@ -4630,12 +5229,12 @@
         banner.innerHTML =
             '<i class="fas fa-exclamation-triangle"></i>' +
             '<span class="dep-banner-msg">This change affects <strong>' + count +
-            '</strong> dependent task' + (count > 1 ? 's' : '') +
-            '. Update their dates too?</span>' +
+            '</strong> dependent task' + (count > 1 ? 's' : '') + '.' + skippedNote + '</span>' +
             '<button class="dep-banner-btn" id="dep-banner-review">Review Dependencies</button>' +
+            '<button class="dep-banner-btn dep-banner-btn-primary" id="dep-banner-shift">' +
+            'Shift ' + count + ' task' + (count > 1 ? 's' : '') + '</button>' +
             '<button class="dep-banner-close" id="dep-banner-close">&times;</button>';
 
-        // Insert before the gantt chart wrapper
         const chartArea = document.getElementById('gantt-chart-wrapper') ||
                           document.querySelector('.gantt-container');
         if (chartArea && chartArea.parentNode) {
@@ -4644,37 +5243,30 @@
             document.body.appendChild(banner);
         }
 
-        // "Review Dependencies" scrolls to the first affected task
+        // Review → prominent, persistent highlight (cleared on outside click).
         document.getElementById('dep-banner-review').addEventListener('click', function() {
-            const barWrapper = document.querySelector('.bar-wrapper[data-id="' + firstId + '"]');
-            if (barWrapper) {
-                barWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // Brief highlight
-                barWrapper.style.outline = '3px solid #fbbf24';
-                barWrapper.style.outlineOffset = '2px';
-                setTimeout(() => {
-                    barWrapper.style.outline = '';
-                    barWrapper.style.outlineOffset = '';
-                }, 3000);
-            }
-            // Also try to highlight in the split-view table
-            const tableRow = document.querySelector('.split-view-row[data-task-id="' + firstId + '"]');
-            if (tableRow) {
-                tableRow.style.background = 'rgba(251, 191, 36, 0.15)';
-                setTimeout(() => { tableRow.style.background = ''; }, 3000);
-            }
-            banner.remove();
+            highlightDependents(dependents, firstId);
         });
 
-        // Close button
+        // Shift → confirm, then cascade-reschedule the whole downstream chain.
+        document.getElementById('dep-banner-shift').addEventListener('click', function() {
+            const ok = window.confirm(
+                'Shift ' + count + ' dependent task' + (count > 1 ? 's' : '') +
+                ' so the schedule stays valid?\n\nEach is moved to start after its ' +
+                'predecessor finishes, keeping its original duration. This may move ' +
+                'further downstream tasks too.'
+            );
+            if (!ok) return;
+            clearDependencyHighlight();
+            banner.remove();
+            cascadeReschedule(sourceTaskId);
+        });
+
+        // Close
         document.getElementById('dep-banner-close').addEventListener('click', function() {
+            clearDependencyHighlight();
             banner.remove();
         });
-
-        // Auto-dismiss after 10 seconds
-        setTimeout(() => {
-            if (document.getElementById('gantt-dep-banner')) banner.remove();
-        }, 10000);
     }
 
     /**
@@ -4687,6 +5279,45 @@
         document.body.appendChild(toast);
         setTimeout(() => { if (toast.parentNode) toast.remove(); }, 4000);
     }
+
+    /**
+     * Show a brief success/info toast at bottom-right.
+     */
+    function showGanttInfoToast(message) {
+        const toast = document.createElement('div');
+        toast.className = 'gantt-info-toast';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 4000);
+    }
+
+    // After a cascade reschedule we reload the page; surface the confirmation
+    // toast that was stashed in sessionStorage just before the reload.
+    (function showPendingCascadeToast() {
+        function go() {
+            try {
+                const msg = sessionStorage.getItem('ganttCascadeToast');
+                if (msg) {
+                    sessionStorage.removeItem('ganttCascadeToast');
+                    showGanttInfoToast(msg);
+                }
+            } catch (e) { /* sessionStorage unavailable */ }
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', go);
+        } else {
+            setTimeout(go, 400);
+        }
+    })();
+
+    // Belt-and-suspenders: once all resources/fonts are in and the SVG is fully
+    // laid out, reconcile row heights one more time so the panels are aligned
+    // even if the post-render sync ran a frame too early.
+    window.addEventListener('load', function () {
+        requestAnimationFrame(function () {
+            if (typeof syncTableRowHeights === 'function') syncTableRowHeights();
+        });
+    });
 
     // Update task progress
     function updateTaskProgress(taskId, progress) {
@@ -4929,12 +5560,59 @@
                     return true;
                 });
 
-                // Topological sort: predecessors above successors → clean downward lines
+                // Topological sort: predecessors above successors â†’ clean downward lines
                 const regularTasks = topologicalSortTasks(expandedPhaseTasks);
                 
                 // Add all tasks + milestones in position-aware order for this phase
                 const phaseMilestones = visibleMilestones.filter(m => m.phase === phaseName);
                 buildOrderedTaskList(regularTasks, phaseMilestones).forEach(item => ganttData.push(item));
+            }
+        }
+
+        // Unphased tasks (e.g. ideas promoted from PrizmDiscovery are created
+        // without a phase). Without their own group they'd be silently dropped
+        // from the phase view, so the Gantt would show fewer tasks than the board.
+        const phasedNames = new Set();
+        for (let i = 1; i <= numPhases; i++) phasedNames.add(`Phase ${i}`);
+        const unphasedTasks = tasks.filter(t =>
+            !phasedNames.has((t.phase || '').trim()) &&
+            t.start && t.end && t.start !== '' && t.end !== '');
+
+        if (unphasedTasks.length > 0) {
+            const phaseName = 'Unphased';
+            const isExpanded = expandedPhases.has(phaseName);
+            const taskStarts = unphasedTasks.map(t => new Date(t.start)).filter(d => !isNaN(d.getTime()));
+            const taskEnds = unphasedTasks.map(t => new Date(t.end)).filter(d => !isNaN(d.getTime()));
+            const phaseStart = taskStarts.length ? new Date(Math.min(...taskStarts)).toISOString().split('T')[0] : '';
+            const phaseEnd = taskEnds.length ? new Date(Math.max(...taskEnds)).toISOString().split('T')[0] : '';
+
+            if (phaseStart && phaseEnd) {
+                ganttData.push({
+                    id: 'unphased',
+                    name: `${phaseName} ${isExpanded ? '▼' : '▶'} (${unphasedTasks.length} tasks)`,
+                    fullName: phaseName,
+                    start: phaseStart,
+                    end: phaseEnd,
+                    progress: 0,
+                    dependencies: '',
+                    custom_class: 'phase-bar',
+                    priority: 'phase',
+                    status: 'phase',
+                    assigned_to: '',
+                    assignee_first_name: '',
+                    assignee_last_name: '',
+                    item_type: 'phase',
+                    phase: phaseName,
+                    isPhase: true,
+                    phaseName: phaseName
+                });
+
+                if (isExpanded) {
+                    // Milestones with no phase are appended separately below, so
+                    // only the tasks are nested here to avoid duplicating them.
+                    const regularTasks = topologicalSortTasks(unphasedTasks);
+                    buildOrderedTaskList(regularTasks, []).forEach(item => ganttData.push(item));
+                }
             }
         }
 
@@ -5024,7 +5702,7 @@
         void chartWrapper.offsetHeight;
 
         if (data.length === 0) {
-            chartWrapper.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;">No items to display</div>';
+            chartWrapper.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">No items to display</div>';
             chartWrapper.classList.add('chart-ready');
             return;
         }
@@ -5086,33 +5764,28 @@
             }
         });
 
-        // Apply custom styling after render - use requestAnimationFrame for smoother rendering
-        requestAnimationFrame(() => {
-            applyPhaseStyling();
-            
-            // Show chart with smooth transition after initial styling
-            requestAnimationFrame(() => {
-                applyPhaseStyling();
-                chartWrapper.classList.add('chart-ready');
-                
-                // Set up arrow polygon observer for this chart instance
-                setupArrowPolygonObserver();
-                
-                // Draw custom dependency lines
-                requestAnimationFrame(() => {
-                    drawCustomDependencyLines();
+        // Kill Frappe Gantt's built-in 0→width <animate> elements so bars
+        // appear at full size instantly (no contraction/expansion flash).
+        stripBarAnimations();
 
-                    // Build/refresh the split-view table with same data
-                    _lastRenderedItems = data;
-                    refreshSplitView();
-                    
-                    // Final cleanup pass
-                    setTimeout(() => {
-                        drawCustomDependencyLines();
-                    }, 200);
-                });
-            });
+        // Apply all styling synchronously BEFORE revealing the chart so the
+        // browser never paints an intermediate grey / compressed frame.
+        applyPhaseStyling();
+        drawCustomDependencyLines();
+        _lastRenderedItems = data;
+        refreshSplitView();
+
+        // Reveal the fully-styled chart in one shot
+        chartWrapper.classList.add('chart-ready');
+
+        // Set up observer + one deferred cleanup pass
+        setupArrowPolygonObserver();
+        requestAnimationFrame(() => {
+            drawCustomDependencyLines();
         });
+
+        // Auto-scroll so today's date is visible in the viewport
+        scrollToToday();
     }
 
     // Apply custom styling for phases
@@ -5132,8 +5805,9 @@
             if (bar && label) {
                 const taskName = label.textContent || '';
 
-                // Check if this is a phase bar
-                if (taskName.includes('Phase') && taskName.includes('tasks')) {
+                // Check if this is a phase bar. The "unphased" bucket bar is a
+                // phase bar too, but its label says "Unphased" (no "Phase").
+                if ((taskName.includes('Phase') && taskName.includes('tasks')) || taskId === 'unphased') {
                     bar.setAttribute('data-is-phase', 'true');
                     bar.style.cursor = 'pointer';
                 }
@@ -5142,6 +5816,97 @@
 
         // Also apply standard styling
         applyCustomStyling();
+
+        // Place phase-bar labels inside the bar when they fit, or in a gradient
+        // pill to the right when the bar is too narrow to hold them.
+        polishPhaseBarLabels();
+    }
+
+    /**
+     * For every phase bar, decide whether its label fits inside the bar.
+     *  - Fits  → centre the label inside (default phase styling).
+     *  - Too narrow → render the label to the right of the bar inside a gradient
+     *    "pill" so a 1-day/undated phase bar still reads cleanly.
+     * Re-runs after a drag so the label flips back inside once the bar widens.
+     */
+    function polishPhaseBarLabels() {
+        const svg = document.querySelector('#gantt');
+        if (!svg) return;
+        ensurePhaseLabelGradient(svg);
+
+        document.querySelectorAll('.gantt .bar-wrapper').forEach(wrapper => {
+            const bar = wrapper.querySelector('.bar');
+            const label = wrapper.querySelector('.bar-label');
+            if (!bar || !label) return;
+            if (bar.getAttribute('data-is-phase') !== 'true') return;
+
+            // Clear any pill from a previous pass so we measure cleanly.
+            const oldPill = wrapper.querySelector('.phase-label-pill');
+            if (oldPill) oldPill.remove();
+            label.classList.remove('phase-label-outside');
+
+            const barX = parseFloat(bar.getAttribute('x'));
+            const barW = parseFloat(bar.getAttribute('width'));
+            let barBox;
+            try { barBox = bar.getBBox(); } catch (e) { return; }
+            const cy = barBox.y + barBox.height / 2;
+            if (isNaN(barX) || isNaN(barW)) return;
+
+            // Measure the label's natural width.
+            let textW;
+            try { textW = label.getBBox().width; } catch (e) { return; }
+
+            const INSIDE_PAD = 16;
+            if (textW + INSIDE_PAD <= barW) {
+                // Fits — centre inside the bar (default behaviour).
+                label.setAttribute('x', barX + barW / 2);
+                label.setAttribute('y', cy);
+                return;
+            }
+
+            // Too narrow — render the label to the right inside a gradient pill.
+            label.classList.add('phase-label-outside');
+            const GAP = 8;        // space between bar and pill
+            const PILL_PAD = 10;  // horizontal padding inside the pill
+            const PILL_H = 20;
+            label.setAttribute('x', barX + barW + GAP + PILL_PAD);
+            label.setAttribute('y', cy);
+
+            let labelW;
+            try { labelW = label.getBBox().width; } catch (e) { labelW = textW; }
+
+            const pill = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            pill.setAttribute('class', 'phase-label-pill');
+            pill.setAttribute('x', barX + barW + GAP);
+            pill.setAttribute('y', cy - PILL_H / 2);
+            pill.setAttribute('width', labelW + PILL_PAD * 2);
+            pill.setAttribute('height', PILL_H);
+            pill.setAttribute('rx', 6);
+            pill.setAttribute('ry', 6);
+            pill.setAttribute('fill', 'url(#phaseLabelGradient)');
+            // Insert behind the text label so the text stays readable.
+            (label.parentNode || wrapper).insertBefore(pill, label);
+        });
+    }
+
+    /** Inject the phase-label pill gradient into the SVG's <defs> once. */
+    function ensurePhaseLabelGradient(svg) {
+        if (svg.querySelector('#phaseLabelGradient')) return;
+        let defs = svg.querySelector('defs');
+        if (!defs) {
+            defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            svg.insertBefore(defs, svg.firstChild);
+        }
+        const grad = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+        grad.setAttribute('id', 'phaseLabelGradient');
+        grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+        grad.setAttribute('x2', '1'); grad.setAttribute('y2', '0');
+        const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+        stop1.setAttribute('offset', '0%'); stop1.setAttribute('stop-color', '#6366f1');
+        const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+        stop2.setAttribute('offset', '100%'); stop2.setAttribute('stop-color', '#4f46e5');
+        grad.appendChild(stop1); grad.appendChild(stop2);
+        defs.appendChild(grad);
     }
 
     // Initialize phase view on load if phases exist
@@ -5159,20 +5924,6 @@
         });
     }
 
-    // Handle back navigation to previous page
-    function goBack() {
-        // Check if there's a previous page in history
-        if (document.referrer && document.referrer !== window.location.href) {
-            window.history.back();
-        } else {
-            // Fallback to board detail if no history (demo-aware)
-            {% if is_demo_mode %}
-            window.location.href = '{% url "demo_board_detail" board.id %}';
-            {% else %}
-            window.location.href = '{% url "board_detail" board.id %}';
-            {% endif %}
-        }
-    }
 
     // ============================================
     // CRITICAL PATH NETWORK FLOWCHART
@@ -5181,7 +5932,7 @@
     /**
      * Generate the critical path network diagram flowchart
      */
-    function generateCriticalPathFlowchart(phaseFilter = 'all') {
+    function generateCriticalPathFlowchart(phaseFilter = 'all', pathFilter = 'all') {
         const svgContainer = document.getElementById('flowchart-svg');
         const statsElement = document.getElementById('flowchart-stats');
         if (!svgContainer) return;
@@ -5199,16 +5950,15 @@
         // Clear existing content
         svgContainer.innerHTML = '';
 
-        // Get task data and filter by phase if needed
-        let taskList = tasks.filter(t => 
-            t.start && t.end && 
-            t.start !== '' && t.end !== '' && 
-            !t.name.includes('Phase') || !t.name.includes('tasks')
+        // Build the task map from the WHOLE project (all valid tasks), not just the
+        // selected phase. The critical path is a project-wide, cross-phase chain, so
+        // the CPM must see every task; the phase dropdown only filters what is DISPLAYED.
+        // Exclude phase-header / summary rows (e.g. "Phase 2 (11 tasks)") which are not real tasks.
+        let taskList = tasks.filter(t =>
+            t.start && t.end &&
+            t.start !== '' && t.end !== '' &&
+            !(t.name.includes('Phase') && t.name.includes('tasks'))
         );
-
-        if (phaseFilter !== 'all') {
-            taskList = taskList.filter(t => t.phase === phaseFilter);
-        }
 
         if (taskList.length === 0) {
             svgContainer.innerHTML = `
@@ -5278,18 +6028,8 @@
             task.isEnd = task.successors.length === 0;
         });
 
-        // Group tasks by phase first (needed for per-phase critical path calculation)
-        const phaseTasksMap = new Map();
-        taskMap.forEach((task, taskId) => {
-            const phase = task.phase || 'No Phase';
-            if (!phaseTasksMap.has(phase)) {
-                phaseTasksMap.set(phase, []);
-            }
-            phaseTasksMap.get(phase).push(taskId);
-        });
-
-        // Calculate critical path per phase for accurate highlighting
-        // This ensures each phase shows its own critical path
+        // CPM helper: forward/backward pass + slack over a given set of task ids.
+        // Called once with the WHOLE task set for a single, continuous project-wide critical path.
         function calculateCriticalPathForTasks(taskIds) {
             if (taskIds.length === 0) return;
 
@@ -5349,30 +6089,32 @@
             });
         }
 
-        // If viewing all phases, calculate critical path per phase separately
-        // This ensures each phase shows its own critical path
-        if (phaseFilter === 'all') {
-            phaseTasksMap.forEach((taskIds, phase) => {
-                calculateCriticalPathForTasks(taskIds);
-            });
-        } else {
-            // Single phase view - calculate for all visible tasks
-            calculateCriticalPathForTasks(Array.from(taskMap.keys()));
-        }
+        // TRUE project-wide critical path: run a SINGLE global CPM pass over the entire
+        // task graph. Computing it per-phase (as before) made each phase its own mini-project
+        // with its own local start/end, which broke the 0-slack chain at every phase boundary
+        // and produced disconnected "critical islands". One global pass keeps the critical
+        // path a continuous, unbroken chain from project start to project end.
+        calculateCriticalPathForTasks(Array.from(taskMap.keys()));
 
         // Calculate overall project end for stats
         const projectEnd = Math.max(...Array.from(taskMap.values()).map(t => t.EF || 0));
 
-        // Use phaseTasksMap for layout (already created above)
-        const phaseGroups = phaseTasksMap;
+        // Layout groups: only the phase(s) the user chose to DISPLAY (critical status is global).
+        const phaseGroups = new Map();
+        taskMap.forEach((task, taskId) => {
+            if (phaseFilter !== 'all' && task.phase !== phaseFilter) return;
+            const phase = task.phase || 'No Phase';
+            if (!phaseGroups.has(phase)) phaseGroups.set(phase, []);
+            phaseGroups.get(phase).push(taskId);
+        });
 
         // Layout configuration
         const nodeWidth = 180;
         const nodeHeight = 70;
-        const horizontalGap = 80;
+        const horizontalGap = 120;
         const verticalGap = 40;
-        const phaseGap = 100;
-        const padding = 50;
+        const phaseGap = 200;
+        const padding = 160;
 
         // Calculate positions using layered approach per phase
         const nodePositions = new Map();
@@ -5512,45 +6254,93 @@
             }
         });
 
+        // Visibility per the path-type filter (All / Critical only / Non-Critical only)
+        const isNodeVisible = (t) => pathFilter === 'all'
+            || (pathFilter === 'critical' && t.isCritical)
+            || (pathFilter === 'non-critical' && !t.isCritical);
+
+        // Arrowhead sits this many px before the node's left edge (mirrors the Gantt chevron offset)
+        const ARROW_GAP = 14;
+
         // Draw dependency arrows first (so they appear behind nodes)
         taskMap.forEach((task, taskId) => {
             const fromPos = nodePositions.get(taskId);
-            if (!fromPos) return;
+            if (!fromPos || !isNodeVisible(task)) return;
 
             task.successors.forEach(succId => {
                 const toPos = nodePositions.get(succId);
                 if (!toPos) return;
 
                 const succTask = taskMap.get(succId);
-                const isCriticalArrow = task.isCritical && succTask && succTask.isCritical;
+                if (!succTask || !isNodeVisible(succTask)) return;
+                const isCriticalArrow = task.isCritical && succTask.isCritical;
 
-                // Calculate arrow path (from right of source to left of target)
+                // Calculate arrow path (from right of source to just before left of target)
                 const startX = fromPos.x + nodeWidth;
                 const startY = fromPos.y + nodeHeight / 2;
-                const endX = toPos.x;
+                const endX = toPos.x - ARROW_GAP;
                 const endY = toPos.y + nodeHeight / 2;
 
                 // Create curved path
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const midX = (startX + endX) / 2;
-                
+
                 // Bezier curve for smoother arrows
                 const d = `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`;
-                
+
                 path.setAttribute('d', d);
                 path.setAttribute('class', `fc-dependency-arrow ${isCriticalArrow ? 'critical-arrow' : ''}`);
-                path.setAttribute('marker-end', `url(#arrowhead-fc${isCriticalArrow ? '-critical' : ''})`);
+                path.setAttribute('data-from', taskId);
+                path.setAttribute('data-to', succId);
                 svgContainer.appendChild(path);
+
+                // Standalone chevron arrowhead (like the main Gantt) instead of marker-end.
+                // A fixed-size polygon does NOT scale with stroke-width, so critical (3px)
+                // and non-critical (2px) arrows get identical, undistorted heads. The curve
+                // arrives horizontally at (endX, endY), so the chevron points right into the node.
+                const chevronColor = isCriticalArrow ? '#ef4444' : '#f59e0b';
+                const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                chevron.setAttribute('class', `fc-chevron ${isCriticalArrow ? 'critical-arrow' : ''}`);
+                chevron.setAttribute('fill', chevronColor);
+                chevron.setAttribute('points', `${endX - 9},${endY - 5} ${endX + 1},${endY} ${endX - 9},${endY + 5}`);
+                chevron.setAttribute('data-from', taskId);
+                chevron.setAttribute('data-to', succId);
+                svgContainer.appendChild(chevron);
             });
         });
+
+        // Hover focus mode: dim everything unrelated, highlight the hovered node's
+        // direct predecessors/successors and their connecting arrows.
+        function applyHoverFocus(hoveredId) {
+            const related = new Set([hoveredId]);
+            const ht = taskMap.get(hoveredId);
+            if (ht) {
+                ht.dependencies.forEach(d => related.add(d));
+                ht.successors.forEach(s => related.add(s));
+            }
+            svgContainer.querySelectorAll('.fc-task-node').forEach(n => {
+                n.classList.toggle('fc-dimmed', !related.has(n.getAttribute('data-node-id')));
+            });
+            svgContainer.querySelectorAll('.fc-dependency-arrow, .fc-chevron').forEach(a => {
+                const active = a.getAttribute('data-from') === hoveredId || a.getAttribute('data-to') === hoveredId;
+                a.classList.toggle('fc-active', active);
+                a.classList.toggle('fc-dimmed', !active);
+            });
+        }
+        function clearHoverFocus() {
+            svgContainer.querySelectorAll('.fc-dimmed, .fc-active').forEach(el => {
+                el.classList.remove('fc-dimmed', 'fc-active');
+            });
+        }
 
         // Draw task nodes
         taskMap.forEach((task, taskId) => {
             const pos = nodePositions.get(taskId);
-            if (!pos) return;
+            if (!pos || !isNodeVisible(task)) return;
 
             const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             g.setAttribute('class', `fc-task-node ${task.isCritical ? 'critical' : 'non-critical'} ${task.isStart ? 'start-node' : ''} ${task.isEnd ? 'end-node' : ''}`);
+            g.setAttribute('data-node-id', taskId);
             g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
 
             // Background rect
@@ -5574,6 +6364,10 @@
             title.setAttribute('class', 'fc-task-title');
             const displayName = task.name.length > 22 ? task.name.substring(0, 20) + '...' : task.name;
             title.textContent = displayName;
+            // Tooltip: full untruncated task name on hover
+            const svgTitle = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+            svgTitle.textContent = task.name;
+            g.insertBefore(svgTitle, g.firstChild);
             g.appendChild(title);
 
             // Slack value
@@ -5582,7 +6376,7 @@
             slackText.setAttribute('y', 40);
             slackText.setAttribute('text-anchor', 'middle');
             slackText.setAttribute('class', 'fc-task-slack');
-            slackText.textContent = task.isCritical ? '🔥 Slack: 0 days' : `⏱ Slack: ${task.slack} days`;
+            slackText.textContent = task.isCritical ? '🔥 Slack: 0 days' : `⌛ Slack: ${task.slack} days`;
             g.appendChild(slackText);
 
             // Duration
@@ -5593,6 +6387,10 @@
             durationText.setAttribute('class', 'fc-task-duration');
             durationText.textContent = `Duration: ${task.duration} days`;
             g.appendChild(durationText);
+
+            // Hover focus: highlight this node's neighbours, fade the rest
+            g.addEventListener('mouseenter', () => applyHoverFocus(taskId));
+            g.addEventListener('mouseleave', clearHoverFocus);
 
             // Click handler to navigate to task
             g.style.cursor = 'pointer';
@@ -5629,24 +6427,28 @@
         const showFlowchartBtn = document.getElementById('show-critical-path-flowchart');
         const flowchartModal = document.getElementById('criticalPathFlowchartModal');
         const phaseSelect = document.getElementById('flowchart-phase-select');
-        
+        const pathSelect = document.getElementById('flowchart-path-select');
+
+        // Re-render using the current phase + path dropdown values
+        function regenerateFlowchart() {
+            generateCriticalPathFlowchart(
+                phaseSelect ? phaseSelect.value : 'all',
+                pathSelect ? pathSelect.value : 'all'
+            );
+        }
+
         if (showFlowchartBtn && flowchartModal) {
             showFlowchartBtn.addEventListener('click', function() {
                 const modal = new bootstrap.Modal(flowchartModal);
                 modal.show();
-                
+
                 // Generate flowchart when modal opens
-                setTimeout(() => {
-                    generateCriticalPathFlowchart('all');
-                }, 100);
+                setTimeout(regenerateFlowchart, 100);
             });
-            
-            // Re-generate on phase filter change
-            if (phaseSelect) {
-                phaseSelect.addEventListener('change', function() {
-                    generateCriticalPathFlowchart(this.value);
-                });
-            }
+
+            // Re-generate on phase or path filter change
+            if (phaseSelect) phaseSelect.addEventListener('change', regenerateFlowchart);
+            if (pathSelect) pathSelect.addEventListener('change', regenerateFlowchart);
         }
 
         // ============================================

@@ -23,6 +23,9 @@ urlpatterns = [
     path('organization/remove-member/<int:profile_id>/', views.remove_member, name='remove_member'),
     path('organization/delete/', views.delete_organization, name='delete_organization'),
     
+    # Organization invitations
+    path('org-invite/<uuid:token>/', views.accept_org_invitation, name='accept_org_invitation'),
+    
     # Social login completion
     path('social-signup-complete/', views.social_signup_complete, name='social_signup_complete'),
     
@@ -31,15 +34,13 @@ urlpatterns = [
 
     # Display Mode API
     path('api/update-display-mode/', views.update_display_mode, name='update_display_mode'),
+
+    # Presence API
+    path('api/update-presence-preference/', views.update_presence_preference, name='update_presence_preference'),
     
     # Password Reset URLs
     path('password-reset/', 
-         auth_views.PasswordResetView.as_view(
-             template_name='accounts/password_reset.html',
-             email_template_name='accounts/password_reset_email.html',
-             subject_template_name='accounts/password_reset_subject.txt',
-             success_url='/accounts/password-reset/done/'
-         ),
+         views.CustomPasswordResetView.as_view(),
          name='password_reset'),
     
     path('password-reset/done/',
@@ -75,4 +76,10 @@ urlpatterns = [
              template_name='accounts/password_change_done.html'
          ),
          name='password_change_done'),
+
+    # Google Calendar OAuth
+    path('google-calendar/connect/', views.google_calendar_connect, name='google_calendar_connect'),
+    path('google-calendar/callback/', views.google_calendar_callback, name='google_calendar_callback'),
+    path('google-calendar/disconnect/', views.google_calendar_disconnect, name='google_calendar_disconnect'),
+    path('google-calendar/toggle/', views.google_calendar_toggle_sync, name='google_calendar_toggle_sync'),
 ]

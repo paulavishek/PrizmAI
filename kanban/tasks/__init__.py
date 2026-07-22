@@ -16,6 +16,7 @@ from kanban.tasks.demo_tasks import (
 
 from kanban.tasks.automation_tasks import (
     run_due_date_approaching_automations,
+    run_overdue_task_automations,
     run_scheduled_automation,
 )
 
@@ -51,6 +52,16 @@ from kanban.tasks.scope_autopsy_tasks import (
 
 from kanban.tasks.shadow_branch_tasks import (
     recalculate_branches_for_board,
+    generate_ai_for_branch_snapshot,
+)
+
+from kanban.tasks.sandbox_tasks import (
+    _delete_sandbox,
+    cleanup_stale_sandboxes,
+)
+
+from kanban.tasks.sandbox_provisioning import (
+    provision_sandbox_task,
 )
 
 from kanban.tasks.commitment_tasks import (
@@ -58,6 +69,18 @@ from kanban.tasks.commitment_tasks import (
     reset_weekly_tokens,
     auto_detect_signals_for_board,
     generate_ai_reasoning_task,
+)
+
+from kanban.tasks.ai_streaming_tasks import (
+    run_premortem_task,
+    summarize_board_analytics_task,
+    predict_deadline_task,
+    analyze_workflow_task,
+    send_ai_message_task,
+)
+
+from kanban.tasks.migration_tasks import (
+    run_source_migration,
 )
 
 __all__ = [
@@ -69,8 +92,12 @@ __all__ = [
     'detect_board_conflicts_task',
     # Demo tasks
     'refresh_demo_dates_task',
+    # Sandbox provisioning
+    'provision_sandbox_task',
+    'cleanup_stale_sandboxes',
     # Automation tasks
     'run_due_date_approaching_automations',
+    'run_overdue_task_automations',
     # Time tracking tasks
     'send_time_tracking_reminders',
     'detect_time_anomalies',
@@ -93,9 +120,16 @@ __all__ = [
     'generate_scope_autopsy',
     # Shadow branch tasks
     'recalculate_branches_for_board',
+    'generate_ai_for_branch_snapshot',
     # Commitment protocol tasks
     'run_commitment_decay_all',
     'reset_weekly_tokens',
     'auto_detect_signals_for_board',
     'generate_ai_reasoning_task',
+    # AI streaming tasks
+    'run_premortem_task',
+    'summarize_board_analytics_task',
+    'predict_deadline_task',
+    'analyze_workflow_task',
+    'send_ai_message_task',
 ]

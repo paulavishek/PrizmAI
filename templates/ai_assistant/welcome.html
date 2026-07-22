@@ -89,7 +89,7 @@
     }
     
     .btn-new-chat {
-        background: white;
+        background: var(--card-bg);
         color: #667eea;
         font-weight: bold;
         padding: 12px 40px;
@@ -166,6 +166,11 @@
 
 {% block content %}
 <div class="welcome-container">
+    <div class="mb-3">
+        <a href="{% url 'dashboard' %}" class="btn-prizm-back">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
     <div class="welcome-content">
         <div class="assistant-icon">🤖</div>
         

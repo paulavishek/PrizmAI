@@ -1,0 +1,525 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Workspace Settings — PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .preset-card {
+        border: 2px solid var(--border-color, #dee2e6);
+        border-radius: 12px;
+        padding: 24px;
+        cursor: pointer;
+        transition: border-color .2s ease, box-shadow .2s ease;
+        position: relative;
+    }
+    .preset-card:hover {
+        border-color: var(--link-color, #0d6efd);
+    }
+    .preset-card.active {
+        border-color: #5046e5;
+        box-shadow: 0 0 0 3px rgba(80, 70, 229, .15);
+    }
+    .preset-card .preset-radio {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+    }
+    .preset-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: .75rem;
+        font-weight: 600;
+    }
+    .preset-badge-lean    { background: #dbeafe; color: #1e40af; }
+    .preset-badge-professional { background: #fef3c7; color: #92400e; }
+    .preset-badge-enterprise   { background: #ede9fe; color: #5b21b6; }
+    .feature-list {
+        list-style: none;
+        padding: 0;
+        margin: 12px 0 0;
+    }
+    .feature-list li {
+        padding: 3px 0;
+        font-size: .875rem;
+        color: var(--text-secondary, #6b7280);
+    }
+    .feature-list li i { width: 18px; text-align: center; margin-right: 6px; }
+    .feature-list li.included i { color: #16a34a; }
+    .feature-list li.locked i   { color: var(--text-muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 800px;">
+    <div class="d-flex align-items-center mb-4">
+        <a href="{% url 'dashboard' %}" class="btn-prizm-back btn-sm me-3">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <div>
+            <h4 class="mb-0"><i class="fas fa-sliders-h me-2" style="color:#5046e5;"></i>Workspace Settings</h4>
+            <small class="text-muted">Choose the default feature level for your organization</small>
+        </div>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <form method="post" id="preset-form">
+        {% csrf_token %}
+        <input type="hidden" name="form_type" value="preset">
+        <div class="row g-3 mb-4">
+            {% for value, label in preset_choices %}
+            <div class="col-12">
+                <label class="preset-card d-block {% if current_preset == value %}active{% endif %}" 
+                       id="preset-card-{{ value }}">
+                    <input type="radio" name="global_preset" value="{{ value }}" 
+                           class="form-check-input preset-radio"
+                           {% if current_preset == value %}checked{% endif %}
+                           onchange="document.querySelectorAll('.preset-card').forEach(c=>c.classList.remove('active')); this.closest('.preset-card').classList.add('active');">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="preset-badge preset-badge-{{ value }} me-2">{{ label }}</span>
+                        {% if value == 'lean' %}
+                        <small class="text-muted">Best for teams under 10 people</small>
+                        {% elif value == 'professional' %}
+                        <small class="text-muted">Best for teams of 10–50 people</small>
+                        {% else %}
+                        <small class="text-muted">Full PrizmAI — large organizations</small>
+                        {% endif %}
+                    </div>
+                    <ul class="feature-list">
+                        {% if value == 'lean' %}
+                        <li class="included"><i class="fas fa-check"></i> Visual Kanban Board</li>
+                        <li class="included"><i class="fas fa-check"></i> Calendar View</li>
+                        <li class="included"><i class="fas fa-check"></i> Spectra Q&A (basic chat)</li>
+                        <li class="included"><i class="fas fa-check"></i> Basic Analytics (column distribution)</li>
+                        <li class="included"><i class="fas fa-check"></i> Simple Task Creation</li>
+                        <li class="locked"><i class="fas fa-lock"></i> Goal / Mission / Strategy hierarchy</li>
+                        <li class="locked"><i class="fas fa-lock"></i> Gantt Chart, Burndown, AI Coach</li>
+                        {% elif value == 'professional' %}
+                        <li class="included"><i class="fas fa-check"></i> Everything in Lean, plus:</li>
+                        <li class="included"><i class="fas fa-check"></i> Gantt Chart & Burndown Charts</li>
+                        <li class="included"><i class="fas fa-check"></i> Goal / Mission / Strategy hierarchy</li>
+                        <li class="included"><i class="fas fa-check"></i> AI Coach & Retrospectives</li>
+                        <li class="included"><i class="fas fa-check"></i> Full Analytics & Skill Gap Analysis</li>
+                        <li class="included"><i class="fas fa-check"></i> Automations (trigger-based)</li>
+                        <li class="locked"><i class="fas fa-lock"></i> Shadow Board, Stress Test, What-If</li>
+                        {% else %}
+                        <li class="included"><i class="fas fa-check"></i> Everything — no features hidden</li>
+                        <li class="included"><i class="fas fa-check"></i> Shadow Board & What-If Simulator</li>
+                        <li class="included"><i class="fas fa-check"></i> Pre-Mortem & Stress Test</li>
+                        <li class="included"><i class="fas fa-check"></i> Budget & ROI Dashboard</li>
+                        <li class="included"><i class="fas fa-check"></i> Exit Protocol & Scope Autopsy</li>
+                        <li class="included"><i class="fas fa-check"></i> Resource Optimization</li>
+                        <li class="included"><i class="fas fa-check"></i> Scheduled Automations</li>
+                        {% endif %}
+                    </ul>
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="alert alert-secondary py-2 mb-4">
+            <small>
+                <i class="fas fa-info-circle me-1"></i>
+                <strong>Note:</strong> Board Owners can restrict individual boards to a simpler mode, 
+                but cannot unlock features beyond what you set here.
+            </small>
+        </div>
+
+        <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save me-1"></i> Save Settings
+            </button>
+        </div>
+    </form>
+
+    {# ================================================================ #}
+    {# Custom Fields — Org Admins only                                   #}
+    {# ================================================================ #}
+    {% if active_workspace %}
+    <div class="card mt-4">
+        <div class="card-header d-flex align-items-center justify-content-between" style="background:var(--bg-tertiary); border-bottom:1px solid #dee2e6; padding:.75rem 1.25rem;">
+            <div>
+                <h5 class="mb-0" style="font-size:.95rem; font-weight:600; color:var(--text-primary);">
+                    <i class="fas fa-tags me-2" style="color:#5046e5;"></i>Custom Fields
+                </h5>
+                <small class="text-muted">Define typed metadata fields that appear on every task in this workspace.</small>
+            </div>
+            <a href="{% url 'custom_field_list' active_workspace.pk %}" class="btn btn-sm btn-outline-primary">
+                Manage Fields
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    {# ================================================================ #}
+    {# AI Provider Settings — Org Admins only                           #}
+    {# ================================================================ #}
+    {% if request.user.profile.is_admin %}
+    <form method="post" id="ai-settings-form" class="mt-4">
+        {% csrf_token %}
+        <input type="hidden" name="form_type" value="ai_settings">
+
+        <div class="card">
+            <div class="card-header d-flex align-items-center" style="background:var(--bg-tertiary); border-bottom:1px solid #dee2e6; padding:.75rem 1.25rem;">
+                <div>
+                    <h5 class="mb-0" style="font-size:.95rem; font-weight:600; color:var(--text-primary);">
+                        <i class="fas fa-robot me-2" style="color:#5046e5;"></i>AI Provider Settings
+                    </h5>
+                    <small class="text-muted">Configure which AI model powers Spectra, AI Coach, and all AI features across your workspace.</small>
+                </div>
+            </div>
+            <div class="card-body">
+
+                {# Non-field errors (validation failures shown here) #}
+                {% if ai_settings_form.non_field_errors %}
+                <div class="alert alert-danger py-2 mb-3">
+                    {% for error in ai_settings_form.non_field_errors %}
+                    <div><i class="fas fa-exclamation-circle me-1"></i>{{ error }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {# ---- Section 1: Provider Selection ---- #}
+                <div class="mb-4">
+                    <div class="d-flex align-items-center mb-3">
+                        <span class="me-2 text-muted" style="font-size:.875rem;">Current Provider:</span>
+                        {% if current_ai_provider == 'Google Gemini' %}
+                            <span class="badge" style="background:#dbeafe;color:#1e40af;font-size:.8rem;">{{ current_ai_provider }}</span>
+                        {% elif current_ai_provider == 'OpenAI' %}
+                            <span class="badge" style="background:#dcfce7;color:#15803d;font-size:.8rem;">{{ current_ai_provider }}</span>
+                        {% else %}
+                            <span class="badge" style="background:#ede9fe;color:#5b21b6;font-size:.8rem;">{{ current_ai_provider }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="id_provider" class="form-label fw-semibold" style="font-size:.875rem;">Default AI Provider</label>
+                        <select name="provider" id="id_provider" class="form-select" style="max-width:320px;">
+                            {% for val, label in ai_settings_form.fields.provider.choices %}
+                            <option value="{{ val }}" {% if ai_settings_form.initial.provider == val or ai_settings_form.data.provider == val %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="allow_user_provider_override"
+                               id="id_allow_override"
+                               {% if ai_settings_form.initial.allow_user_provider_override or ai_settings_form.data.allow_user_provider_override %}checked{% endif %}>
+                        <label class="form-check-label" for="id_allow_override">
+                            {{ ai_settings_form.fields.allow_user_provider_override.label }}
+                        </label>
+                        <div class="form-text">When enabled, team members can choose their preferred AI provider from their profile settings.</div>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                {# ---- Section 2: BYOK ---- #}
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#byok-collapse"
+                            aria-expanded="false" aria-controls="byok-collapse">
+                        <i class="fas fa-key me-1"></i>Use Your Own API Key (BYOK)
+                        <i class="fas fa-chevron-down ms-1" style="font-size:.75rem;"></i>
+                    </button>
+
+                    <div class="collapse mt-3" id="byok-collapse">
+                        <p class="text-muted" style="font-size:.875rem;">
+                            By default, PrizmAI uses its own API keys. You can provide your own key to use your own quota and billing.
+                        </p>
+
+                        {% if has_byok_key and ai_settings %}
+                        <div class="alert alert-info py-2 mb-3" style="font-size:.8rem;">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            Current key: <strong>{{ ai_settings.key_last_four }}</strong>
+                            ({{ ai_settings.byok_provider|capfirst }})
+                            {% if ai_settings.key_validated_at %}
+                            — validated {{ ai_settings.key_validated_at|date:"M d, Y" }}
+                            {% endif %}
+                            {% if ai_settings.byok_model %}
+                            — model: <strong>{{ ai_settings.byok_model }}</strong>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-3" style="max-width:320px;">
+                            <label for="id_byok_provider" class="form-label" style="font-size:.875rem;">{{ ai_settings_form.fields.byok_provider.label }}</label>
+                            <select name="byok_provider" id="id_byok_provider" class="form-select form-select-sm">
+                                {% for val, label in ai_settings_form.fields.byok_provider.choices %}
+                                <option value="{{ val }}" {% if ai_settings_form.initial.byok_provider == val or ai_settings_form.data.byok_provider == val %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        {# ---- Per-provider API key instructions ---- #}
+                        <div id="org-byok-instructions-gemini" class="org-byok-instructions d-none mb-3" style="max-width:500px;">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body py-2 px-3">
+                                    <button class="btn btn-link btn-sm p-0 text-decoration-none fw-semibold collapsed"
+                                            type="button" data-bs-toggle="collapse"
+                                            data-bs-target="#org-byok-guide-gemini"
+                                            aria-expanded="false">
+                                        <i class="fas fa-lightbulb me-1" style="color:#f59e0b;"></i>
+                                        How do I get a Google Gemini API key?
+                                        <i class="fas fa-chevron-down ms-1" style="font-size:.7rem;"></i>
+                                    </button>
+                                    <div class="collapse mt-2" id="org-byok-guide-gemini">
+                                        <ol class="mb-1 ps-3" style="font-size:.8rem;">
+                                            <li>Go to <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer">Google AI Studio</a></li>
+                                            <li>Sign in with your Google account</li>
+                                            <li>Click <strong>Get API Key</strong> &rarr; <strong>Create API key</strong></li>
+                                            <li>Copy the key and paste it in the field below</li>
+                                        </ol>
+                                        <p class="mb-0 text-muted" style="font-size:.75rem;"><i class="fas fa-info-circle me-1"></i>Free tier available. Paid plans at <a href="https://ai.google.dev/pricing" target="_blank" rel="noopener noreferrer">Google AI pricing</a>.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="org-byok-instructions-openai" class="org-byok-instructions d-none mb-3" style="max-width:500px;">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body py-2 px-3">
+                                    <button class="btn btn-link btn-sm p-0 text-decoration-none fw-semibold collapsed"
+                                            type="button" data-bs-toggle="collapse"
+                                            data-bs-target="#org-byok-guide-openai"
+                                            aria-expanded="false">
+                                        <i class="fas fa-lightbulb me-1" style="color:#f59e0b;"></i>
+                                        How do I get an OpenAI API key?
+                                        <i class="fas fa-chevron-down ms-1" style="font-size:.7rem;"></i>
+                                    </button>
+                                    <div class="collapse mt-2" id="org-byok-guide-openai">
+                                        <ol class="mb-1 ps-3" style="font-size:.8rem;">
+                                            <li>Go to <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer">platform.openai.com</a></li>
+                                            <li>Sign in or create an account</li>
+                                            <li>Navigate to <strong>Settings &rarr; API Keys &rarr; Create new secret key</strong></li>
+                                            <li>Copy the key immediately and paste it below</li>
+                                        </ol>
+                                        <div class="alert alert-warning py-1 px-2 mb-1" style="font-size:.75rem;">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            <strong>Important:</strong> OpenAI only shows your API key once at creation time. If you navigate away without copying it, you will have to create a new key.
+                                        </div>
+                                        <p class="mb-0 text-muted" style="font-size:.75rem;"><i class="fas fa-info-circle me-1"></i>Requires a paid account with billing set up at <a href="https://platform.openai.com/settings/organization/billing" target="_blank" rel="noopener noreferrer">OpenAI billing</a>.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="org-byok-instructions-anthropic" class="org-byok-instructions d-none mb-3" style="max-width:500px;">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body py-2 px-3">
+                                    <button class="btn btn-link btn-sm p-0 text-decoration-none fw-semibold collapsed"
+                                            type="button" data-bs-toggle="collapse"
+                                            data-bs-target="#org-byok-guide-anthropic"
+                                            aria-expanded="false">
+                                        <i class="fas fa-lightbulb me-1" style="color:#f59e0b;"></i>
+                                        How do I get an Anthropic Claude API key?
+                                        <i class="fas fa-chevron-down ms-1" style="font-size:.7rem;"></i>
+                                    </button>
+                                    <div class="collapse mt-2" id="org-byok-guide-anthropic">
+                                        <ol class="mb-1 ps-3" style="font-size:.8rem;">
+                                            <li>Go to <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">console.anthropic.com</a></li>
+                                            <li>Sign in or create an account</li>
+                                            <li>Navigate to <strong>Settings &rarr; API Keys &rarr; Create Key</strong></li>
+                                            <li>Copy the key and paste it below</li>
+                                        </ol>
+                                        <p class="mb-0 text-muted" style="font-size:.75rem;"><i class="fas fa-info-circle me-1"></i>Requires credits or a paid plan. Manage at <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener noreferrer">Anthropic billing</a>.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3" style="max-width:420px;">
+                            <label for="id_raw_api_key" class="form-label" style="font-size:.875rem;">{{ ai_settings_form.fields.raw_api_key.label }}</label>
+                            <input type="password" name="raw_api_key" id="id_raw_api_key"
+                                   class="form-control form-control-sm" autocomplete="off"
+                                   placeholder="Paste API key here">
+                            <div class="form-text">{{ ai_settings_form.fields.raw_api_key.help_text }}</div>
+                        </div>
+
+                        {# ---- Model selector ---- #}
+                        <div class="mb-3 d-none" id="org-byok-model-section" style="max-width:420px;">
+                            <label for="id_org_byok_model_select" class="form-label fw-semibold" style="font-size:.875rem;">
+                                <i class="fas fa-microchip me-1" style="color:#5046e5;"></i>Which model would you like to use?
+                            </label>
+                            <select id="id_org_byok_model_select" class="form-select form-select-sm mb-2">
+                                <option value="">--- Select model ---</option>
+                            </select>
+                            <div id="org-byok-model-custom-wrap" class="d-none">
+                                <input type="text" id="id_org_byok_model_custom"
+                                       class="form-control form-control-sm"
+                                       placeholder="e.g. gpt-4o-2024-11-20"
+                                       maxlength="100">
+                                <div class="form-text">Enter the exact model string from your provider's documentation.</div>
+                            </div>
+                            <input type="hidden" name="byok_model" id="id_org_byok_model_hidden"
+                                   value="{{ ai_settings_form.initial.byok_model|default:'' }}">
+                        </div>
+
+                        {% if has_byok_key %}
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="remove_byok_key"
+                                   id="id_remove_byok_key">
+                            <label class="form-check-label text-danger" for="id_remove_byok_key">
+                                {{ ai_settings_form.fields.remove_byok_key.label }}
+                            </label>
+                        </div>
+                        {% endif %}
+
+                        <p class="text-muted mt-2" style="font-size:.8rem;">
+                            <i class="fas fa-lock me-1"></i>
+                            Your API key is encrypted before storage and is never logged or displayed after saving.
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+            <div class="card-footer d-flex justify-content-end" style="background:var(--bg-tertiary);">
+                <button type="submit" class="btn btn-primary" id="ai-settings-save-btn">
+                    <i class="fas fa-save me-1"></i> Save AI Settings
+                </button>
+            </div>
+        </div>
+    </form>
+    {% endif %}
+
+</div>
+
+{% block extra_js %}
+<script>
+(function () {
+    var form = document.getElementById('ai-settings-form');
+    if (!form) return;
+    var btn = document.getElementById('ai-settings-save-btn');
+    form.addEventListener('submit', function () {
+        var keyField = document.getElementById('id_raw_api_key');
+        var hasKey = keyField && keyField.value.trim().length > 0;
+        btn.disabled = true;
+        btn.innerHTML = hasKey
+            ? '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Validating key…'
+            : '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Saving…';
+    });
+})();
+
+// BYOK provider instructions + model selector (org settings)
+(function () {
+    var BYOK_MODELS = {
+        gemini: [
+            {value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash \u2014 Fast, balanced (default)'},
+            {value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite \u2014 Lightweight, cheapest'},
+            {value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro \u2014 Most capable'},
+            {value: '__custom__', label: 'Other / Custom model\u2026'},
+        ],
+        openai: [
+            {value: 'gpt-4o', label: 'GPT-4o \u2014 Latest flagship (default)'},
+            {value: 'gpt-4o-mini', label: 'GPT-4o Mini \u2014 Fast and cheap'},
+            {value: 'gpt-4-turbo', label: 'GPT-4 Turbo \u2014 Previous generation'},
+            {value: '__custom__', label: 'Other / Custom model\u2026'},
+        ],
+        anthropic: [
+            {value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 \u2014 Balanced (default)'},
+            {value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 \u2014 Fast and cheap'},
+            {value: 'claude-opus-4-6', label: 'Claude Opus 4.6 \u2014 Most capable'},
+            {value: '__custom__', label: 'Other / Custom model\u2026'},
+        ],
+    };
+
+    var providerSelect   = document.getElementById('id_byok_provider');
+    var modelSection     = document.getElementById('org-byok-model-section');
+    var modelSelect      = document.getElementById('id_org_byok_model_select');
+    var modelCustomWrap  = document.getElementById('org-byok-model-custom-wrap');
+    var modelCustomInput = document.getElementById('id_org_byok_model_custom');
+    var modelHidden      = document.getElementById('id_org_byok_model_hidden');
+
+    function hideAllInstructions() {
+        document.querySelectorAll('.org-byok-instructions').forEach(function (el) {
+            el.classList.add('d-none');
+        });
+    }
+
+    function populateModelDropdown(provider, savedModel) {
+        modelSelect.innerHTML = '<option value="">--- Select model ---</option>';
+        var models = BYOK_MODELS[provider];
+        if (!models) return;
+        var hasMatch = false;
+        models.forEach(function (m) {
+            var opt = document.createElement('option');
+            opt.value = m.value;
+            opt.textContent = m.label;
+            if (savedModel && m.value === savedModel) {
+                opt.selected = true;
+                hasMatch = true;
+            }
+            modelSelect.appendChild(opt);
+        });
+        if (savedModel && !hasMatch) {
+            modelSelect.value = '__custom__';
+            modelCustomInput.value = savedModel;
+            modelCustomWrap.classList.remove('d-none');
+        } else {
+            modelCustomWrap.classList.add('d-none');
+            modelCustomInput.value = '';
+        }
+        syncHiddenModel();
+    }
+
+    function syncHiddenModel() {
+        if (!modelHidden) return;
+        var sel = modelSelect.value;
+        if (sel === '__custom__') {
+            modelHidden.value = modelCustomInput.value.trim();
+        } else {
+            modelHidden.value = sel;
+        }
+    }
+
+    function onProviderChange(savedModel) {
+        var provider = providerSelect ? providerSelect.value : '';
+        hideAllInstructions();
+        if (provider) {
+            var box = document.getElementById('org-byok-instructions-' + provider);
+            if (box) box.classList.remove('d-none');
+            modelSection.classList.remove('d-none');
+            populateModelDropdown(provider, savedModel !== undefined ? savedModel : (modelHidden ? modelHidden.value : ''));
+        } else {
+            modelSection.classList.add('d-none');
+        }
+    }
+
+    if (providerSelect) {
+        providerSelect.addEventListener('change', function () { onProviderChange(); });
+        if (providerSelect.value) {
+            onProviderChange(modelHidden ? modelHidden.value : '');
+        }
+    }
+
+    if (modelSelect) {
+        modelSelect.addEventListener('change', function () {
+            if (modelSelect.value === '__custom__') {
+                modelCustomWrap.classList.remove('d-none');
+            } else {
+                modelCustomWrap.classList.add('d-none');
+                modelCustomInput.value = '';
+            }
+            syncHiddenModel();
+        });
+    }
+    if (modelCustomInput) {
+        modelCustomInput.addEventListener('input', syncHiddenModel);
+    }
+})();
+</script>
+{% endblock %}
+{% endblock %}

@@ -1,30 +1,27 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static feature_guide_tags %}
 
 {% block title %}PrizmBrief – {{ board.name }}{% endblock %}
 
 {% block extra_css %}
 <style>
-  /* ── Page container ────────────────────────────────────────── */
-  .pb-hero {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 16px;
-    padding: 36px 40px 28px;
-    color: #fff;
-    margin-bottom: 32px;
-    position: relative;
-    overflow: hidden;
+  /* ── Page header ──────────────────────────────────────────────────────── */
+  .pb-page-header {
+    padding-bottom: 20px;
+    margin-bottom: 24px;
+    border-bottom: 2px solid #e5e7eb;
   }
-  .pb-hero::before {
-    content: "✨";
-    position: absolute;
-    right: 32px; top: 20px;
-    font-size: 72px;
-    opacity: 0.15;
-    line-height: 1;
+  .pb-page-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin: 0;
   }
-  .pb-hero h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 4px; }
-  .pb-hero .sub { opacity: 0.85; font-size: 0.95rem; }
+  .pb-page-header .sub {
+    color: #6b7280;
+    font-size: 0.95rem;
+    margin-top: 5px;
+  }
 
   /* ── Form card ─────────────────────────────────────────────── */
   .pb-card {
@@ -99,27 +96,240 @@
   }
   /* ── Back link ─────────────────────────────────────────────── */
   .pb-back { font-size: 0.9rem; }
+
+  /* ── Saved Briefs section ───────────────────────────────────── */
+  .pb-saved-section {
+    margin-top: 36px;
+    padding-top: 28px;
+    border-top: 2px solid #e5e7eb;
+  }
+  .pb-saved-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 16px;
+  }
+  .pb-saved-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-left: 4px solid #667eea;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    transition: box-shadow 0.15s;
+  }
+  .pb-saved-item:hover { box-shadow: 0 3px 14px rgba(0,0,0,0.07); }
+  .pb-saved-item-body { flex: 1; min-width: 0; }
+  .pb-saved-item-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #212529;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pb-saved-item-meta {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-top: 2px;
+  }
+  .pb-saved-item-meta .badge {
+    background: rgba(102,126,234,0.12);
+    color: #667eea;
+    font-size: 0.72rem;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .pb-saved-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .pb-saved-actions button, .pb-saved-actions a {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    color: #495057;
+    text-decoration: none;
+  }
+  .pb-saved-actions button:hover, .pb-saved-actions a:hover { background: #e9ecef; }
+  .pb-saved-actions .pb-del-btn:hover { background: #f8d7da; color: #842029; border-color: #f5c6cb; }
+  .pb-empty-saved {
+    color: #9ca3af;
+    font-size: 0.9rem;
+    font-style: italic;
+    padding: 12px 0;
+  }
+
+  /* ── Dark Mode — the two-way rule: white cards → dark surfaces so the
+     (bright) text becomes readable; borders/greys → tokens; accents lightened. ── */
+  [data-bs-theme="dark"] .pb-card,
+  [data-bs-theme="dark"] .pb-saved-item {
+    background: var(--card-bg); border-color: var(--border-color);
+  }
+  [data-bs-theme="dark"] .pb-option { border-color: var(--border-color); }
+  [data-bs-theme="dark"] .pb-option:hover,
+  [data-bs-theme="dark"] .pb-option.selected { background: rgba(102,126,234,0.15); border-color: #a5b4fc; }
+  [data-bs-theme="dark"] .pb-saved-actions button,
+  [data-bs-theme="dark"] .pb-saved-actions a { background: var(--bg-tertiary); border-color: var(--border-color); color: var(--text-secondary); }
+  [data-bs-theme="dark"] .pb-page-header,
+  [data-bs-theme="dark"] .pb-saved-section { border-bottom-color: var(--border-color); border-top-color: var(--border-color); }
+  /* Text → tokens (dark bg needs bright text) */
+  [data-bs-theme="dark"] .pb-page-header h1,
+  [data-bs-theme="dark"] .pb-question-label,
+  [data-bs-theme="dark"] .pb-option-label,
+  [data-bs-theme="dark"] .pb-saved-title,
+  [data-bs-theme="dark"] .pb-saved-item-name { color: var(--text-primary); }
+  [data-bs-theme="dark"] .pb-page-header .sub,
+  [data-bs-theme="dark"] .pb-option-desc,
+  [data-bs-theme="dark"] .pb-saved-item-meta,
+  [data-bs-theme="dark"] .pb-empty-saved { color: var(--text-muted); }
+  /* Brand-purple accents → lighter on dark */
+  [data-bs-theme="dark"] .pb-saved-item { border-left-color: #a5b4fc; }
+  [data-bs-theme="dark"] .pb-saved-item-meta .badge { background: rgba(102,126,234,0.20); color: #a5b4fc; }
+  /* Error alert → dark tint */
+  [data-bs-theme="dark"] .pb-alert-err { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.4); color: #f28b82; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4" style="max-width: 760px; margin: 0 auto;">
 
-  <!-- Back link -->
-  <div class="mb-3 pb-back">
-    <a href="{% url 'board_detail' board.id %}" class="text-decoration-none text-muted">
-      ← Back to {{ board.name }}
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+      <li class="breadcrumb-item active">PrizmBrief</li>
+    </ol>
+  </nav>
+
+  <div class="mb-3">
+    <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back">
+      <i class="fas fa-arrow-left"></i> Back to Board
     </a>
   </div>
 
-  <!-- Hero banner -->
-  <div class="pb-hero">
-    <h1>✨ PrizmBrief</h1>
+  <!-- Page header -->
+  <div class="pb-page-header">
+    <h1><i class="fas fa-presentation text-primary me-2"></i>✨ PrizmBrief</h1>
     <div class="sub">AI Presentation Content Generator &nbsp;·&nbsp; <strong>{{ board.name }}</strong></div>
-    <div class="sub mt-1" style="opacity:0.7; font-size:0.85rem;">
+    <div class="sub mt-1" style="font-size:0.85rem;">
       Answer 3 quick questions and PrizmBrief will pull live board data to generate
       structured slide content you can paste straight into Gamma or PowerPoint.
     </div>
+    <button class="btn btn-link btn-sm ps-0 mt-1 text-decoration-none fw-semibold"
+            style="color: #0d6efd;"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#prizmBriefGuide"
+            aria-expanded="false"
+            aria-controls="prizmBriefGuide">
+        <i class="fas fa-question-circle me-1"></i>
+        <span id="prizmbrief-guide-label">How does this work?</span>
+        <i class="fas fa-chevron-down ms-1 prizmbrief-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+    </button>
+  </div>
+
+  <!-- ── How It Works — Collapsible Guide ── -->
+  <div class="collapse mb-4" id="prizmBriefGuide">
+      <div class="card border shadow-sm">
+          <div class="card-body p-4">
+              <div class="row g-4">
+
+                  <!-- Three-step flow -->
+                  <div class="col-12">
+                      <h6 class="mb-3 fw-semibold text-dark"><i class="fas fa-map-signs me-1 text-info"></i>Three questions, one click, presentation-ready content</h6>
+                      <div class="row g-3">
+                          <div class="col-md-4">
+                              <div class="p-3 rounded border h-100" style="border-left: 4px solid #0d6efd !important;">
+                                  <div class="d-flex align-items-center gap-2 mb-2">
+                                      <span class="badge rounded-circle bg-primary" style="width:24px;height:24px;font-size:0.8rem;display:flex;align-items:center;justify-content:center;">1</span>
+                                      <i class="fas fa-users text-primary"></i>
+                                      <strong class="small">Choose Audience</strong>
+                                  </div>
+                                  <p class="small text-secondary mb-0">Client, Executive, or Internal Team. PrizmBrief adjusts the language, tone, and detail level automatically for each.</p>
+                              </div>
+                          </div>
+                          <div class="col-md-4">
+                              <div class="p-3 rounded border h-100" style="border-left: 4px solid #0891b2 !important;">
+                                  <div class="d-flex align-items-center gap-2 mb-2">
+                                      <span class="badge rounded-circle" style="width:24px;height:24px;font-size:0.8rem;display:flex;align-items:center;justify-content:center;background:#0891b2;">2</span>
+                                      <i class="fas fa-bullseye" style="color:#0891b2;"></i>
+                                      <strong class="small">Set Purpose</strong>
+                                  </div>
+                                  <p class="small text-secondary mb-0">Status update, kickoff, risk review, or milestone celebration. Each purpose determines which data gets pulled from your board.</p>
+                              </div>
+                          </div>
+                          <div class="col-md-4">
+                              <div class="p-3 rounded border h-100" style="border-left: 4px solid #059669 !important;">
+                                  <div class="d-flex align-items-center gap-2 mb-2">
+                                      <span class="badge rounded-circle" style="width:24px;height:24px;font-size:0.8rem;display:flex;align-items:center;justify-content:center;background:#059669;">3</span>
+                                      <i class="fas fa-magic" style="color:#059669;"></i>
+                                      <strong class="small">Generate</strong>
+                                  </div>
+                                  <p class="small text-secondary mb-0">PrizmBrief reads your live board and produces structured slide content with titles, key points, and supporting data. Copy one slide or the full deck.</p>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div class="col-12"><hr class="my-0"></div>
+
+                  <!-- Audience types vs What gets pulled -->
+                  <div class="col-md-12">
+                      <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-table me-1 text-info"></i>What changes by audience</h6>
+                      <div class="table-responsive">
+                          <table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">
+                              <thead class="table-light">
+                                  <tr>
+                                      <th class="text-muted">Dimension</th>
+                                      <th class="text-primary"><i class="fas fa-briefcase me-1"></i>Client</th>
+                                      <th class="text-warning"><i class="fas fa-chess-king me-1"></i>Executive</th>
+                                      <th class="text-success"><i class="fas fa-users me-1"></i>Internal Team</th>
+                                  </tr>
+                              </thead>
+                              <tbody>
+                                  <tr>
+                                      <td class="text-muted fw-semibold">Language style</td>
+                                      <td>Business, outcome-focused</td>
+                                      <td>Strategic, high-level</td>
+                                      <td>Technical, operational</td>
+                                  </tr>
+                                  <tr>
+                                      <td class="text-muted fw-semibold">Detail level</td>
+                                      <td>Medium — highlights &amp; milestones</td>
+                                      <td>Low — KPIs &amp; decisions only</td>
+                                      <td>High — tasks, blockers, owners</td>
+                                  </tr>
+                                  <tr>
+                                      <td class="text-muted fw-semibold">Key metrics shown</td>
+                                      <td>Progress %, delivery dates</td>
+                                      <td>Budget, timeline, risks</td>
+                                      <td>Velocity, blockers, assignments</td>
+                                  </tr>
+                                  <tr>
+                                      <td class="text-muted fw-semibold">Best for</td>
+                                      <td>Client status calls</td>
+                                      <td>Board / leadership updates</td>
+                                      <td>Sprint reviews, team standups</td>
+                                  </tr>
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
+
+              </div>
+          </div>
+      </div>
   </div>
 
   <!-- Error -->
@@ -181,17 +391,71 @@
     </div>
 
     <!-- Loading overlay -->
-    <div id="pb-loading" class="text-center py-4">
-      <div class="pb-spinner"></div>
-      <div class="text-muted">PrizmBrief is reading your board data and crafting the slides…</div>
+    <div id="pb-loading" class="text-center py-4" data-prizm-container>
+      <div class="prizm-spinner"></div>
+      <div class="prizm-loading-message-inline" data-prizm-messages="prizmbrief">PrizmBrief is reading your board data and crafting the slides…</div>
     </div>
   </form>
+
+  <!-- ── Saved Briefs ──────────────────────────────────────────── -->
+  <div class="pb-saved-section" id="pb-saved-section">
+    <div class="pb-saved-title">💾 Saved Briefs
+      {% if saved_briefs %}
+      <span style="font-size:0.82rem; font-weight:400; color:#6c757d; margin-left:8px;">
+        {{ saved_briefs|length }} saved
+      </span>
+      {% endif %}
+    </div>
+
+    {% for brief in saved_briefs %}
+    <div class="pb-saved-item" id="saved-brief-{{ brief.id }}">
+      <div class="pb-saved-item-body">
+        <div class="pb-saved-item-name" id="saved-name-{{ brief.id }}">{{ brief.name }}</div>
+        <div class="pb-saved-item-meta">
+          {{ brief.created_at|date:"M d, Y · H:i" }}
+          &nbsp;
+          <span class="badge">👤 {{ brief.audience_label }}</span>
+          <span class="badge">🎯 {{ brief.purpose_label }}</span>
+          <span class="badge">📋 {{ brief.mode_label }}</span>
+        </div>
+      </div>
+      <div class="pb-saved-actions">
+        <a href="{% url 'prizmbrief_saved_detail' board.id brief.id %}" title="View">👁️ View</a>
+        <button onclick="renameBrief({{ brief.id }})" title="Rename">✏️ Rename</button>
+        <button class="pb-del-btn" onclick="deleteBrief({{ brief.id }}, '{{ brief.name|escapejs }}')" title="Delete">🗑️ Delete</button>
+      </div>
+    </div>
+    {% empty %}
+    <div class="pb-empty-saved" id="pb-empty-saved">
+      No saved briefs yet. Generate a brief and save it to access it later.
+    </div>
+    {% endfor %}
+  </div>
 
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+  /* Guide toggle label */
+  document.addEventListener('DOMContentLoaded', function() {
+      var pbGuide = document.getElementById('prizmBriefGuide');
+      if (pbGuide) {
+          pbGuide.addEventListener('shown.bs.collapse', function() {
+              var label = document.getElementById('prizmbrief-guide-label');
+              if (label) label.textContent = 'Hide guide';
+              var chevron = document.querySelector('.prizmbrief-guide-chevron');
+              if (chevron) chevron.style.transform = 'rotate(180deg)';
+          });
+          pbGuide.addEventListener('hidden.bs.collapse', function() {
+              var label = document.getElementById('prizmbrief-guide-label');
+              if (label) label.textContent = 'How does this work?';
+              var chevron = document.querySelector('.prizmbrief-guide-chevron');
+              if (chevron) chevron.style.transform = 'rotate(0deg)';
+          });
+      }
+  });
+
   /* Highlight selected option card */
   function selectOption(label) {
     const group = label.closest('.pb-card');
@@ -205,5 +469,62 @@
     document.getElementById('pb-submit-btn').innerHTML = '⏳ Generating…';
     document.getElementById('pb-loading').style.display = 'block';
   });
+
+  /* ── Saved briefs: Rename ────────────────────────────────── */
+  function renameBrief(briefId) {
+    const nameEl = document.getElementById('saved-name-' + briefId);
+    const currentName = nameEl.textContent.trim();
+    const newName = prompt('Rename this brief:', currentName);
+    if (!newName || newName.trim() === '' || newName.trim() === currentName) return;
+
+    fetch(`/boards/{{ board.id }}/prizmbrief/saved/${briefId}/rename/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}',
+      },
+      body: JSON.stringify({ name: newName.trim() }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        nameEl.textContent = data.name;
+      } else {
+        alert(data.error || 'Could not rename.');
+      }
+    })
+    .catch(() => alert('Network error.'));
+  }
+
+  /* ── Saved briefs: Delete ────────────────────────────────── */
+  function deleteBrief(briefId, briefName) {
+    if (!confirm(`Delete "${briefName}"? This cannot be undone.`)) return;
+
+    fetch(`/boards/{{ board.id }}/prizmbrief/saved/${briefId}/delete/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}',
+      },
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        const el = document.getElementById('saved-brief-' + briefId);
+        if (el) el.remove();
+        // Show empty state if no more items
+        const section = document.getElementById('pb-saved-section');
+        if (!section.querySelector('.pb-saved-item')) {
+          const empty = document.createElement('div');
+          empty.className = 'pb-empty-saved';
+          empty.textContent = 'No saved briefs yet. Generate a brief and save it to access it later.';
+          section.appendChild(empty);
+        }
+      } else {
+        alert(data.error || 'Could not delete.');
+      }
+    })
+    .catch(() => alert('Network error.'));
+  }
 </script>
 {% endblock %}

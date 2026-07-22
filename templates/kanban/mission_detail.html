@@ -10,29 +10,35 @@
 <li class="breadcrumb-item active">{{ mission.name|truncatechars:40 }}</li>
 {% endblock %}
 
+{% block back_button %}
+<a href="{% url 'mission_list' %}" class="btn-prizm-back">
+    <i class="fas fa-arrow-left"></i> Back to Missions
+</a>
+{% endblock %}
+
 {% block header_icon %}<i class="fas fa-bullseye text-primary me-2"></i>{% endblock %}
 
 {% block header_subtitle %}
-{% if mission.organization_goal %}
-<div class="mb-1">
-    <span class="badge bg-warning bg-opacity-25 text-dark px-2 py-1" style="font-size:0.72rem;">
-        <i class="fas fa-trophy text-warning me-1"></i>
-        Contributing to: <a href="{% url 'goal_detail' mission.organization_goal.id %}" class="text-decoration-none text-warning fw-semibold">{{ mission.organization_goal.name|truncatechars:50 }}</a>
-    </span>
-</div>
-{% endif %}
+<p class="text-muted small mb-0">Mission{% if mission.organization_goal %} · Under goal: <a href="{% url 'goal_detail' mission.organization_goal.id %}" class="text-decoration-none">{{ mission.organization_goal.name|truncatechars:50 }}</a>{% endif %}</p>
+<p class="text-muted small mb-0">v{{ record.version }} · created {{ record.created_at|date:"M d" }}</p>
 {% endblock %}
 
 {% block header_actions %}
+{% if can_edit %}
 <a href="{% url 'edit_mission' mission.id %}" class="btn btn-sm btn-outline-secondary">
     <i class="fas fa-edit me-1"></i>Edit
 </a>
+{% endif %}
+{% if can_create_child %}
 <a href="{% url 'create_strategy' mission.id %}" class="btn btn-sm btn-success">
     <i class="fas fa-plus me-1"></i>New Strategy
 </a>
+{% endif %}
+{% if can_delete %}
 <a href="{% url 'delete_mission' mission.id %}" class="btn btn-sm btn-outline-danger">
     <i class="fas fa-trash me-1"></i>Delete
 </a>
+{% endif %}
 {% endblock %}
 
 {% block header_meta %}
@@ -65,9 +71,11 @@
         <i class="fas fa-lightbulb text-success me-2"></i>Strategies
         <span class="badge bg-secondary ms-1">{{ strategy_tree|length }}</span>
     </h5>
+    {% if can_create_child %}
     <a href="{% url 'create_strategy' mission.id %}" class="btn btn-sm btn-success shadow-sm">
         <i class="fas fa-plus fa-sm me-1"></i>Add Strategy
     </a>
+    {% endif %}
 </div>
 
 <div class="row">
@@ -80,25 +88,34 @@
                         <h5 class="card-title mb-0">
                             <i class="fas fa-lightbulb text-success me-1"></i>{{ s.strategy.name }}
                         </h5>
-                        <span class="status-badge {{ s.strategy.status }}">{{ s.strategy.get_status_display }}</span>
+                        <div class="d-flex align-items-center gap-2">
+                            {% if s.health_score is not None %}
+                            <span class="badge {% if s.health_score >= 70 %}bg-success{% elif s.health_score >= 40 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                                {% if s.health_score >= 70 %}On track{% elif s.health_score >= 40 %}At risk{% else %}Off track{% endif %}
+                            </span>
+                            {% endif %}
+                            <span class="status-badge {{ s.strategy.status }}">{{ s.strategy.get_status_display }}</span>
+                        </div>
                     </div>
 
                     {% if s.strategy.description %}
                     <p class="card-text text-muted small mb-2">{{ s.strategy.description|truncatechars:120 }}</p>
                     {% endif %}
 
-                    {# Health score + progress #}
+                    {# Per-strategy progress bar #}
                     {% if s.health_score is not None %}
-                    <div class="d-flex align-items-center gap-2 mb-3">
-                        <span class="fw-bold small {% if s.health_score >= 70 %}text-success{% elif s.health_score >= 40 %}text-warning{% else %}text-danger{% endif %}">
-                            {{ s.health_score }}
-                        </span>
-                        <div class="progress flex-grow-1 progress-sm">
-                            <div class="progress-bar {% if s.health_score >= 70 %}bg-success{% elif s.health_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
-                                 style="width:{{ s.completion_pct }}%"></div>
-                        </div>
-                        <small class="fw-bold text-nowrap">{{ s.completion_pct }}%</small>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-muted small">Progress</span>
+                        <span class="fw-bold small">{{ s.completion_pct }}%</span>
                     </div>
+                    <div class="progress mb-2" style="height: 6px;">
+                        <div class="progress-bar {% if s.health_score >= 70 %}bg-success{% elif s.health_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                             style="width:{{ s.completion_pct }}%"></div>
+                    </div>
+                    <p class="text-muted small mb-3">
+                        {{ s.board_count }} board{{ s.board_count|pluralize }} · {{ s.total_tasks }} task{{ s.total_tasks|pluralize }} ·
+                        <a href="{% url 'strategy_detail' mission.id s.strategy.id %}" class="text-decoration-none">Open →</a>
+                    </p>
                     {% endif %}
 
                     {# Boards sub-list #}
@@ -136,17 +153,18 @@
                 </div>
                 <div class="card-footer bg-transparent border-top-0 d-flex justify-content-between align-items-center">
                     <small class="text-muted">{{ s.strategy.created_at|date:"M d, Y" }}</small>
+                    {% if can_edit %}
                     <div class="dropdown">
                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="{% url 'strategy_detail' mission.id s.strategy.id %}"><i class="fas fa-eye me-2"></i>View</a></li>
                             <li><a class="dropdown-item" href="{% url 'edit_strategy' mission.id s.strategy.id %}"><i class="fas fa-edit me-2"></i>Edit</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" href="{% url 'delete_strategy' mission.id s.strategy.id %}"><i class="fas fa-trash me-2"></i>Delete</a></li>
                         </ul>
                     </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -160,9 +178,11 @@
                 <p class="text-muted mb-4">
                     Add a <strong>Strategy</strong> to define how you plan to address the Mission.
                 </p>
+                {% if can_create_child %}
                 <a href="{% url 'create_strategy' mission.id %}" class="btn btn-success">
                     <i class="fas fa-plus fa-sm me-1"></i>Create First Strategy
                 </a>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -230,13 +250,32 @@
     <div class="card-body py-2" id="ai-summary-body">
         {% if mission.ai_summary %}
         <p class="mb-0 small">{{ mission.ai_summary }}</p>
+        {% if can_edit %}
+        <div class="text-end mt-2">
+            <button class="btn btn-sm btn-outline-warning btn-regenerate-ai"
+                    data-url="{% url 'regenerate_summary' level=level_name pk=record.pk %}">
+                <i class="fas fa-sync-alt me-1"></i>Regenerate
+            </button>
+        </div>
+        {% endif %}
         {% else %}
         <p class="text-muted fst-italic mb-0 small">
-            <i class="fas fa-info-circle me-1"></i>No AI summary yet.
+            <i class="fas fa-info-circle me-1"></i>No AI summary yet. Summaries roll up from this mission's strategies.
         </p>
+        {% if can_edit %}
+        <div class="text-end mt-2">
+            <button class="btn btn-sm btn-primary btn-regenerate-ai"
+                    data-url="{% url 'regenerate_summary' level=level_name pk=record.pk %}">
+                <i class="fas fa-magic me-1"></i>Generate AI Summary
+            </button>
+        </div>
+        {% endif %}
         {% endif %}
     </div>
 </div>
+
+{# ── Portfolio Analytics ── #}
+{% include 'kanban/partials/portfolio_analytics.html' %}
 {% endblock %}
 
 {# ================================================================ #}
@@ -283,6 +322,32 @@
 </div>
 {% endif %}
 
+{# Link / change / remove goal — owner-only in sidebar #}
+{% if can_edit %}
+<div class="sidebar-section">
+    <div class="sidebar-label">
+        {% if mission.organization_goal %}Change Goal{% else %}Link to Goal{% endif %}
+    </div>
+    <div class="sidebar-value">
+        <form method="post" action="{% url 'set_mission_goal' mission.id %}" class="d-flex flex-column gap-1">
+            {% csrf_token %}
+            <select name="goal_id" class="form-select form-select-sm">
+                <option value="">— None (unlinked) —</option>
+                {% for g in all_goals %}
+                <option value="{{ g.id }}" {% if mission.organization_goal_id == g.id %}selected{% endif %}>{{ g.name|truncatechars:40 }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-sm btn-outline-warning mt-1">
+                <i class="fas fa-link me-1"></i>{% if mission.organization_goal %}Update Goal{% else %}Link Goal{% endif %}
+            </button>
+        </form>
+        <small class="text-muted d-block mt-1" style="font-size:0.72rem;">
+            <i class="fas fa-info-circle me-1"></i>A Mission sits under one Goal — changing this moves it.
+        </small>
+    </div>
+</div>
+{% endif %}
+
 {% if mission.due_date %}
 <div class="sidebar-section">
     <div class="sidebar-label">Due Date</div>
@@ -304,6 +369,20 @@
 
 <div class="sidebar-section">
     <div class="sidebar-label">Strategies</div>
-    <div class="sidebar-value">{{ strategy_tree|length }}</div>
+    <div class="sidebar-value">{{ strategy_tree|length }} total</div>
+    {% if on_track_count or at_risk_count or off_track_count %}
+    <small class="text-muted">
+        {% if on_track_count %}{{ on_track_count }} on track{% endif %}{% if on_track_count and at_risk_count or on_track_count and off_track_count %} · {% endif %}{% if at_risk_count %}{{ at_risk_count }} at risk{% endif %}{% if at_risk_count and off_track_count %} · {% endif %}{% if off_track_count %}{{ off_track_count }} off track{% endif %}
+    </small>
+    {% endif %}
+</div>
+
+<div class="sidebar-section">
+    <div class="sidebar-label">Version</div>
+    <div class="sidebar-value">
+        v{{ record.version }}
+        · <a href="#tab-versions" class="text-decoration-none"
+           onclick="event.preventDefault(); var t=document.querySelector('.strategic-tabs .nav-link[data-bs-target=&quot;#tab-versions&quot;]'); if(t) t.click();">View history</a>
+    </div>
 </div>
 {% endblock %}

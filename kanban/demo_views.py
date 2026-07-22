@@ -27,6 +27,7 @@ from kanban.conflict_models import ConflictDetection
 from wiki.models import WikiPage
 from kanban.utils.demo_permissions import DemoPermissions
 from kanban.utils.demo_admin import login_as_demo_admin, logout_demo_admin, is_demo_admin_user
+from kanban.utils.demo_protection import allow_demo_writes
 import logging
 
 logger = logging.getLogger(__name__)
@@ -61,10 +62,12 @@ def _auto_grant_demo_access(request):
             return
         
         for board in demo_boards:
-            # Add user to board members (simple M2M relationship)
-            if request.user not in board.members.all():
-                board.members.add(request.user)
-                logger.info(f"Auto-granted {request.user.username} access to demo board: {board.name}")
+            # Add user to board as member via new BoardMembership
+            from kanban.models import BoardMembership
+            BoardMembership.objects.get_or_create(
+                board=board, user=request.user,
+                defaults={'role': 'member'}
+            )
             
             # Add user to chat rooms for this board
             chat_rooms = ChatRoom.objects.filter(board=board)
@@ -74,6 +77,9 @@ def _auto_grant_demo_access(request):
         
         # Also set up time tracking demo data for this user
         _setup_user_time_tracking_demo(request.user, demo_boards)
+        
+        # Assign 2-3 demo tasks to the real user so My Tasks card is populated
+        _assign_demo_tasks_to_real_user(request.user, demo_boards)
         
     except Exception as e:
         logger.error(f"Error auto-granting demo access: {e}")
@@ -168,9 +174,125 @@ def _setup_user_time_tracking_demo(user, demo_boards):
     
     except Exception as e:
         logger.error(f"Error setting up time tracking demo for {user.username}: {e}")
-        
+
+
+def _assign_demo_tasks_to_real_user(user, demo_boards):
+    """
+    Assign 2-3 demo tasks to a real user so 'My Tasks' and 'My Boards'
+    cards on the dashboard are populated when viewing the demo.
+
+    Picks incomplete tasks (in-progress preferred, then to-do) and
+    reassigns them from their demo-user assignee to the real user.
+    The original assignee is stored in the user's session-scoped
+    profile field (demo_task_originals) so we can restore on exit.
+
+    Only runs once per user (skips if user already owns demo tasks).
+    """
+    # Skip demo users — they already own tasks
+    if '_demo' in user.username:
+        return
+
+    # Skip if this user already has demo tasks assigned to them
+    already_assigned = Task.objects.filter(
+        column__board__in=demo_boards,
+        assigned_to=user,
+        is_seed_demo_data=True,
+    ).exists()
+    if already_assigned:
+        return
+
+    try:
+        with allow_demo_writes():
+            for board in demo_boards:
+                # Prefer in-progress tasks (more visible), then to-do
+                candidates = list(
+                    Task.objects.filter(
+                        column__board=board,
+                        is_seed_demo_data=True,
+                        item_type='task',
+                        progress__gt=0,
+                        progress__lt=100,
+                    ).exclude(
+                        assigned_to=user,
+                    ).order_by('?')[:2]
+                )
+
+                # If we got fewer than 2 from in-progress, grab a to-do task
+                if len(candidates) < 2:
+                    extra = list(
+                        Task.objects.filter(
+                            column__board=board,
+                            is_seed_demo_data=True,
+                            item_type='task',
+                            progress=0,
+                        ).exclude(
+                            assigned_to=user,
+                        ).exclude(
+                            id__in=[c.id for c in candidates],
+                        ).order_by('?')[:3 - len(candidates)]
+                    )
+                    candidates.extend(extra)
+
+                # Cap at 3
+                candidates = candidates[:3]
+
+                # Store original assignees on the profile for later restoration
+                originals = {}
+                for task in candidates:
+                    originals[str(task.id)] = task.assigned_to_id
+                    task.assigned_to = user
+                    task.save(update_fields=['assigned_to'])
+
+                # Persist the mapping so we can restore on demo exit
+                if originals:
+                    from accounts.models import UserProfile
+                    profile = UserProfile.objects.get(user=user)
+                    # Merge with any existing originals (in case of multiple boards)
+                    existing = profile.demo_task_originals or {}
+                    existing.update(originals)
+                    profile.demo_task_originals = existing
+                    profile.save(update_fields=['demo_task_originals'])
+                    logger.info(
+                        f"Assigned {len(originals)} demo tasks to real user "
+                        f"{user.username}: task ids {list(originals.keys())}"
+                    )
+
     except Exception as e:
-        logger.error(f"Error auto-granting demo access: {e}")
+        logger.error(f"Error assigning demo tasks to {user.username}: {e}")
+
+
+def _restore_demo_task_assignments(user):
+    """
+    Restore demo tasks back to their original demo-user assignees
+    when a real user exits demo mode.
+    """
+    try:
+        with allow_demo_writes():
+            from accounts.models import UserProfile
+            profile = UserProfile.objects.get(user=user)
+            originals = profile.demo_task_originals
+            if not originals:
+                return
+
+            restored = 0
+            for task_id_str, original_user_id in originals.items():
+                try:
+                    task = Task.objects.get(id=int(task_id_str), is_seed_demo_data=True)
+                    task.assigned_to_id = original_user_id
+                    task.save(update_fields=['assigned_to'])
+                    restored += 1
+                except Task.DoesNotExist:
+                    pass
+
+            # Clear the stored originals
+            profile.demo_task_originals = {}
+            profile.save(update_fields=['demo_task_originals'])
+
+            if restored:
+                logger.info(f"Restored {restored} demo tasks from user {user.username}")
+
+    except Exception as e:
+        logger.error(f"Error restoring demo tasks for {user.username}: {e}")
 
 
 def demo_mode_selection(request):
@@ -469,8 +591,8 @@ def switch_demo_role(request):
     # Get role display name
     role_names = {
         'admin': 'Demo Admin (Solo)',
-        'member': 'Sam Rivera (Member)',
-        'viewer': 'Jordan Taylor (Viewer)'
+        'member': 'Marcus Chen (Member)',
+        'viewer': 'Elena Vasquez (Viewer)'
     }
     
     return JsonResponse({
@@ -560,28 +682,14 @@ def _ensure_user_in_demo_boards(user, demo_boards):
         user: User object
         demo_boards: QuerySet or list of Board objects
     """
-    from kanban.permission_models import BoardMembership, Role
+    from kanban.models import BoardMembership
     
     for board in demo_boards:
-        # Skip if user is already a member
-        if user in board.members.all():
-            continue
-        
-        # Add user to board members
-        board.members.add(user)
-        
-        # Create BoardMembership with Editor role for proper RBAC
-        editor_role = Role.objects.filter(
-            organization=board.organization,
-            name='Editor'
-        ).first()
-        
-        if editor_role:
-            BoardMembership.objects.get_or_create(
-                board=board,
-                user=user,
-                defaults={'role': editor_role}
-            )
+        # Create BoardMembership for the user
+        BoardMembership.objects.get_or_create(
+            board=board, user=user,
+            defaults={'role': 'member'}
+        )
         
         # Add user to all chat rooms for this board
         chat_rooms = ChatRoom.objects.filter(board=board)
@@ -664,29 +772,19 @@ def demo_dashboard(request):
         # Check if user is already a member of any demo boards
         user_demo_orgs = Organization.objects.filter(
             name__in=DEMO_ORG_NAMES,
-            boards__members=request.user
+            boards__memberships__user=request.user
         ).distinct()
         
         if not user_demo_orgs.exists():
             # User doesn't have access yet - grant it automatically
-            from kanban.permission_models import BoardMembership, Role
+            from kanban.models import BoardMembership
             
             for demo_board in demo_boards:
-                # Add user to board members
-                demo_board.members.add(request.user)
-                
-                # Create BoardMembership with Editor role
-                editor_role = Role.objects.filter(
-                    organization=demo_board.organization,
-                    name='Editor'
-                ).first()
-                
-                if editor_role:
-                    BoardMembership.objects.get_or_create(
-                        board=demo_board,
-                        user=request.user,
-                        defaults={'role': editor_role}
-                    )
+                # Create BoardMembership for the user
+                BoardMembership.objects.get_or_create(
+                    board=demo_board, user=request.user,
+                    defaults={'role': 'member'}
+                )
                 
                 # Add user to all chat rooms for this board
                 chat_rooms = ChatRoom.objects.filter(board=demo_board)
@@ -872,28 +970,18 @@ def demo_board_detail(request, board_id):
         # Organization-level access check: user must have access to at least one board in this org
         user_has_org_access = Board.objects.filter(
             organization=board.organization,
-            members=request.user
+            memberships__user=request.user
         ).exists()
         
         if not user_has_org_access:
             # Auto-grant access when user clicks on a demo board
-            from kanban.permission_models import BoardMembership, Role
+            from kanban.models import BoardMembership
             
-            # Add user to this board
-            board.members.add(request.user)
-            
-            # Create BoardMembership with Editor role
-            editor_role = Role.objects.filter(
-                organization=board.organization,
-                name='Editor'
-            ).first()
-            
-            if editor_role:
-                BoardMembership.objects.get_or_create(
-                    board=board,
-                    user=request.user,
-                    defaults={'role': editor_role}
-                )
+            # Create BoardMembership for the user
+            BoardMembership.objects.get_or_create(
+                board=board, user=request.user,
+                defaults={'role': 'member'}
+            )
             
             # Add user to all chat rooms for this board
             chat_rooms = ChatRoom.objects.filter(board=board)
@@ -963,7 +1051,7 @@ def demo_board_detail(request, board_id):
     
     # Get board members - show all board members
     from accounts.models import UserProfile
-    board_member_ids = board.members.values_list('id', flat=True)
+    board_member_ids = board.memberships.values_list('user_id', flat=True)
     board_member_profiles = UserProfile.objects.filter(user_id__in=board_member_ids)
     
     # For adding new members: show all users who aren't on the board yet
@@ -1249,13 +1337,103 @@ def _delete_user_board_safely(board):
     try:
         from wiki.models import WikiLink
         WikiLink.objects.filter(board=board).delete()
+        if task_ids:
+            WikiLink.objects.filter(task_id__in=task_ids).delete()
     except Exception:
         pass
 
     try:
-        from kanban.permission_models import BoardMembership, PermissionAuditLog
+        from kanban.models import CalendarEvent
+        CalendarEvent.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from knowledge_graph.models import MemoryNode, MemoryConnection
+        from django.db.models import Q as _Q
+        orphan_nodes = MemoryNode.objects.filter(board=board)
+        orphan_ids = list(orphan_nodes.values_list('id', flat=True))
+        if orphan_ids:
+            MemoryConnection.objects.filter(
+                _Q(from_node_id__in=orphan_ids) | _Q(to_node_id__in=orphan_ids)
+            ).delete()
+            orphan_nodes.delete()
+    except Exception:
+        pass
+
+    try:
+        from decision_center.models import DecisionItem
+        DecisionItem.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.whatif_models import WhatIfScenario
+        WhatIfScenario.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
+        BranchDivergenceLog.objects.filter(branch__board=board).delete()
+        BranchSnapshot.objects.filter(branch__board=board).delete()
+        ShadowBranch.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        # Board-scoped signals are written by the project confidence service
+        # (~35 rows per board).  FK checks are disabled before board.delete()
+        # below, so SQLite won't auto-cascade these — delete them explicitly
+        # to avoid orphaned ProjectSignal rows accumulating across resets.
+        from kanban.project_signals_models import ProjectSignal, ProjectConfidenceScore
+        ProjectSignal.objects.filter(board=board).delete()
+        ProjectConfidenceScore.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
+        PreMortemScenarioAcknowledgment.objects.filter(pre_mortem__board=board).delete()
+        PreMortemAnalysis.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.stress_test_models import StressTestSession, ImmunityScore, StressTestScenario, Vaccine
+        Vaccine.objects.filter(session__board=board).delete()
+        StressTestScenario.objects.filter(session__board=board).delete()
+        ImmunityScore.objects.filter(session__board=board).delete()
+        StressTestSession.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
+        ScopeTimelineEvent.objects.filter(report__board=board).delete()
+        ScopeAutopsyReport.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from exit_protocol.models import (
+            HospiceDismissal, CemeteryEntry, ProjectOrgan, HospiceSession,
+            ProjectHealthSignal,
+        )
+        HospiceDismissal.objects.filter(board=board).delete()
+        try:
+            CemeteryEntry.objects.filter(board=board).delete()
+        except Exception:
+            pass
+        ProjectOrgan.objects.filter(source_board=board).delete()
+        HospiceSession.objects.filter(board=board).delete()
+        ProjectHealthSignal.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.models import BoardMembership
         BoardMembership.objects.filter(board=board).delete()
-        PermissionAuditLog.objects.filter(board=board).delete()
     except Exception:
         pass
 
@@ -1319,11 +1497,33 @@ def reset_demo_data(request):
 
     if request.method == 'POST':
         try:
+          with allow_demo_writes():
             from django.core.management import call_command
             from django.db import connection
             from io import StringIO
 
             out = StringIO()
+
+            # ============================================================
+            # STEP 0: Purge the user's PrizmAI Google Calendar events
+            # ============================================================
+            # Calendar sync is suppressed inside allow_demo_writes(), so the
+            # per-task post_delete signal below will NOT remove the Google
+            # Calendar events for the tasks we are about to delete — they would
+            # be left orphaned on the user's calendar (the exact cause of the
+            # "stale notifications that come back" bug). Do one batched purge
+            # up front instead. Best-effort: a calendar failure must never
+            # block the demo reset.
+            try:
+                from accounts.tasks import purge_user_calendar_events
+                try:
+                    # Async when a Celery worker is available …
+                    purge_user_calendar_events.delay(request.user.id)
+                except Exception:
+                    # … otherwise run it inline (Daphne-only / no broker).
+                    purge_user_calendar_events(request.user.id)
+            except Exception:
+                pass
 
             # ============================================================
             # STEP 1: Identify demo boards and user-created boards
@@ -1332,12 +1532,91 @@ def reset_demo_data(request):
             official_board_names = ['Software Development']
             demo_boards = Board.objects.filter(is_official_demo_board=True)
 
-            # User-created boards: anything not official
-            user_boards = Board.objects.filter(is_official_demo_board=False)
+            # User-created boards: only boards owned by the current user
+            # (never touch other users' sandboxes or boards)
+            user_boards = Board.objects.filter(
+                is_official_demo_board=False,
+                owner=request.user,
+            )
 
             # ============================================================
-            # STEP 2: Delete all user-created boards with full cleanup
+            # STEP 2: Delete user-created boards with full cleanup
             # ============================================================
+            # Also clean up DemoSandbox records so sandbox can be
+            # re-provisioned cleanly after reset.
+            try:
+                from kanban.models import DemoSandbox
+                DemoSandbox.objects.filter(user=request.user).delete()
+            except Exception:
+                pass
+
+            # Self-healing: strip any stale membership the real user holds on the
+            # OFFICIAL demo template board(s). Demo users are meant to see only
+            # their private sandbox copy — a leftover membership on the template
+            # (e.g. from an account that originally seeded the board, pre-sandbox)
+            # makes every "all boards I belong to" feature double-count (boards,
+            # messages, calendar, cemetery, time). The reset otherwise never
+            # touches official-board membership, so such a row survives every
+            # reset. The three demo personas legitimately belong to the template
+            # and must be preserved.
+            try:
+                from kanban.models import BoardMembership
+                BoardMembership.objects.filter(
+                    board__is_official_demo_board=True,
+                    user=request.user,
+                ).exclude(
+                    user__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
+                ).delete()
+            except Exception:
+                pass
+
+            # Clean SET_NULL FK models before board deletion (they'd be orphaned)
+            user_board_ids = list(user_boards.values_list('id', flat=True))
+            user_task_ids_on_own_boards = list(
+                Task.objects.filter(column__board_id__in=user_board_ids)
+                .values_list('id', flat=True)
+            ) if user_board_ids else []
+
+            if user_board_ids:
+                try:
+                    from ai_assistant.models import (
+                        AIAssistantMessage, AIAssistantSession, AIAssistantAnalytics,
+                    )
+                    orphan_sessions = AIAssistantSession.objects.filter(board_id__in=user_board_ids)
+                    AIAssistantMessage.objects.filter(session__in=orphan_sessions).delete()
+                    orphan_sessions.delete()
+                    AIAssistantAnalytics.objects.filter(board_id__in=user_board_ids).delete()
+                except Exception:
+                    pass
+
+                try:
+                    from kanban.models import CalendarEvent
+                    CalendarEvent.objects.filter(board_id__in=user_board_ids).delete()
+                except Exception:
+                    pass
+
+                try:
+                    from knowledge_graph.models import MemoryNode, MemoryConnection
+                    from django.db.models import Q
+                    orphan_nodes = MemoryNode.objects.filter(board_id__in=user_board_ids)
+                    orphan_node_ids = list(orphan_nodes.values_list('id', flat=True))
+                    if orphan_node_ids:
+                        MemoryConnection.objects.filter(
+                            Q(from_node_id__in=orphan_node_ids)
+                            | Q(to_node_id__in=orphan_node_ids)
+                        ).delete()
+                        orphan_nodes.delete()
+                except Exception:
+                    pass
+
+                try:
+                    from wiki.models import WikiLink
+                    WikiLink.objects.filter(board_id__in=user_board_ids).delete()
+                    if user_task_ids_on_own_boards:
+                        WikiLink.objects.filter(task_id__in=user_task_ids_on_own_boards).delete()
+                except Exception:
+                    pass
+
             for board in list(user_boards):
                 try:
                     _delete_user_board_safely(board)
@@ -1393,7 +1672,7 @@ def reset_demo_data(request):
                 task__column__board__in=demo_boards
             ).exclude(
                 task__is_seed_demo_data=True,
-                user__username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                user__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
             ).delete()
 
             # User-added task activities / time entries / task thread comments
@@ -1410,7 +1689,7 @@ def reset_demo_data(request):
                 TimeEntry.objects.filter(
                     task__column__board__in=demo_boards
                 ).exclude(
-                    user__username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                    user__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
                 ).delete()
             except Exception:
                 pass
@@ -1420,6 +1699,47 @@ def reset_demo_data(request):
                 TaskThreadComment.objects.filter(
                     task__column__board__in=demo_boards
                 ).delete()
+            except Exception:
+                pass
+
+            # Shadow branches and snapshots on official demo boards.
+            # The shadow board is a user-exploration feature; clearing it on
+            # reset gives a clean slate (populate_all_demo_data does not seed
+            # shadow branches, so nothing is lost by deleting all of them).
+            try:
+                from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
+                demo_branch_ids = list(
+                    ShadowBranch.objects.filter(board__in=demo_boards).values_list('id', flat=True)
+                )
+                if demo_branch_ids:
+                    BranchDivergenceLog.objects.filter(branch_id__in=demo_branch_ids).delete()
+                    BranchSnapshot.objects.filter(branch_id__in=demo_branch_ids).delete()
+                ShadowBranch.objects.filter(board__in=demo_boards).delete()
+            except Exception:
+                pass
+
+            # Automation rules & logs on official demo boards.
+            # The pristine demo seeds NO automation rules (populate_automation_
+            # demo_data only seeds checklist/subtask/dependency content), so any
+            # AutomationRule on an official template board is user-created
+            # exploration — e.g. rules built while testing triggers/conditions/
+            # actions. The reset otherwise never touches automation, so these
+            # rules (and their logs) persist across every reset and keep the
+            # template polluted. Clearing all of them restores the original
+            # (rule-free) state. NB: rules on the user's OWN sandbox boards are
+            # already removed when those boards are deleted in STEP 2 (board FK
+            # is CASCADE); logs must be deleted explicitly here because
+            # AutomationLog.rule is SET_NULL (deleting a rule leaves the log).
+            try:
+                from kanban.automation_models import (
+                    AutomationRule, AutomationLog, ScheduledAutomation,
+                )
+                AutomationLog.objects.filter(board__in=demo_boards).delete()
+                try:
+                    ScheduledAutomation.objects.filter(board__in=demo_boards).delete()
+                except Exception:
+                    pass
+                AutomationRule.objects.filter(board__in=demo_boards).delete()
             except Exception:
                 pass
 
@@ -1435,7 +1755,7 @@ def reset_demo_data(request):
                 ChatMessage.objects.filter(
                     chat_room__board__in=demo_boards
                 ).exclude(
-                    author__username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                    author__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
                 ).delete()
 
                 # Delete notifications for the current real user
@@ -1462,7 +1782,7 @@ def reset_demo_data(request):
                 non_demo_board_sessions = AIAssistantSession.objects.filter(
                     board__in=demo_boards
                 ).exclude(
-                    user__username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                    user__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
                 )
                 AIAssistantMessage.objects.filter(session__in=non_demo_board_sessions).delete()
                 non_demo_board_sessions.delete()
@@ -1470,7 +1790,63 @@ def reset_demo_data(request):
                 pass
 
             # ============================================================
-            # STEP 6: Clean up orphaned webhook events (safety net)
+            # STEP 5b: Clear user-created calendar events & memory nodes
+            # ============================================================
+            try:
+                from kanban.models import CalendarEvent
+                CalendarEvent.objects.filter(
+                    board__in=demo_boards
+                ).exclude(
+                    created_by__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
+                ).delete()
+                # Also clean user-created events without board association
+                CalendarEvent.objects.filter(
+                    created_by=request.user, board__isnull=True, is_demo=True,
+                ).delete()
+            except Exception:
+                pass
+
+            try:
+                from knowledge_graph.models import MemoryNode, MemoryConnection
+                from django.db.models import Q as _Q
+                user_memory_nodes = MemoryNode.objects.filter(
+                    board__in=demo_boards
+                ).exclude(
+                    created_by__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
+                )
+                node_ids = list(user_memory_nodes.values_list('id', flat=True))
+                if node_ids:
+                    MemoryConnection.objects.filter(
+                        _Q(from_node_id__in=node_ids) | _Q(to_node_id__in=node_ids)
+                    ).delete()
+                    user_memory_nodes.delete()
+            except Exception:
+                pass
+
+            # ============================================================
+            # STEP 6a: Clear Decision Center items and briefings
+            # ============================================================
+            try:
+                from decision_center.models import (
+                    DecisionItem, DecisionCenterBriefing, DecisionCenterSettings
+                )
+                from django.core.cache import cache as dc_cache
+
+                # Delete all decision items for the current user
+                DecisionItem.objects.filter(created_for=request.user).delete()
+                # Delete only the *demo* briefings so they get regenerated fresh —
+                # the real-workspace briefing must survive a demo reset.
+                DecisionCenterBriefing.objects.filter(
+                    user=request.user, is_demo=True,
+                ).delete()
+                # Invalidate widget cache for both demo and real modes
+                dc_cache.delete(f'dc_widget_{request.user.id}_demo')
+                dc_cache.delete(f'dc_widget_{request.user.id}_real')
+            except Exception:
+                pass
+
+            # ============================================================
+            # STEP 6b: Clean up orphaned webhook events (safety net)
             # ============================================================
             try:
                 from webhooks.models import WebhookEvent
@@ -1485,18 +1861,152 @@ def reset_demo_data(request):
             # ============================================================
             # STEP 7: Repopulate all official demo data
             # ============================================================
-            # The --reset flag clears seed data and recreates it fresh
-            call_command('populate_all_demo_data', '--reset', stdout=out, stderr=out)
-
-            # Refresh all dates to current
+            # Lock shadow-branch recalculation for all demo boards so that
+            # Celery tasks queued by membership/deadline signals during
+            # populate_all_demo_data don't overwrite the freshly seeded
+            # demo snapshot data.  120-second TTL is well beyond the 5-second
+            # signal countdown + populate run time.
             try:
-                call_command('refresh_demo_dates', '--force', stdout=out, stderr=out)
+                from django.core.cache import cache as _dcache
+                _demo_board_ids = list(
+                    demo_boards.values_list('id', flat=True)
+                )
+                for _bid in _demo_board_ids:
+                    _dcache.set(f'demo_shadow_lock_{_bid}', True, timeout=120)
+            except Exception:
+                pass
+
+            # ---- Pre-clean Google Calendar events before wiping seed tasks ----
+            # The management command below deletes and recreates every seed task.
+            # Any task that previously had a google_calendar_event_id (set during
+            # the user's session) would leave a ghost event in their calendar if
+            # we don't remove it now.  We do this explicitly so the signal-level
+            # suppression below can then safely skip sync on all new task creates.
+            try:
+                from accounts.tasks import delete_calendar_event as _del_cal_evt
+                _gcal_tasks = list(
+                    Task.objects.filter(column__board__in=demo_boards)
+                    .exclude(google_calendar_event_id__isnull=True)
+                    .exclude(google_calendar_event_id='')
+                    .filter(assigned_to__isnull=False)
+                    .values_list('assigned_to_id', 'google_calendar_event_id')
+                )
+                for _uid, _eid in _gcal_tasks:
+                    try:
+                        _del_cal_evt.delay(_uid, _eid)
+                    except Exception:
+                        try:
+                            _del_cal_evt(_uid, _eid)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # The --reset flag clears seed data and recreates it fresh.
+            # Wrap in suppress_calendar_sync so that creating dozens of seed
+            # tasks does not flood the user's Google Calendar with new events.
+            from kanban.utils.demo_protection import suppress_calendar_sync
+            with suppress_calendar_sync():
+                call_command('populate_all_demo_data', '--reset', stdout=out, stderr=out)
+
+                # Refresh all dates to current
+                try:
+                    call_command('refresh_demo_dates', '--force', stdout=out, stderr=out)
+                except Exception:
+                    pass
+
+            # Re-clone the per-user Discovery ideas synchronously. populate_all_demo_data
+            # above only recreates the shared templates (sandbox_owner=None); the
+            # Discovery view shows the user only their own clones (sandbox_owner=user).
+            # The async provisioning path also clones, but it can be starved after a
+            # reset — do it here so the inbox is never empty when the user lands back
+            # on the Discovery page. Idempotent (clears the user's existing clones first).
+            try:
+                from kanban.sandbox_views import _clone_discovery_ideas_for_user
+                _clone_discovery_ideas_for_user(request.user)
+            except Exception:
+                pass
+
+            # Re-clone the per-user wiki. populate_all_demo_data --reset above
+            # purges + reseeds only the shared templates (sandbox_owner=None); the
+            # wiki views show the user only their own clones (sandbox_owner=user),
+            # so rebuild them here or the user lands on an empty Knowledge Hub.
+            # Idempotent (clears the user's existing clones first).
+            try:
+                from kanban.sandbox_views import _clone_wiki_for_user
+                _clone_wiki_for_user(request.user)
+            except Exception:
+                pass
+
+            # Re-clone the per-user custom-field schema (+ seeded task values).
+            # The reset above reseeds only the shared templates (sandbox_owner=
+            # None); the field views/serializers show the user only their own
+            # clones (sandbox_owner=user), so rebuild them here or the user's
+            # tasks lose their custom-field values. Idempotent.
+            try:
+                from kanban.sandbox_views import _clone_custom_fields_for_user
+                _clone_custom_fields_for_user(request.user)
+            except Exception:
+                pass
+
+            # Repair the personal timesheet on the user's existing sandbox boards.
+            # This reset path repopulates the official templates in place but does
+            # not re-clone the sandbox copies, so their cloned time entries are
+            # still owned by the primary persona. Remap them to the user so the
+            # time-tracking dashboard shows their own isolated copy. Idempotent.
+            try:
+                from kanban.sandbox_views import _remap_demo_time_entries_to_owner
+                _remap_demo_time_entries_to_owner(request.user)
+            except Exception:
+                pass
+
+            # Clone demo calendar events into the user's sandbox boards so the
+            # calendar is per-user (seeded only on the shared template board).
+            # This reset path does not re-provision the sandbox, so purge the
+            # user's existing sandbox events first — the clone (clone-if-empty)
+            # then repopulates them fresh from the just-refreshed templates.
+            try:
+                from kanban.models import Board, CalendarEvent
+                from kanban.sandbox_views import _clone_calendar_events_for_user
+                _sb_ids = list(
+                    Board.objects.filter(owner=request.user, is_sandbox_copy=True)
+                    .values_list('id', flat=True)
+                )
+                CalendarEvent.objects.filter(board_id__in=_sb_ids).delete()
+                _clone_calendar_events_for_user(request.user)
             except Exception:
                 pass
 
             # Detect conflicts for fresh data
             try:
                 call_command('detect_conflicts', '--clear', stdout=out, stderr=out)
+            except Exception:
+                pass
+
+            # Invalidate Decision Center widget cache after repopulation
+            try:
+                from django.core.cache import cache as dc_cache
+                dc_cache.delete(f'dc_widget_{request.user.id}_demo')
+                dc_cache.delete(f'dc_widget_{request.user.id}_real')
+            except Exception:
+                pass
+
+            # ============================================================
+            # STEP 7b: Regenerate Decision Center items for current user
+            # ============================================================
+            # The collect_decision_items Celery task only runs daily.
+            # After a reset we must explicitly re-scan so the DC page
+            # and dashboard widget show consistent, fresh counts.
+            try:
+                from decision_center.tasks import (
+                    collect_for_user, generate_briefing_for_user,
+                )
+                collect_for_user(request.user)
+                generate_briefing_for_user(request.user)
+                # Final cache invalidation after items are created
+                from django.core.cache import cache as dc_cache2
+                dc_cache2.delete(f'dc_widget_{request.user.id}_demo')
+                dc_cache2.delete(f'dc_widget_{request.user.id}_real')
             except Exception:
                 pass
 

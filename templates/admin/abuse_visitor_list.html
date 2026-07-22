@@ -30,14 +30,14 @@
     }
     
     .nav-tabs a:hover { 
-        background: #f9fafb;
-        color: #1f2937;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
     }
     
     .nav-tabs a.active { 
-        background: white;
+        background: var(--card-bg);
         color: #667eea;
-        border-color: #e5e7eb;
+        border-color: var(--border-color);
         border-bottom-color: white;
     }
     
@@ -47,7 +47,7 @@
         margin-bottom: 20px;
         flex-wrap: wrap;
         align-items: center;
-        background: white;
+        background: var(--card-bg);
         padding: 15px;
         border-radius: 8px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
@@ -68,7 +68,7 @@
     }
     
     .section-card {
-        background: white;
+        background: var(--card-bg);
         border-radius: 12px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         overflow: hidden;
@@ -87,7 +87,7 @@
     }
     
     .visitor-table th {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         font-weight: 600;
         font-size: 0.8rem;
         text-transform: uppercase;
@@ -97,7 +97,7 @@
     }
     
     .visitor-table tr:hover {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
     }
     
     .visitor-table th a {
@@ -152,7 +152,7 @@
         border: 1px solid #ddd;
         border-radius: 6px;
         text-decoration: none;
-        color: #333;
+        color: var(--text-primary);
     }
     
     .pagination a:hover {
@@ -271,9 +271,9 @@
                     </td>
                     <td>
                         {% if visitor.browser_fingerprint %}
-                            <code style="font-size: 0.75rem; color: #999;">{{ visitor.browser_fingerprint|truncatechars:12 }}</code>
+                            <code style="font-size: 0.75rem; color: var(--text-muted);">{{ visitor.browser_fingerprint|truncatechars:12 }}</code>
                         {% else %}
-                            <span style="color: #999;">—</span>
+                            <span style="color: var(--text-muted);">—</span>
                         {% endif %}
                     </td>
                     <td>
@@ -314,7 +314,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="9" style="text-align: center; padding: 50px; color: #999;">
+                    <td colspan="9" style="text-align: center; padding: 50px; color: var(--text-muted);">
                         No visitors found matching your criteria
                     </td>
                 </tr>

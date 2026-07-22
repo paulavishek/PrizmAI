@@ -1,1791 +1,3397 @@
 """
 Consolidated Demo Data Population Command
 =========================================
-A single command to populate ALL demo data for PrizmAI application.
+Single source of truth for PrizmAI demo data.
 
-This file consolidates demo data creation for:
-- Tasks, dependencies, and labels
-- Wiki pages and categories
-- Messaging (chat rooms, messages, notifications)
-- Conflicts (resource, dependency, schedule conflicts)
-- AI Assistant (chat sessions, Q&A history)
-- Time tracking, budgets, retrospectives, coaching
+Produces ONE Software Development board under the "Demo - Acme Corporation"
+organisation, owned by Priya Sharma, with:
+  - 5 columns (Backlog / To Do / In Progress / In Review / Done)
+  - 13 labels (3 Lean + 9 technical + 1 Epic marker)
+  - 4 epic parent tasks   (item_type='epic', live in Backlog)
+  - 32 child tasks        (12 Done + 2 In Review + 4 In Progress + 6 To Do + 8 Backlog)
+  - 3 milestones          (item_type='milestone' on the Gantt)
+  - 4 stakeholders, 1 project budget, 28 task-cost rows, ~80 time entries
+  - 4 AI coach suggestions, 1 Phase-1 retrospective
+  - 3 chat rooms with ~20 messages
+  - 30 PriorityDecision records  (ML training data)
+  - 25 historical completed tasks on a hidden archive board (ML training data)
+  - 10 wiki pages across 4 categories (Getting Started, Engineering,
+    Architecture & Decisions, Process & Workflows)
+
+Every date is calculated relative to TODAY at runtime - re-running the command
+shifts the project forward so "today" always sits inside Phase 2 (~40% through).
 
 Usage:
-    python manage.py populate_all_demo_data
-    python manage.py populate_all_demo_data --reset  # Clear and recreate all
-
-This creates a comprehensive demo environment showcasing all PrizmAI features.
+    python manage.py populate_all_demo_data            # idempotent top-up
+    python manage.py populate_all_demo_data --reset    # wipe demo data + reseed
 """
-from django.core.management.base import BaseCommand
-from django.contrib.auth.models import User
-from django.utils import timezone
-from django.db import transaction
-from datetime import timedelta, date
+
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 import random
-import json
 
-# Import all required models
+from django.contrib.auth.models import User
+from django.core.management import call_command
+from django.core.management.base import BaseCommand
+from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
+
 from accounts.models import Organization
-from kanban.models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy, OrganizationGoal
-from kanban.permission_models import Role
-from kanban.budget_models import TimeEntry, ProjectBudget, TaskCost, ProjectROI
-from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction
-from kanban.retrospective_models import ProjectRetrospective, LessonLearned, ImprovementMetric, RetrospectiveActionItem
-from kanban.coach_models import CoachingSuggestion, PMMetrics, CoachingInsight
-from kanban.stakeholder_models import ProjectStakeholder, StakeholderTaskInvolvement
-from kanban.conflict_models import ConflictDetection, ConflictResolution, ConflictNotification
-
-# Wiki models
-from wiki.models import WikiPage, WikiCategory, WikiLink
-
-# Messaging models
-from messaging.models import ChatRoom, ChatMessage, Notification, FileAttachment, TaskThreadComment
-
-# AI Assistant models
-from ai_assistant.models import (
-    AIAssistantSession, AIAssistantMessage, ProjectKnowledgeBase,
-    AIAssistantAnalytics, AITaskRecommendation, UserPreference
+from accounts.demo_personas import (
+    DEMO_PERSONAS, DEMO_USERNAMES, LEGACY_DEMO_USERNAMES, LEGACY_DEMO_EMAILS,
 )
+from kanban.models import (
+    Board, Column, Task, TaskLabel, Comment, BoardMembership, ChecklistItem,
+    Workspace,
+)
+from kanban.custom_field_models import (
+    CustomFieldDefinition, CustomFieldOption, TaskCustomFieldValue,
+)
+from kanban.budget_models import ProjectBudget, TaskCost, TimeEntry
+from kanban.coach_models import CoachingSuggestion
+from kanban.priority_models import PriorityDecision
+from kanban.retrospective_models import (
+    ProjectRetrospective, LessonLearned, RetrospectiveActionItem,
+    ImprovementMetric,
+)
+from kanban.stakeholder_models import ProjectStakeholder, StakeholderTaskInvolvement
+from messaging.models import ChatRoom, ChatMessage
+from wiki.models import WikiCategory, WikiPage
+
+
+# ---------------------------------------------------------------------------
+# Constants & helpers
+# ---------------------------------------------------------------------------
+
+DEMO_ORG_NAME = 'Demo - Acme Corporation'
+DEMO_BOARD_NAME = 'Software Development'
+ARCHIVE_BOARD_NAME = 'Historical Reference Data'
+
+# Codebase storage values (NOT the display labels - see Task model choices)
+LSS_VA = 'value_added'
+LSS_NVA = 'necessary_nva'
+LSS_WASTE = 'waste'
+
+# risk_likelihood / risk_impact are IntegerFields 1=Low, 2=Med, 3=High
+RISK = {'low': 1, 'medium': 2, 'high': 3}
+
+# Demo persona identifiers come from accounts.demo_personas — the single
+# source of truth for username/email/role. Re-exported under the old local
+# names so internal references stay short.
+PERSONA_USERNAMES = DEMO_USERNAMES
+LEGACY_USERNAMES = LEGACY_DEMO_USERNAMES
+LEGACY_EMAILS = LEGACY_DEMO_EMAILS
+LEGACY_BOARD_NAMES = ('Marketing Campaign', 'Bug Tracking', 'Software Project')
+
+# Phase labels stored on Task.phase (CharField). Must match the bare "Phase N"
+# format expected by the Gantt view's phase grouping (kanban/views.py l.3517) and
+# the CPM toggle's JS filter (gantt_chart.html l.2503).
+PHASE_FOUNDATION = 'Phase 1'
+PHASE_CORE = 'Phase 2'
+PHASE_INTEGRATIONS = 'Phase 3'
+PHASE_LAUNCH = 'Phase 4'
+
+
+def _aware_due(d):
+    """Promote a date to an aware datetime at 12:00 in the project tz."""
+    return timezone.make_aware(datetime.combine(d, time(12, 0)))
+
+
+# Work-type per task code → drives the "Bug vs Feature vs Chore" analytics chart.
+# Tuned for a realistic greenfield mix (feature-heavy build-out, a handful of
+# fix/hardening bugs, infra/docs/test chores). Epics carry the 'Epic' label and
+# classify as Feature automatically, so they're omitted here.
+_WORK_TYPE = {
+    # Done
+    'D1': 'Chore', 'D2': 'Chore', 'D3': 'Chore', 'D4': 'Feature',
+    'D5': 'Feature', 'D6': 'Feature', 'D7': 'Bug', 'D8': 'Feature',
+    'D9': 'Chore', 'D10': 'Chore', 'D11': 'Chore', 'D12': 'Chore',
+    # In Review
+    'R1': 'Feature', 'R2': 'Feature',
+    # In Progress
+    'P1': 'Feature', 'P2': 'Chore', 'P3': 'Feature', 'P4': 'Chore',
+    # To Do
+    'T1': 'Feature', 'T2': 'Feature', 'T3': 'Feature', 'T4': 'Feature',
+    'T5': 'Bug', 'T6': 'Bug',
+    # Backlog
+    'B1': 'Bug', 'B2': 'Chore', 'B3': 'Feature', 'B4': 'Feature',
+    'B5': 'Chore', 'B6': 'Chore', 'B7': 'Chore', 'B8': 'Feature',
+}
 
 
 class Command(BaseCommand):
-    help = 'Populate ALL demo data in a single command (tasks, wiki, messaging, conflicts, AI assistant)'
-
-    @staticmethod
-    def _next_quarter_label():
-        """Return a label like 'Q2 2025' for the next calendar quarter."""
-        today = date.today()
-        quarter = (today.month - 1) // 3 + 1  # current quarter (1-4)
-        next_q = quarter % 4 + 1
-        year = today.year if next_q > quarter else today.year + 1
-        return f'Q{next_q} {year}'
+    help = (
+        'Populate the Software Development demo board with realistic, '
+        'dynamically-dated data. Safe to run multiple times.'
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--reset',
             action='store_true',
-            help='Delete ALL existing demo data before creating new data',
-        )
-        parser.add_argument(
-            '--skip-tasks',
-            action='store_true',
-            help='Skip task creation (useful if tasks already exist)',
+            help='Delete existing demo tasks/related data before reseeding',
         )
 
+    # ------------------------------------------------------------------
+    # Main entry point
+    # ------------------------------------------------------------------
     def handle(self, *args, **options):
-        self.stdout.write(self.style.SUCCESS('\n' + '=' * 80))
-        self.stdout.write(self.style.SUCCESS('CONSOLIDATED DEMO DATA POPULATION'))
-        self.stdout.write(self.style.SUCCESS('=' * 80 + '\n'))
+        self.TODAY = timezone.now().date()
+        self.NOW = timezone.now()
+        self.reset = options.get('reset', False)
 
-        # =====================================================================
-        # SELF-HEALING: Ensure demo organization exists before proceeding
-        # =====================================================================
-        try:
-            self.demo_org = Organization.objects.get(is_demo=True, name='Demo - Acme Corporation')
-            self.stdout.write(self.style.SUCCESS(f'✅ Found organization: {self.demo_org.name}'))
-        except Organization.DoesNotExist:
-            self.stdout.write(self.style.WARNING(
-                '⚠️ Demo organization not found. Auto-creating...'
-            ))
-            # Self-healing: create demo organization
-            from django.core.management import call_command
-            call_command('create_demo_organization')
-            try:
-                self.demo_org = Organization.objects.get(is_demo=True)
-                self.stdout.write(self.style.SUCCESS(f'✅ Created organization: {self.demo_org.name}'))
-            except Organization.DoesNotExist:
-                self.stdout.write(self.style.ERROR(
-                    '❌ Failed to create demo organization.'
-                ))
-                return
+        self.stdout.write(self.style.SUCCESS('=' * 80))
+        self.stdout.write(self.style.SUCCESS('DEMO DATA POPULATION - Software Development board'))
+        self.stdout.write(self.style.SUCCESS('=' * 80))
+        self.stdout.write(f'Today: {self.TODAY}  (project mid-point)')
+        self.stdout.write('')
 
-        # Get demo users (self-healing: will be created by create_demo_organization if missing)
-        self.alex = User.objects.filter(username='alex_chen_demo').first()
-        self.sam = User.objects.filter(username='sam_rivera_demo').first()
-        self.jordan = User.objects.filter(username='jordan_taylor_demo').first()
-
-        self.demo_users = [u for u in [self.alex, self.sam, self.jordan] if u]
-        if len(self.demo_users) < 3:
-            self.stdout.write(self.style.WARNING(
-                '⚠️ Demo users not found. Running create_demo_organization to fix...'
-            ))
-            from django.core.management import call_command
-            call_command('create_demo_organization')
-            # Refresh user references
-            self.alex = User.objects.filter(username='alex_chen_demo').first()
-            self.sam = User.objects.filter(username='sam_rivera_demo').first()
-            self.jordan = User.objects.filter(username='jordan_taylor_demo').first()
-            self.demo_users = [u for u in [self.alex, self.sam, self.jordan] if u]
-            
-        self.stdout.write(f'   Found {len(self.demo_users)} demo users')
-
-        # Get demo boards (self-healing: recreate if missing)
-        self.demo_boards = Board.objects.filter(organization=self.demo_org, is_official_demo_board=True)
-        self.software_board = self.demo_boards.filter(name__icontains='software').first()
-        self.marketing_board = self.demo_boards.filter(name__icontains='marketing').first()
-        self.bug_board = self.demo_boards.filter(name__icontains='bug').first()
-
-        if not self.software_board:
-            self.stdout.write(self.style.WARNING(
-                '⚠️ Demo board not found. Running create_demo_organization to fix...'
-            ))
-            from django.core.management import call_command
-            call_command('create_demo_organization')
-            # Refresh board references
-            self.demo_boards = Board.objects.filter(organization=self.demo_org, is_official_demo_board=True)
-            self.software_board = self.demo_boards.filter(name__icontains='software').first()
-            self.marketing_board = None
-            self.bug_board = None
-            
-        self.stdout.write(f'   Found {self.demo_boards.count()} demo boards')
-
-        # Reset if requested
-        if options['reset']:
-            self.reset_all_demo_data()
+        # Ensure org + personas + board scaffolding exist (self-healing).
+        self._ensure_scaffolding()
 
         with transaction.atomic():
-            # 1. Create tasks and related data (unless skipped)
-            if not options['skip_tasks']:
-                self.stdout.write(self.style.NOTICE('\n📝 PHASE 1: Creating Tasks & Core Data...'))
-                from django.core.management import call_command
-                try:
-                    if options['reset']:
-                        call_command('populate_demo_data', '--reset')
-                    else:
-                        call_command('populate_demo_data')
-                except Exception as e:
-                    self.stdout.write(self.style.WARNING(f'   ⚠️ Task creation via existing command: {e}'))
-                    self.stdout.write('   Creating tasks directly...')
-                    # Fallback: tasks are created by the existing command
+            if self.reset:
+                self._reset_demo_data()
 
-            # 2. Wiki Demo Data
-            self.stdout.write(self.style.NOTICE('\n📚 PHASE 2: Creating Wiki Demo Data...'))
-            wiki_stats = self.create_wiki_demo_data()
-            self.stdout.write(self.style.SUCCESS(
-                f'   ✅ Wiki: {wiki_stats["categories"]} categories, {wiki_stats["pages"]} pages, {wiki_stats["links"]} links'
-            ))
+            # Always: delete legacy boards from the demo org (Marketing/Bug Tracking)
+            self._delete_legacy_demo_boards()
 
-            # 3. Messaging Demo Data
-            self.stdout.write(self.style.NOTICE('\n💬 PHASE 3: Creating Messaging Demo Data...'))
-            msg_stats = self.create_messaging_demo_data()
-            self.stdout.write(self.style.SUCCESS(
-                f'   ✅ Messaging: {msg_stats["rooms"]} rooms, {msg_stats["messages"]} messages'
-            ))
+            # Always: purge legacy demo persona accounts. Old User+BoardMembership
+            # rows would otherwise still appear in AI Resource Optimization and
+            # other per-board reports. Self-heals on every seeder invocation.
+            self._delete_legacy_demo_accounts()
 
-            # 4. Conflict Demo Data
-            self.stdout.write(self.style.NOTICE('\n⚠️ PHASE 4: Creating Conflict Demo Data...'))
-            conflict_stats = self.create_conflict_demo_data()
-            self.stdout.write(self.style.SUCCESS(
-                f'   ✅ Conflicts: {conflict_stats["conflicts"]} conflicts, {conflict_stats["resolutions"]} resolutions'
-            ))
+            # Idempotency: if the board already has seed tasks AND we're not
+            # resetting, this is a no-op (the heavy seed work has nothing safe
+            # to add - singletons like ProjectBudget would clash).
+            existing_tasks = Task.objects.filter(
+                column__board=self.board, is_seed_demo_data=True,
+            ).count()
+            did_full_seed = False
+            if existing_tasks > 0 and not self.reset:
+                self.stdout.write(self.style.WARNING(
+                    f'  Board already has {existing_tasks} seed tasks. '
+                    'Skipping seed (pass --reset to rebuild).'
+                ))
+                # Always refresh labels - cheap and matches new colour scheme
+                self._create_labels(self.board)
+            else:
+                # Core seed sequence
+                did_full_seed = True
+                labels = self._create_labels(self.board)
+                epics = self._create_epics(labels)
+                tasks_by_code = self._create_child_tasks(epics, labels)
+                self._link_dependencies(tasks_by_code)
+                self._create_milestones(tasks_by_code)
+                self._create_budget_and_time(tasks_by_code, epics)
+                self._create_stakeholders(tasks_by_code)
+                self._create_scope_baseline()
+                self._create_retrospective()
+                self._create_chat_rooms()
+                self._create_coaching_suggestions(tasks_by_code)
+                self._create_historical_tasks_for_ml()
+                self._create_priority_decisions(tasks_by_code)
+                self._create_wiki_pages()
+                self._create_velocity_snapshots()
+                self._create_confidence_history()
+                # Run last: reads the final board task count so the ROI history's
+                # total_tasks matches every other budget surface (33, not 32/36).
+                self._create_roi_snapshots()
 
-            # 5. AI Assistant Demo Data
-            self.stdout.write(self.style.NOTICE('\n🤖 PHASE 5: Creating AI Assistant Demo Data...'))
-            ai_stats = self.create_ai_assistant_demo_data()
-            self.stdout.write(self.style.SUCCESS(
-                f'   ✅ AI Assistant: {ai_stats["sessions"]} sessions, {ai_stats["messages"]} messages, '
-                f'{ai_stats["analytics"]} analytics, {ai_stats["knowledge_base"]} KB entries, '
-                f'{ai_stats["recommendations"]} recommendations'
-            ))
+            # Always run — idempotent via get_or_create
+            self._create_custom_fields()
 
-            # 6. Time Tracking Demo Data
-            self.stdout.write(self.style.NOTICE('\n⏱️ PHASE 6: Creating Time Tracking Demo Data...'))
-            time_stats = self.create_time_tracking_demo_data()
-            self.stdout.write(self.style.SUCCESS(
-                f'   ✅ Time Tracking: {time_stats["entries"]} time entries for {time_stats["users"]} users'
-            ))
+        # Optional sub-seeders (best-effort, outside the transaction)
+        self._call_optional_subseeders()
 
-            # 7. Mission & Strategy (hierarchy layer above Boards)
-            self.stdout.write(self.style.NOTICE('\n🎯 PHASE 7: Creating Demo Mission & Strategy...'))
-            self.seed_demo_mission_strategy()
-            self.stdout.write(self.style.SUCCESS('   ✅ Demo Mission & Strategy seeded'))
+        # Run AFTER the sub-seeders: populate_discovery_demo_data promotes the
+        # "Regional Pricing Tiers for APAC" idea onto the board (the 33rd task).
+        # The autopsy reads the final board task count, so it must run last —
+        # otherwise it captures 28->32 and permanently misses the promoted task.
+        if did_full_seed:
+            self._create_scope_autopsy()
+            # Same ordering reason as the autopsy: the scope-creep suggestion is
+            # created before the Discovery sub-seeder promotes the 33rd task, so
+            # its "current scope" must be recomputed from the final board count.
+            self._finalize_scope_creep_figures()
 
-            # 8. Organization Goal (apex of hierarchy — sits above Mission)
-            self.stdout.write(self.style.NOTICE('\n🏆 PHASE 8: Creating Demo Organization Goal...'))
-            self.seed_demo_organization_goal()
-            self.stdout.write(self.style.SUCCESS('   ✅ Demo Organization Goal seeded'))
+        self._print_verification_report()
 
-        # Final Summary
-        self.print_final_summary()
+    # ------------------------------------------------------------------
+    # Scaffolding (org / users / board)
+    # ------------------------------------------------------------------
+    def _ensure_scaffolding(self):
+        """Ensure demo org, personas, and the Software Development board exist."""
+        try:
+            self.demo_org = Organization.objects.get(name=DEMO_ORG_NAME, is_demo=True)
+        except Organization.DoesNotExist:
+            self.stdout.write('Demo organisation missing - running create_demo_organization...')
+            call_command('create_demo_organization')
+            self.demo_org = Organization.objects.get(name=DEMO_ORG_NAME, is_demo=True)
 
-    def reset_all_demo_data(self):
-        """Reset ALL demo data - removes user-created content and prepares for fresh population"""
-        self.stdout.write(self.style.WARNING('\n🗑️ Resetting ALL demo data...'))
+        # Ensure all three personas exist (self-heal if missing)
+        if User.objects.filter(username__in=PERSONA_USERNAMES).count() < 3:
+            self.stdout.write('One or more personas missing - running create_demo_organization...')
+            call_command('create_demo_organization')
 
-        from django.db import connection
-        from kanban.models import Comment, TaskActivity, TaskFile
-        from kanban.resource_leveling_models import TaskAssignmentHistory
-        from kanban.stakeholder_models import StakeholderTaskInvolvement
+        self.priya = User.objects.get(username=DEMO_PERSONAS['lead']['username'])
+        self.marcus = User.objects.get(username=DEMO_PERSONAS['frontend']['username'])
+        self.elena = User.objects.get(username=DEMO_PERSONAS['devops']['username'])
+        # testuser1 is the real observer/tester account in the demo workspace.
+        # Optional: not present in every environment (e.g. CI). Falls back to
+        # marcus so the archive-board spread still uses 4 slots.
+        self.testuser1 = User.objects.filter(username='testuser1').first()
+        self.fourth_member = self.testuser1 or self.marcus
 
-        # =====================================================================
-        # STEP 1: Delete user-created boards (non-official demo boards)
-        #         — must delete all related artifacts before the boards
-        # =====================================================================
-        user_created_boards = list(Board.objects.filter(
+        # Board: created by create_demo_organization
+        try:
+            self.board = Board.objects.get(
+                name=DEMO_BOARD_NAME,
+                organization=self.demo_org,
+                is_official_demo_board=True,
+            )
+        except Board.DoesNotExist:
+            call_command('create_demo_organization')
+            self.board = Board.objects.get(
+                name=DEMO_BOARD_NAME,
+                organization=self.demo_org,
+                is_official_demo_board=True,
+            )
+
+        # Refresh deadline + phases on each run so dates stay current.
+        self.board.project_deadline = self.TODAY + timedelta(days=56)
+        self.board.num_phases = 4
+        self.board.save(update_fields=['project_deadline', 'num_phases'])
+
+        # Column lookup (will all exist after create_demo_organization)
+        self.columns = {c.name: c for c in self.board.columns.all()}
+        for needed in ('Backlog', 'To Do', 'In Progress', 'In Review', 'Done'):
+            if needed not in self.columns:
+                raise RuntimeError(
+                    f'Demo board missing column "{needed}". '
+                    'Run create_demo_organization first.'
+                )
+
+    # ------------------------------------------------------------------
+    # Cleanup
+    # ------------------------------------------------------------------
+    def _reset_demo_data(self):
+        """Wipe demo-board content (tasks + dependents) so we can reseed clean."""
+        self.stdout.write(self.style.WARNING('Resetting demo data...'))
+
+        # All boards in the demo org that are seed/official: the main board plus
+        # any historical/archive board. We never touch user-owned boards.
+        boards = list(Board.objects.filter(
             organization=self.demo_org,
-            is_official_demo_board=False
+            is_seed_demo_data=True,
         ))
 
-        deleted_board_count = 0
-        for board in user_created_boards:
-            task_ids = list(Task.objects.filter(column__board=board).values_list('id', flat=True))
-
+        for b in boards:
+            task_ids = list(Task.objects.filter(column__board=b).values_list('id', flat=True))
             if task_ids:
-                # Clear M2M on tasks first
-                for task in Task.objects.filter(id__in=task_ids):
-                    try:
-                        task.dependencies.clear()
-                    except Exception:
-                        pass
-                    try:
-                        task.related_tasks.clear()
-                    except Exception:
-                        pass
-
-                # Task-level children
-                TaskActivity.objects.filter(task_id__in=task_ids).delete()
+                # Clear M2M before deleting tasks
+                for t in Task.objects.filter(id__in=task_ids):
+                    t.dependencies.clear()
+                    t.related_tasks.clear()
                 Comment.objects.filter(task_id__in=task_ids).delete()
-                TaskFile.objects.filter(task_id__in=task_ids).delete()
-                try:
-                    TaskAssignmentHistory.objects.filter(task_id__in=task_ids).delete()
-                except Exception:
-                    pass
+                TaskCost.objects.filter(task_id__in=task_ids).delete()
+                TimeEntry.objects.filter(task_id__in=task_ids).delete()
+                ChecklistItem.objects.filter(task_id__in=task_ids).delete()
                 try:
                     StakeholderTaskInvolvement.objects.filter(task_id__in=task_ids).delete()
                 except Exception:
                     pass
                 try:
-                    TaskThreadComment.objects.filter(task_id__in=task_ids).delete()
+                    PriorityDecision.objects.filter(task_id__in=task_ids).delete()
                 except Exception:
                     pass
-                try:
-                    TimeEntry.objects.filter(task_id__in=task_ids).delete()
-                except Exception:
-                    pass
-                try:
-                    from kanban.budget_models import TaskCost
-                    TaskCost.objects.filter(task_id__in=task_ids).delete()
-                except Exception:
-                    pass
-                try:
-                    from wiki.models import WikiLink as WL
-                    WL.objects.filter(task_id__in=task_ids).delete()
-                except Exception:
-                    pass
-
                 Task.objects.filter(id__in=task_ids).delete()
 
-            # Board-level children
-            try:
-                from webhooks.models import WebhookEvent as WE, Webhook as WH
-                WE.objects.filter(board=board).delete()
-                WH.objects.filter(board=board).delete()
-            except Exception:
-                pass
-            try:
-                FileAttachment.objects.filter(chat_room__board=board).delete()
-                ChatMessage.objects.filter(chat_room__board=board).delete()
-                ChatRoom.objects.filter(board=board).delete()
-            except Exception:
-                pass
-            try:
-                ConflictNotification.objects.filter(conflict__board=board).delete()
-                ConflictResolution.objects.filter(conflict__board=board).delete()
-                ConflictDetection.objects.filter(board=board).delete()
-            except Exception:
-                pass
-            try:
-                AIAssistantMessage.objects.filter(session__board=board).delete()
-                AIAssistantSession.objects.filter(board=board).delete()
-                AITaskRecommendation.objects.filter(board=board).delete()
-                ProjectKnowledgeBase.objects.filter(board=board).delete()
-                AIAssistantAnalytics.objects.filter(board=board).delete()
-            except Exception:
-                pass
-            try:
-                from kanban.stakeholder_models import (
-                    StakeholderEngagementRecord
-                )
-                StakeholderEngagementRecord.objects.filter(
-                    stakeholder__board=board
-                ).delete()
-                StakeholderTaskInvolvement.objects.filter(
-                    stakeholder__board=board
-                ).delete()
-                from kanban.stakeholder_models import ProjectStakeholder
-                ProjectStakeholder.objects.filter(board=board).delete()
-            except Exception:
-                pass
-            try:
-                from kanban.retrospective_models import (
-                    RetrospectiveTrend, ImprovementMetric, LessonLearned,
-                    RetrospectiveActionItem, ProjectRetrospective
-                )
-                RetrospectiveTrend.objects.filter(board=board).delete()
-                ImprovementMetric.objects.filter(board=board).delete()
-                LessonLearned.objects.filter(board=board).delete()
-                RetrospectiveActionItem.objects.filter(board=board).delete()
-                ProjectRetrospective.objects.filter(board=board).delete()
-            except Exception:
-                pass
-            try:
-                from kanban.coach_models import CoachingSuggestion, PMMetrics
-                CoachingSuggestion.objects.filter(board=board).delete()
-                PMMetrics.objects.filter(board=board).delete()
-            except Exception:
-                pass
-            try:
-                from kanban.budget_models import ProjectBudget, ProjectROI
-                ProjectROI.objects.filter(board=board).delete()
-                ProjectBudget.objects.filter(board=board).delete()
-            except Exception:
-                pass
-            try:
-                from kanban.burndown_models import (
-                    TeamVelocitySnapshot, BurndownPrediction, BurndownAlert, SprintMilestone
-                )
-                BurndownAlert.objects.filter(board=board).delete()
-                BurndownPrediction.objects.filter(board=board).delete()
-                TeamVelocitySnapshot.objects.filter(board=board).delete()
-                SprintMilestone.objects.filter(board=board).delete()
-            except Exception:
-                pass
-            try:
-                from kanban.models import (
-                    TeamSkillProfile, SkillGap, SkillDevelopmentPlan,
-                    ScopeChangeSnapshot, ScopeCreepAlert,
-                    WorkloadDistributionRecommendation, TeamCapacityAlert,
-                    ResourceDemandForecast, MeetingTranscript
-                )
-                SkillGap.objects.filter(board=board).delete()
-                SkillDevelopmentPlan.objects.filter(board=board).delete()
-                TeamSkillProfile.objects.filter(board=board).delete()
-                ScopeCreepAlert.objects.filter(board=board).delete()
-                ScopeChangeSnapshot.objects.filter(board=board).delete()
-                WorkloadDistributionRecommendation.objects.filter(board=board).delete()
-                TeamCapacityAlert.objects.filter(board=board).delete()
-                ResourceDemandForecast.objects.filter(board=board).delete()
-                MeetingTranscript.objects.filter(board=board).delete()
-            except Exception:
-                pass
-            try:
-                from analytics.models import EngagementMetrics
-                EngagementMetrics.objects.filter(board=board).delete()
-            except Exception:
-                pass
-            try:
-                from kanban.permission_models import BoardMembership, PermissionAuditLog
-                BoardMembership.objects.filter(board=board).delete()
-                PermissionAuditLog.objects.filter(board=board).delete()
-            except Exception:
-                pass
+            # Board-scoped children
+            ProjectBudget.objects.filter(board=b).delete()
+            ProjectStakeholder.objects.filter(board=b).delete()
+            ProjectRetrospective.objects.filter(board=b).delete()
+            CoachingSuggestion.objects.filter(board=b).delete()
+            ChatMessage.objects.filter(chat_room__board=b).delete()
+            ChatRoom.objects.filter(board=b).delete()
 
-            # Delete columns then board (with FK safety)
-            board.columns.all().delete()
-            with connection.cursor() as c:
-                c.execute('PRAGMA foreign_keys = OFF;')
-            board.delete()
-            with connection.cursor() as c:
-                c.execute('PRAGMA foreign_keys = ON;')
-            deleted_board_count += 1
+            # Scope tracking: snapshots, alerts, autopsy reports, and per-task
+            # reasons. Without this, every --reset run accumulates another
+            # baseline row, producing the duplicate "May 09, 2026" entries in
+            # the Scope History list. Also reset the cached baseline_* fields
+            # on the board so the next seed call can set them cleanly.
+            from kanban.models import ScopeChangeSnapshot, ScopeCreepAlert
+            from kanban.scope_autopsy_models import (
+                ScopeAutopsyReport, TaskScopeReason,
+            )
+            ScopeCreepAlert.objects.filter(board=b).delete()
+            ScopeChangeSnapshot.objects.filter(board=b).delete()
+            # Cascades to ScopeTimelineEvent via the FK on_delete=CASCADE
+            ScopeAutopsyReport.objects.filter(board=b).delete()
+            TaskScopeReason.objects.filter(board=b).delete()
+            Board.objects.filter(pk=b.pk).update(
+                baseline_task_count=None,
+                baseline_complexity_total=None,
+                baseline_set_date=None,
+                baseline_set_by=None,
+            )
 
-        if deleted_board_count:
-            self.stdout.write(f'   ✓ Deleted {deleted_board_count} user-created boards')
-
-        # Fix any orphaned webhook events from previously-deleted boards
-        try:
-            with connection.cursor() as c:
-                c.execute(
-                    'DELETE FROM webhooks_webhookevent '
-                    'WHERE board_id NOT IN (SELECT id FROM kanban_board)'
-                )
-        except Exception:
-            pass
-
-        # =====================================================================
-        # STEP 2: Delete user-created tasks on official demo boards
-        # =====================================================================
-        user_tasks_on_demo_boards = Task.objects.filter(
-            column__board__in=self.demo_boards,
-            is_seed_demo_data=False
+        # Custom field definitions for the demo workspace (cascade deletes values)
+        demo_workspaces = Workspace.objects.filter(
+            organization=self.demo_org, is_demo=True
         )
-        if user_tasks_on_demo_boards.exists():
-            user_task_ids = list(user_tasks_on_demo_boards.values_list('id', flat=True))
-            # Clean children first
-            Comment.objects.filter(task_id__in=user_task_ids).delete()
-            TaskActivity.objects.filter(task_id__in=user_task_ids).delete()
-            TaskFile.objects.filter(task_id__in=user_task_ids).delete()
-            for t in Task.objects.filter(id__in=user_task_ids):
-                try:
-                    t.dependencies.clear()
-                except Exception:
-                    pass
-                try:
-                    t.related_tasks.clear()
-                except Exception:
-                    pass
-            deleted = user_tasks_on_demo_boards.delete()[0]
-            self.stdout.write(f'   ✓ Deleted {deleted} user-created tasks on demo boards')
+        CustomFieldDefinition.objects.filter(workspace__in=demo_workspaces).delete()
 
-        # Delete ALL comments on demo boards (will be repopulated by seed data)
-        Comment.objects.filter(
-            task__column__board__in=self.demo_boards
+        # Wiki: pages/categories are org-level (not board-scoped), so they were
+        # never cleaned by the board loop above. Without this, every reset left
+        # the previous seed's rows behind (get_or_create only adds, never
+        # removes) - accumulating orphaned pages/categories that broke DB
+        # migrations and produced empty/duplicate categories in the UI. Purge
+        # the whole demo-org wiki here so the reseed starts from a clean slate.
+        # Scoped to demo_org, so real users' wiki is untouched. WikiPage delete
+        # cascades to its versions/access/links; category delete cascades to any
+        # remaining pages.
+        wp_deleted = WikiPage.objects.filter(organization=self.demo_org).delete()[0]
+        wc_deleted = WikiCategory.objects.filter(organization=self.demo_org).delete()[0]
+        self.stdout.write(
+            f'  [OK] Wiki purged: {wp_deleted} pages, {wc_deleted} categories'
+        )
+
+        self.stdout.write('  [OK] Reset complete')
+
+    def _delete_legacy_demo_boards(self):
+        """Delete Marketing Campaign / Bug Tracking / Software Project boards
+        that belong to the demo org. Safe - never touches real user boards
+        because of the organization filter."""
+        legacy = Board.objects.filter(
+            organization=self.demo_org,
+            name__in=LEGACY_BOARD_NAMES,
+        )
+        deleted = []
+        for b in legacy:
+            deleted.append(b.name)
+            # Cascade everything
+            task_ids = list(Task.objects.filter(column__board=b).values_list('id', flat=True))
+            for t in Task.objects.filter(id__in=task_ids):
+                t.dependencies.clear()
+                t.related_tasks.clear()
+            Comment.objects.filter(task_id__in=task_ids).delete()
+            TaskCost.objects.filter(task_id__in=task_ids).delete()
+            TimeEntry.objects.filter(task_id__in=task_ids).delete()
+            ChecklistItem.objects.filter(task_id__in=task_ids).delete()
+            Task.objects.filter(id__in=task_ids).delete()
+            b.columns.all().delete()
+            b.delete()
+        if deleted:
+            self.stdout.write(self.style.WARNING(
+                f'  [OK] Deleted legacy demo boards: {", ".join(deleted)}'
+            ))
+
+    def _delete_legacy_demo_accounts(self):
+        """Neutralise old persona accounts (alex_chen_demo / sam_rivera_demo /
+        jordan_taylor_demo) so they stop appearing in AI Resource Optimization
+        and other per-board reports.
+
+        We deliberately do NOT ``delete()`` the User rows: ``Organization.created_by``
+        and several other FKs cascade-on-delete to the User, so removing a
+        legacy User would wipe the entire demo Organization, Workspace, Board,
+        Tasks, and historical training data.
+
+        Instead we:
+          1. Drop their BoardMembership rows on demo-org boards — this removes
+             them from the team-workload report query
+             (``User.objects.filter(board_memberships__board=board)``).
+          2. Drop their WorkspaceMembership rows on demo workspaces.
+          3. Set ``is_active=False`` so they can't log in.
+          4. Tag profile.is_demo_account=False so demo-only queries skip them.
+        """
+        from kanban.models import BoardMembership, WorkspaceMembership, Board, Workspace
+        from accounts.models import UserProfile
+
+        legacy_qs = User.objects.filter(
+            Q(username__in=LEGACY_USERNAMES) | Q(email__in=LEGACY_EMAILS)
+        )
+        legacy_ids = list(legacy_qs.values_list('id', flat=True))
+        if not legacy_ids:
+            return
+
+        # 1. Strip board memberships on demo-org boards
+        demo_board_ids = list(Board.objects.filter(
+            organization=self.demo_org
+        ).values_list('id', flat=True))
+        bm_deleted, _ = BoardMembership.objects.filter(
+            user_id__in=legacy_ids, board_id__in=demo_board_ids
         ).delete()
 
-        # =====================================================================
-        # STEP 3: Clear Wiki data (all data in demo org, will be repopulated)
-        # =====================================================================
-        WikiLink.objects.filter(wiki_page__organization=self.demo_org).delete()
-        WikiPage.objects.filter(organization=self.demo_org).delete()
-        WikiCategory.objects.filter(organization=self.demo_org).delete()
-        self.stdout.write('   ✓ Cleared Wiki data')
+        # 2. Strip workspace memberships on demo workspaces
+        demo_ws_ids = list(Workspace.objects.filter(
+            organization=self.demo_org
+        ).values_list('id', flat=True))
+        wm_deleted, _ = WorkspaceMembership.objects.filter(
+            user_id__in=legacy_ids, workspace_id__in=demo_ws_ids
+        ).delete()
 
-        # =====================================================================
-        # STEP 4: Clear Messaging data (all — will be repopulated)
-        # =====================================================================
-        Notification.objects.filter(recipient__in=self.demo_users).delete()
-        # Also clear notifications for ALL users on demo boards
-        try:
-            Notification.objects.filter(board__in=self.demo_boards).delete()
-        except Exception:
-            pass
-        FileAttachment.objects.filter(chat_room__board__in=self.demo_boards).delete()
-        ChatMessage.objects.filter(chat_room__board__in=self.demo_boards).delete()
-        TaskThreadComment.objects.filter(task__column__board__in=self.demo_boards).delete()
-        ChatRoom.objects.filter(board__in=self.demo_boards).delete()
-        self.stdout.write('   ✓ Cleared Messaging data')
+        # 3. Deactivate accounts (prevents login + removes from active dropdowns)
+        legacy_qs.update(is_active=False)
 
-        # =====================================================================
-        # STEP 5: Clear Conflicts data
-        # =====================================================================
-        ConflictNotification.objects.filter(conflict__board__in=self.demo_boards).delete()
-        ConflictResolution.objects.filter(conflict__board__in=self.demo_boards).delete()
-        ConflictDetection.objects.filter(board__in=self.demo_boards).delete()
-        self.stdout.write('   ✓ Cleared Conflict data')
+        # 4. Untag as demo accounts so demo-only filters exclude them
+        UserProfile.objects.filter(user_id__in=legacy_ids).update(is_demo_account=False)
 
-        # =====================================================================
-        # STEP 6: Clear AI Assistant data
-        # =====================================================================
-        AIAssistantMessage.objects.filter(session__board__in=self.demo_boards).delete()
-        AIAssistantSession.objects.filter(board__in=self.demo_boards).delete()
-        AIAssistantMessage.objects.filter(session__user__in=self.demo_users).delete()
-        AIAssistantSession.objects.filter(user__in=self.demo_users).delete()
-        ProjectKnowledgeBase.objects.filter(board__in=self.demo_boards).delete()
-        AIAssistantAnalytics.objects.filter(user__in=self.demo_users).delete()
-        AIAssistantAnalytics.objects.filter(board__in=self.demo_boards).delete()
-        AITaskRecommendation.objects.filter(board__in=self.demo_boards).delete()
-        self.stdout.write('   ✓ Cleared AI Assistant data')
+        names = list(legacy_qs.values_list('username', flat=True))
+        self.stdout.write(self.style.WARNING(
+            f'  [OK] Neutralised legacy demo accounts ({", ".join(names)}): '
+            f'{bm_deleted} board memberships, {wm_deleted} workspace memberships removed; '
+            f'accounts deactivated'
+        ))
 
-        # =====================================================================
-        # STEP 7: Clear Time Tracking data
-        # =====================================================================
-        TimeEntry.objects.filter(task__column__board__in=self.demo_boards).delete()
-        self.stdout.write('   ✓ Cleared Time Tracking data')
+    # ------------------------------------------------------------------
+    # Labels
+    # ------------------------------------------------------------------
+    def _create_labels(self, board):
+        """Create the board's regular labels (idempotent) and return a name -> obj map.
 
-        # =====================================================================
-        # STEP 8: Clear Stakeholder data
-        # =====================================================================
-        try:
-            from kanban.stakeholder_models import (
-                ProjectStakeholder, StakeholderTaskInvolvement, StakeholderEngagementRecord
-            )
-            StakeholderEngagementRecord.objects.filter(
-                stakeholder__board__in=self.demo_boards
-            ).delete()
-            StakeholderTaskInvolvement.objects.filter(
-                stakeholder__board__in=self.demo_boards
-            ).delete()
-            ProjectStakeholder.objects.filter(board__in=self.demo_boards).delete()
-        except Exception:
-            pass
-        self.stdout.write('   ✓ Cleared Stakeholder data')
-
-        # =====================================================================
-        # STEP 9: Clear Skill Profiles and Skill Gaps
-        # =====================================================================
-        from kanban.models import TeamSkillProfile, SkillGap
-        SkillGap.objects.filter(board__in=self.demo_boards).delete()
-        try:
-            from kanban.models import SkillDevelopmentPlan
-            SkillDevelopmentPlan.objects.filter(board__in=self.demo_boards).delete()
-        except Exception:
-            pass
-        TeamSkillProfile.objects.filter(board__in=self.demo_boards).delete()
-        self.stdout.write('   ✓ Cleared Skill data')
-
-        # =====================================================================
-        # STEP 10: Clear Scope Change data
-        # =====================================================================
-        from kanban.models import ScopeChangeSnapshot, ScopeCreepAlert
-        ScopeCreepAlert.objects.filter(board__in=self.demo_boards).delete()
-        ScopeChangeSnapshot.objects.filter(board__in=self.demo_boards).delete()
-        self.demo_boards.update(
-            baseline_task_count=None,
-            baseline_complexity_total=None,
-            baseline_set_date=None,
-            baseline_set_by=None
-        )
-        self.stdout.write('   ✓ Cleared Scope Change data and board baselines')
-
-        # =====================================================================
-        # STEP 11: Clear Sprint Milestones
-        # =====================================================================
-        from kanban.burndown_models import SprintMilestone
-        SprintMilestone.objects.filter(board__in=self.demo_boards).delete()
-        self.stdout.write('   ✓ Cleared Sprint Milestone data')
-
-        # =====================================================================
-        # STEP 12: Clear Retrospective data
-        # =====================================================================
-        try:
-            from kanban.retrospective_models import (
-                RetrospectiveTrend, ImprovementMetric, LessonLearned,
-                RetrospectiveActionItem, ProjectRetrospective
-            )
-            RetrospectiveTrend.objects.filter(board__in=self.demo_boards).delete()
-            ImprovementMetric.objects.filter(board__in=self.demo_boards).delete()
-            LessonLearned.objects.filter(board__in=self.demo_boards).delete()
-            RetrospectiveActionItem.objects.filter(board__in=self.demo_boards).delete()
-            ProjectRetrospective.objects.filter(board__in=self.demo_boards).delete()
-        except Exception:
-            pass
-        self.stdout.write('   ✓ Cleared Retrospective data')
-
-        # =====================================================================
-        # STEP 13: Clear Analytics engagement metrics
-        # =====================================================================
-        try:
-            from analytics.models import EngagementMetrics
-            EngagementMetrics.objects.filter(board__in=self.demo_boards).delete()
-        except Exception:
-            pass
-
-        # =====================================================================
-        # STEP 14: Clear Webhook events on demo boards
-        # =====================================================================
-        try:
-            from webhooks.models import WebhookEvent
-            WebhookEvent.objects.filter(board__in=self.demo_boards).delete()
-        except Exception:
-            pass
-
-        self.stdout.write(self.style.SUCCESS('   ✓ All demo data cleared\n'))
-
-    # =========================================================================
-    # WIKI DEMO DATA
-    # =========================================================================
-    def create_wiki_demo_data(self):
-        """Create wiki categories, pages, and links"""
-        demo_user = self.alex
-        
-        # Create categories
-        categories_data = self.get_wiki_categories_data()
-        created_categories = {}
-        
-        for cat_data in categories_data:
-            category, _ = WikiCategory.objects.update_or_create(
-                organization=self.demo_org,
-                slug=cat_data['slug'],
-                defaults={
-                    'name': cat_data['name'],
-                    'description': cat_data['description'],
-                    'icon': cat_data['icon'],
-                    'color': cat_data['color'],
-                    'ai_assistant_type': cat_data['ai_assistant_type'],
-                    'position': cat_data['position'],
-                }
-            )
-            created_categories[cat_data['slug']] = category
-
-        # Create pages
-        pages_data = self.get_wiki_pages_data()
-        created_pages = []
-        
-        for page_data in pages_data:
-            category = created_categories.get(page_data['category'])
-            if not category:
-                continue
-            
-            page, _ = WikiPage.objects.update_or_create(
-                organization=self.demo_org,
-                slug=page_data['slug'],
-                defaults={
-                    'title': page_data['title'],
-                    'content': page_data['content'],
-                    'category': category,
-                    'created_by': demo_user,
-                    'updated_by': demo_user,
-                    'is_published': True,
-                    'is_pinned': page_data.get('is_pinned', False),
-                    'tags': page_data.get('tags', []),
-                }
-            )
-            created_pages.append(page)
-
-        # Create links to tasks
-        links_created = self.create_wiki_links(demo_user)
-
-        return {
-            'categories': len(created_categories),
-            'pages': len(created_pages),
-            'links': links_created
-        }
-
-    def get_wiki_categories_data(self):
-        """Wiki category configurations"""
-        return [
-            {'slug': 'getting-started', 'name': 'Getting Started', 'description': 'Onboarding and setup guides', 'icon': '🚀', 'color': '#3498db', 'ai_assistant_type': 'onboarding', 'position': 1},
-            {'slug': 'technical-docs', 'name': 'Technical Documentation', 'description': 'API references and architecture', 'icon': '📖', 'color': '#2ecc71', 'ai_assistant_type': 'technical', 'position': 2},
-            {'slug': 'meeting-notes', 'name': 'Meeting Notes', 'description': 'Sprint and team meeting notes', 'icon': '📝', 'color': '#9b59b6', 'ai_assistant_type': 'meetings', 'position': 3},
-            {'slug': 'process-workflows', 'name': 'Process & Workflows', 'description': 'Standard procedures', 'icon': '⚙️', 'color': '#e74c3c', 'ai_assistant_type': 'process', 'position': 4},
-            {'slug': 'project-resources', 'name': 'Project Resources', 'description': 'Roadmaps and requirements', 'icon': '📊', 'color': '#f39c12', 'ai_assistant_type': 'documentation', 'position': 5},
+        Lean Six Sigma labels are intentionally NOT seeded: LSS is an
+        operations/manufacturing methodology unfamiliar to most software teams.
+        Users who want them can opt in via the "Add Lean Six Sigma labels"
+        button on the label manager. Task seeding uses an `if ln in labels`
+        guard, so any leftover 'Value-Added' references simply go untagged.
+        """
+        defs = [
+            # Technical
+            ('Backend', '#6366f1', 'regular'),
+            ('Frontend', '#06b6d4', 'regular'),
+            ('DevOps', '#8b5cf6', 'regular'),
+            ('Security', '#dc2626', 'regular'),
+            ('Database', '#d97706', 'regular'),
+            ('API', '#0891b2', 'regular'),
+            ('Testing', '#16a34a', 'regular'),
+            ('Documentation', '#6b7280', 'regular'),
+            ('Performance', '#c2410c', 'regular'),
+            ('Epic', '#7c3aed', 'regular'),
+            # Work-type labels — drive the "Bug vs Feature vs Chore" analytics chart.
+            # Names matched by analytics_helpers._classify_text (bug/feature keywords).
+            ('Bug', '#ef4444', 'regular'),
+            ('Feature', '#3b82f6', 'regular'),
+            ('Chore', '#64748b', 'regular'),
         ]
-
-    def get_wiki_pages_data(self):
-        """Wiki page configurations (condensed for brevity)"""
-        current_date = timezone.now().strftime('%B %d, %Y')
-        
-        return [
-            # Getting Started
-            {
-                'category': 'getting-started',
-                'title': 'Welcome to Acme Corporation',
-                'slug': 'welcome-to-acme',
-                'is_pinned': True,
-                'tags': ['onboarding', 'welcome'],
-                'content': f"""# Welcome to Acme Corporation! 🎉
-
-Welcome to the team! This knowledge hub contains everything you need to get started.
-
-## Quick Links
-- **[Team Setup Guide](team-setup-guide)** - Set up your development environment
-- **[Coding Standards](coding-standards)** - Our code quality guidelines
-
-## Who to Contact
-| Role | Person | Contact |
-|------|--------|---------|
-| Project Manager | Alex Chen | alex.chen@acme.com |
-| Lead Developer | Sam Rivera | sam.rivera@acme.com |
-
-*Last updated: {current_date}*"""
-            },
-            {
-                'category': 'getting-started',
-                'title': 'Team Setup Guide',
-                'slug': 'team-setup-guide',
-                'tags': ['setup', 'environment'],
-                'content': """# Team Setup Guide
-
-## Prerequisites
-- Python 3.10+ installed
-- Node.js 18+ installed
-- Git configured
-
-## Quick Start
-```bash
-# Example repository (fictional — replace with your project URL)
-git clone git@github.com:acme-corp/main-project.git
-cd main-project
-python -m venv venv
-pip install -r requirements.txt
-python manage.py migrate
-```"""
-            },
-            # Technical Docs
-            {
-                'category': 'technical-docs',
-                'title': 'API Documentation',
-                'slug': 'api-documentation',
-                'is_pinned': True,
-                'tags': ['api', 'rest', 'reference'],
-                'content': """# API Documentation
-
-## Authentication
-All API requests require JWT tokens.
-
-```bash
-POST /api/auth/token/
-{
-    "email": "user@example.com",
-    "password": "your_password"
-}
-```
-
-## Endpoints
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/boards/` | List all boards |
-| POST | `/api/tasks/` | Create task |"""
-            },
-            {
-                'category': 'technical-docs',
-                'title': 'Coding Standards',
-                'slug': 'coding-standards',
-                'tags': ['coding', 'standards'],
-                'content': """# Coding Standards
-
-## Python Standards
-- Follow PEP 8
-- Use type hints
-- Docstrings for all public functions
-
-## Code Review Checklist
-- [ ] Code follows style guidelines
-- [ ] All tests pass
-- [ ] Documentation updated"""
-            },
-            # Meeting Notes
-            {
-                'category': 'meeting-notes',
-                'title': 'Sprint 45 Planning Meeting',
-                'slug': 'sprint-45-planning',
-                'is_pinned': True,
-                'tags': ['sprint', 'planning'],
-                'content': f"""# Sprint 45 Planning Meeting
-
-**Date:** {current_date}
-**Attendees:** Alex Chen, Sam Rivera, Jordan Taylor
-
-## Sprint Goals
-1. Complete user authentication improvements
-2. Launch new dashboard analytics
-3. Fix critical bugs from Sprint 44
-
-## High Priority
-- AUTH-234: Implement password reset flow
-- DASH-567: Add burndown chart widget"""
-            },
-            # Process & Workflows
-            {
-                'category': 'process-workflows',
-                'title': 'Sprint Workflow Guide',
-                'slug': 'sprint-workflow',
-                'is_pinned': True,
-                'tags': ['sprint', 'agile', 'scrum'],
-                'content': """# Sprint Workflow Guide
-
-## Sprint Timeline
-- Week 1 Monday: Planning
-- Daily: Standups at 9:30 AM
-- Week 2 Thursday: Demo
-- Week 2 Friday: Retrospective
-
-## Task States
-| State | Description | WIP Limit |
-|-------|-------------|-----------|
-| To Do | Ready to start | No limit |
-| In Progress | Being worked on | 3/person |
-| Done | Completed | No limit |"""
-            },
-            # Project Resources - dynamic quarter calculation
-            {
-                'category': 'project-resources',
-                'title': f'{self._next_quarter_label()} Product Roadmap',
-                'slug': f'{self._next_quarter_label().lower().replace(" ", "-")}-roadmap',
-                'is_pinned': True,
-                'tags': ['roadmap', 'planning'],
-                'content': f"""# {self._next_quarter_label()} Product Roadmap
-
-## Vision
-"Enable teams to work smarter with AI-powered project management"
-
-## Month 1: Foundation
-- AI Task Suggestions v2
-- Dashboard Redesign
-- Performance Optimization
-
-## Month 2: Enhancement
-- Advanced Analytics
-- Enterprise SSO
-
-## Month 3: Growth
-- AI Meeting Assistant
-- Integration Marketplace"""
-            },
-        ]
-
-    def create_wiki_links(self, demo_user):
-        """Create links between wiki pages and tasks"""
-        links_created = 0
-        demo_tasks = Task.objects.filter(column__board__in=self.demo_boards)
-        
-        api_doc = WikiPage.objects.filter(organization=self.demo_org, slug='api-documentation').first()
-        coding_standards = WikiPage.objects.filter(organization=self.demo_org, slug='coding-standards').first()
-        
-        if api_doc:
-            api_tasks = demo_tasks.filter(title__icontains='api')[:3]
-            for task in api_tasks:
-                _, created = WikiLink.objects.get_or_create(
-                    wiki_page=api_doc,
-                    link_type='task',
-                    task=task,
-                    defaults={'created_by': demo_user, 'description': 'Related API documentation'}
-                )
-                if created:
-                    links_created += 1
-
-        if coding_standards:
-            code_tasks = demo_tasks.filter(title__iregex=r'(code|review|implement)')[:3]
-            for task in code_tasks:
-                _, created = WikiLink.objects.get_or_create(
-                    wiki_page=coding_standards,
-                    link_type='task',
-                    task=task,
-                    defaults={'created_by': demo_user, 'description': 'Follow coding standards'}
-                )
-                if created:
-                    links_created += 1
-
-        return links_created
-
-    # =========================================================================
-    # MESSAGING DEMO DATA
-    # =========================================================================
-    def create_messaging_demo_data(self):
-        """Create chat rooms, messages, and notifications"""
-        rooms_created = 0
-        messages_created = 0
-        now = timezone.now()
-        
-        chat_configs = self.get_chat_room_configs()
-        
-        for board in self.demo_boards:
-            board_name = board.name
-            if board_name not in chat_configs:
-                continue
-            
-            board_members = list(board.members.all())
-            creator = board_members[0] if board_members else self.alex
-            
-            for room_config in chat_configs[board_name]:
-                room, created = ChatRoom.objects.get_or_create(
-                    board=board,
-                    name=room_config['name'],
-                    defaults={
-                        'description': room_config['description'],
-                        'created_by': creator,
-                    }
-                )
-                
-                if created:
-                    rooms_created += 1
-                    for member in board_members:
-                        room.members.add(member)
-                
-                # Create messages if none exist
-                if ChatMessage.objects.filter(chat_room=room).count() == 0:
-                    for msg_data in room_config['messages']:
-                        author = self.get_user_by_key(msg_data['author'])
-                        if author and author in board_members:
-                            msg_time = now - timedelta(minutes=msg_data['minutes_ago'])
-                            msg = ChatMessage.objects.create(
-                                chat_room=room,
-                                author=author,
-                                content=msg_data['content'],
-                            )
-                            ChatMessage.objects.filter(pk=msg.pk).update(created_at=msg_time)
-                            messages_created += 1
-        
-        return {'rooms': rooms_created, 'messages': messages_created}
-
-    def get_user_by_key(self, key):
-        """Get user by short key name"""
-        return {
-            'alex': self.alex,
-            'sam': self.sam,
-            'jordan': self.jordan,
-        }.get(key)
-
-    def get_chat_room_configs(self):
-        """Chat room configurations for each board"""
-        return {
-            'Software Development': [
-                {
-                    'name': 'General Discussion',
-                    'description': 'Team updates and announcements',
-                    'messages': [
-                        {'author': 'alex', 'content': 'Good morning team! 🌅 Ready for sprint planning?', 'minutes_ago': 360},
-                        {'author': 'sam', 'content': 'Morning! Yes, I finished reviewing the backlog.', 'minutes_ago': 355},
-                        {'author': 'jordan', 'content': 'Good morning! I have the architecture notes ready for the planning session.', 'minutes_ago': 350},
-                        {'author': 'alex', 'content': 'Perfect. Let\'s prioritize the Auth System and API tasks first — those are blocking everything else.', 'minutes_ago': 340},
-                        {'author': 'sam', 'content': 'Agreed. The Base API Framework is nearly done. We can start integration with Auth by tomorrow.', 'minutes_ago': 335},
-                        {'author': 'jordan', 'content': 'I\'ll review the Auth design doc and flag any concerns before end of day.', 'minutes_ago': 330},
-                        {'author': 'alex', 'content': 'Just updated the sprint board — 12 tasks assigned, 18 remaining. Looks manageable.', 'minutes_ago': 240},
-                        {'author': 'sam', 'content': 'The Dashboard UI is coming together nicely. Should be ready for review by Thursday. 🎨', 'minutes_ago': 180},
-                        {'author': 'jordan', 'content': 'Great work everyone! The API integration looks solid. 👏', 'minutes_ago': 120},
-                        {'author': 'alex', 'content': 'Quick reminder: stakeholder demo is next Friday. Let\'s make sure the critical path tasks are green. 🟢', 'minutes_ago': 60},
-                    ]
-                },
-                {
-                    'name': 'Technical Support',
-                    'description': 'Technical questions and debugging help',
-                    'messages': [
-                        {'author': 'sam', 'content': 'Has anyone encountered issues with PostgreSQL 15 migration?', 'minutes_ago': 480},
-                        {'author': 'alex', 'content': 'Try `python manage.py migrate --fake-initial` first.', 'minutes_ago': 475},
-                        {'author': 'sam', 'content': 'That worked! Thanks 🙏', 'minutes_ago': 470},
-                        {'author': 'jordan', 'content': 'FYI — I updated the setup guide on the wiki with that fix. Check the Team Setup Guide page.', 'minutes_ago': 460},
-                        {'author': 'sam', 'content': 'Quick question: are we using Redis for caching or just the default DB cache?', 'minutes_ago': 300},
-                        {'author': 'alex', 'content': 'Redis in production, DB cache for local dev. Config is in settings/base.py.', 'minutes_ago': 295},
-                        {'author': 'jordan', 'content': 'The Search & Indexing Engine task requires Elasticsearch. I\'ve added setup steps to the wiki.', 'minutes_ago': 200},
-                        {'author': 'sam', 'content': 'Running into a rate-limiting edge case on the API. The tests pass but manual testing shows 429s under burst load.', 'minutes_ago': 120},
-                        {'author': 'jordan', 'content': 'I\'ll take a look — might need to adjust the token bucket window. Can you share the test payload?', 'minutes_ago': 115},
-                        {'author': 'sam', 'content': 'Pushed a repro script to the branch. Check `tests/test_rate_limit_burst.py`.', 'minutes_ago': 110},
-                    ]
-                },
-            ],
-        }
-
-    # =========================================================================
-    # CONFLICT DEMO DATA
-    # =========================================================================
-    def create_conflict_demo_data(self):
-        """Create conflict detection demo data"""
-        conflicts_created = 0
-        resolutions_created = 0
-        now = timezone.now()
-        
-        conflict_configs = self.get_conflict_configs()
-        
-        for board in self.demo_boards:
-            board_name = board.name
-            if board_name not in conflict_configs:
-                continue
-            
-            tasks = list(Task.objects.filter(column__board=board)[:10])
-            if not tasks:
-                continue
-            
-            for config in conflict_configs[board_name]:
-                # Get tasks for this conflict
-                task1 = tasks[config.get('task1_idx', 0) % len(tasks)]
-                task2_idx = config.get('task2_idx')
-                task2 = tasks[task2_idx % len(tasks)] if task2_idx else None
-                
-                affected_user = self.get_user_by_key(config.get('affected_user', 'sam'))
-                
-                conflict = ConflictDetection.objects.create(
-                    board=board,
-                    conflict_type=config['type'],
-                    severity=config['severity'],
-                    title=config['title'],
-                    description=config['description'],
-                    status=config.get('status', 'active'),
-                    ai_confidence_score=int(config.get('confidence', 0.85) * 100),
-                    detected_at=now - timedelta(days=config.get('days_ago', 1)),
-                    suggested_resolutions=[
-                        {
-                            'action': config.get('recommendation', ''),
-                            'confidence': config.get('confidence', 0.85),
-                        }
-                    ],
-                    conflict_data={
-                        'task1_id': task1.id,
-                        'task1_title': task1.title,
-                        'task2_id': task2.id if task2 else None,
-                        'task2_title': task2.title if task2 else None,
-                        'user_id': affected_user.id if affected_user else None,
-                        'user_name': affected_user.get_full_name() if affected_user else None,
-                    }
-                )
-                
-                # Add tasks
-                conflict.tasks.add(task1)
-                if task2:
-                    conflict.tasks.add(task2)
-                
-                # Add affected user
-                if affected_user:
-                    conflict.affected_users.add(affected_user)
-                
-                conflicts_created += 1
-                
-                # Generate actual ConflictResolution objects for active conflicts
-                if config.get('status') != 'resolved':
-                    # Use ConflictResolutionSuggester to generate proper resolutions
-                    from kanban.utils.conflict_detection import ConflictResolutionSuggester
-                    suggester = ConflictResolutionSuggester(conflict)
-                    generated_resolutions = suggester.generate_suggestions()
-                    resolutions_created += len(generated_resolutions)
-                else:
-                    # Create resolution if already resolved
-                    resolution = ConflictResolution.objects.create(
-                        conflict=conflict,
-                        resolution_type=config.get('resolution_type', 'custom'),
-                        title=config.get('resolution_action', 'Manually resolved'),
-                        description='Resolved after team discussion.',
-                        ai_confidence=int(config.get('confidence', 0.85) * 100),
-                        applied_by=self.alex,
-                    )
-                    # Update the conflict to point to this resolution
-                    conflict.chosen_resolution = resolution
-                    conflict.save()
-                    resolutions_created += 1
-        
-        return {'conflicts': conflicts_created, 'resolutions': resolutions_created}
-
-    def get_conflict_configs(self):
-        """Conflict configurations for each board"""
-        return {
-            'Software Development': [
-                {
-                    'type': 'resource',
-                    'severity': 'high',
-                    'title': 'Resource Overload: Sam Rivera',
-                    'description': 'Sam Rivera is assigned to 11 concurrent tasks, exceeding recommended capacity.',
-                    'task1_idx': 0, 'task2_idx': 1,
-                    'affected_user': 'sam',
-                    'confidence': 0.92,
-                    'recommendation': 'Consider redistributing 2-3 tasks to other team members.',
-                },
-                {
-                    'type': 'dependency',
-                    'severity': 'medium',
-                    'title': 'Circular Dependency Detected',
-                    'description': 'Task chain creates a circular dependency that may cause scheduling issues.',
-                    'task1_idx': 2, 'task2_idx': 3,
-                    'confidence': 0.88,
-                    'recommendation': 'Review and break the dependency cycle.',
-                },
-            ],
-        }
-
-    # =========================================================================
-    # AI ASSISTANT DEMO DATA
-    # =========================================================================
-    def create_ai_assistant_demo_data(self):
-        """Create AI assistant sessions, messages, analytics, and recommendations"""
-        sessions_created = 0
-        messages_created = 0
-        analytics_created = 0
-        recommendations_created = 0
-        kb_created = 0
-        now = timezone.now()
-        
-        primary_user = self.alex
-        
-        # Create user preferences for all demo users
-        for user in self.demo_users:
-            UserPreference.objects.get_or_create(
-                user=user,
-                defaults={
-                    'enable_web_search': True,
-                    'enable_task_insights': True,
-                    'enable_risk_alerts': True,
-                    'enable_resource_recommendations': True,
-                }
-            )
-        
-        # Create sessions with rich data
-        sessions_data = self.get_ai_sessions_data()
-        
-        for session_data in sessions_data:
-            board = None
-            if session_data.get('board') == 'software':
-                board = self.software_board
-            elif session_data.get('board') == 'marketing':
-                board = self.marketing_board
-            elif session_data.get('board') == 'bug':
-                board = self.bug_board
-            
-            # Calculate tokens
-            total_tokens = sum(msg_data.get('tokens', 150) for msg_data in session_data['messages'])
-            
-            session = AIAssistantSession.objects.create(
-                user=primary_user,
+        labels = {}
+        for name, color, category in defs:
+            obj, _ = TaskLabel.objects.get_or_create(
                 board=board,
-                title=session_data['title'],
-                description=session_data.get('description', ''),
-                is_active=session_data.get('is_active', False),
-                is_demo=True,  # Mark as demo session visible to all users
-                message_count=len(session_data['messages']),
-                total_tokens_used=total_tokens,
+                name=name,
+                defaults={'color': color, 'category': category},
             )
-            
-            # Backdate session
-            days_ago = session_data.get('days_ago', 0)
-            backdated = now - timedelta(days=days_ago)
-            AIAssistantSession.objects.filter(pk=session.pk).update(
-                created_at=backdated, 
-                updated_at=backdated
-            )
-            
-            sessions_created += 1
-            
-            # Create messages with realistic timing
-            for idx, msg_data in enumerate(session_data['messages']):
-                msg_time = backdated + timedelta(minutes=idx * 2)
-                msg = AIAssistantMessage.objects.create(
-                    session=session,
-                    role=msg_data['role'],
-                    content=msg_data['content'],
-                    model='gemini' if msg_data['role'] == 'assistant' else None,
-                    tokens_used=msg_data.get('tokens', 150),
-                    used_web_search=msg_data.get('web_search', False),
-                    context_data={'knowledge_base_used': msg_data.get('kb_used', False)},
-                )
-                AIAssistantMessage.objects.filter(pk=msg.pk).update(created_at=msg_time)
-                messages_created += 1
-        
-        # Create analytics for the last 30 days
-        analytics_created = self.create_ai_analytics(primary_user)
-        
-        # Create knowledge base entries
-        kb_created = self.create_knowledge_base()
-        
-        # Create task recommendations
-        recommendations_created = self.create_task_recommendations()
-        
-        return {
-            'sessions': sessions_created, 
-            'messages': messages_created,
-            'analytics': analytics_created,
-            'knowledge_base': kb_created,
-            'recommendations': recommendations_created,
-        }
-    
-    def create_ai_analytics(self, user):
-        """Create analytics data for the last 30 days"""
-        from django.db import IntegrityError
-        analytics_created = 0
-        now = timezone.now()
-        
-        # First, delete any existing analytics for demo boards to avoid conflicts
-        if self.software_board:
-            AIAssistantAnalytics.objects.filter(board=self.software_board).delete()
-        if self.marketing_board:
-            AIAssistantAnalytics.objects.filter(board=self.marketing_board).delete()
-        
-        # Create analytics for last 31 days with realistic progression
-        # Note: date field has auto_now_add=True, so we need to update it after creation
-        for days_back in range(30, -1, -1):
-            target_date = (now - timedelta(days=days_back)).date()
-            
-            # Vary activity by day (less on weekends)
-            is_weekend = target_date.weekday() >= 5
-            multiplier = 0.3 if is_weekend else 1.0
-            
-            # Always create analytics for software board (main board)
-            if self.software_board:
-                messages = max(1, int(random.randint(5, 15) * multiplier))
-                gemini = messages
-                kb_queries = max(1, int(random.randint(2, 8) * multiplier))
-                web_searches = max(0, int(random.randint(1, 4) * multiplier))
-                
-                try:
-                    with transaction.atomic():
-                        obj = AIAssistantAnalytics.objects.create(
-                            user=user,
-                            board=self.software_board,
-                            sessions_created=random.randint(1, 3),
-                            messages_sent=messages,
-                            gemini_requests=gemini,
-                            web_searches_performed=web_searches,
-                            knowledge_base_queries=kb_queries,
-                            total_tokens_used=messages * random.randint(100, 250),
-                            input_tokens=messages * random.randint(40, 80),
-                            output_tokens=messages * random.randint(60, 170),
-                            helpful_responses=int(messages * 0.8),
-                            unhelpful_responses=int(messages * 0.1),
-                            avg_response_time_ms=random.randint(800, 2500),
-                        )
-                        # Update the date field (bypasses auto_now_add)
-                        AIAssistantAnalytics.objects.filter(pk=obj.pk).update(date=target_date)
-                        analytics_created += 1
-                except IntegrityError:
-                    pass  # Record already exists
-            
-            # Create analytics for marketing board every 3-4 days
-            if self.marketing_board and days_back % 3 == 0:
-                messages = max(1, int(random.randint(2, 8) * multiplier))
-                gemini = messages
-                
-                try:
-                    with transaction.atomic():
-                        obj = AIAssistantAnalytics.objects.create(
-                            user=user,
-                            board=self.marketing_board,
-                            sessions_created=random.randint(0, 2),
-                            messages_sent=messages,
-                            gemini_requests=gemini,
-                            web_searches_performed=max(0, int(random.randint(0, 2) * multiplier)),
-                            knowledge_base_queries=max(1, int(random.randint(1, 4) * multiplier)),
-                            total_tokens_used=messages * random.randint(100, 200),
-                            input_tokens=messages * random.randint(40, 70),
-                            output_tokens=messages * random.randint(60, 130),
-                            helpful_responses=int(messages * 0.85),
-                            unhelpful_responses=int(messages * 0.05),
-                            avg_response_time_ms=random.randint(700, 2000),
-                        )
-                        # Update the date field (bypasses auto_now_add)
-                        AIAssistantAnalytics.objects.filter(pk=obj.pk).update(date=target_date)
-                        analytics_created += 1
-                except IntegrityError:
-                    pass  # Record already exists
-        
-        return analytics_created
-    
-    def create_knowledge_base(self):
-        """Create knowledge base entries"""
-        kb_created = 0
-        demo_user = self.alex
-        
-        kb_entries = [
-            {
-                'board': self.software_board,
-                'content_type': 'project_overview',
-                'title': 'Software Development Sprint Goals',
-                'content': 'Focus on user authentication, API development, and dashboard improvements. Team includes 3 members working on 2-week sprints.',
-            },
-            {
-                'board': self.software_board,
-                'content_type': 'risk_assessment',
-                'title': 'Technical Debt Analysis',
-                'content': 'Database migration pending. Security vulnerabilities identified in authentication module. Performance optimization needed for dashboard queries.',
-            },
-            {
-                'board': self.marketing_board,
-                'content_type': 'project_overview',
-                'title': 'Q1 Marketing Campaign',
-                'content': 'Social media campaign launch planned. Focus on brand awareness and lead generation. Budget allocated for ads and content creation.',
-            },
-            {
-                'board': self.bug_board,
-                'content_type': 'documentation',
-                'title': 'Bug Tracking Process',
-                'content': 'All production bugs should be logged immediately. Critical bugs require immediate attention. Security bugs must be escalated.',
-            },
-        ]
-        
-        for entry_data in kb_entries:
-            if entry_data['board']:
-                ProjectKnowledgeBase.objects.create(
-                    board=entry_data['board'],
-                    content_type=entry_data['content_type'],
-                    title=entry_data['title'],
-                    content=entry_data['content'],
-                    summary=entry_data['content'][:200],
-                    is_active=True,
-                )
-                kb_created += 1
-        
-        return kb_created
-    
-    def create_task_recommendations(self):
-        """Create AI task recommendations"""
-        recommendations_created = 0
-        
-        # Get some tasks from software board
-        software_tasks = list(Task.objects.filter(column__board=self.software_board)[:5])
-        
-        if len(software_tasks) >= 3:
-            # Optimization recommendation
-            AITaskRecommendation.objects.create(
-                task=software_tasks[0],
-                board=self.software_board,
-                recommendation_type='optimization',
-                title='Consider breaking down this large task',
-                description='This task has high complexity. Breaking it into smaller subtasks could improve tracking and reduce risk.',
-                potential_impact='medium',
-                confidence_score=Decimal('0.82'),
-                suggested_action='Split into 3-4 smaller tasks focusing on: authentication logic, API integration, testing, documentation',
-                expected_benefit='Better progress tracking, easier to assign, reduced delivery risk',
-                status='pending',
-            )
-            recommendations_created += 1
-            
-            # Resource allocation recommendation
-            AITaskRecommendation.objects.create(
-                task=software_tasks[1],
-                board=self.software_board,
-                recommendation_type='resource_allocation',
-                title='Sam Rivera may be overloaded',
-                description='Sam Rivera is assigned to 8 concurrent tasks. This task might benefit from reassignment.',
-                potential_impact='high',
-                confidence_score=Decimal('0.89'),
-                suggested_action='Consider reassigning to Jordan Taylor who has capacity',
-                expected_benefit='Better workload distribution, faster task completion',
-                status='pending',
-            )
-            recommendations_created += 1
-            
-            # Priority recommendation
-            AITaskRecommendation.objects.create(
-                task=software_tasks[2],
-                board=self.software_board,
-                recommendation_type='priority',
-                title='This task blocks 3 other tasks',
-                description='Several tasks depend on this one. Prioritizing it could unblock team progress.',
-                potential_impact='high',
-                confidence_score=Decimal('0.91'),
-                suggested_action='Move to high priority and assign to available developer immediately',
-                expected_benefit='Unblock dependent tasks, maintain sprint velocity',
-                status='accepted',
-            )
-            recommendations_created += 1
-        
-        return recommendations_created
+            # Keep color/category in sync on re-runs
+            obj.color = color
+            obj.category = category
+            obj.save(update_fields=['color', 'category'])
+            labels[name] = obj
+        return labels
 
-    def get_ai_sessions_data(self):
-        """AI Assistant session configurations"""
-        return [
-            {
-                'title': 'Sprint Planning Help',
-                'description': 'Getting help with sprint planning',
-                'is_active': True,
-                'days_ago': 0,
-                'board': 'software',
-                'messages': [
-                    {'role': 'user', 'content': 'What tasks should I prioritize for this sprint?', 'tokens': 80},
-                    {'role': 'assistant', 'content': """Based on your current board status, I recommend prioritizing:
+    # ------------------------------------------------------------------
+    # Helpers for task creation
+    # ------------------------------------------------------------------
+    def _days_ago(self, n):
+        return self.NOW - timedelta(days=n)
 
-**High Priority:**
-1. **Implement user authentication** - Blocking other features
-2. **Design database schema** - Foundation task
-3. **Fix critical security vulnerability** - Security first
+    def _make_task(self, *, code, title, description, column, phase, parent,
+                   priority, start_offset, due_offset, progress,
+                   complexity, risk_l, risk_i, risk_level, lss,
+                   workload, collab, est_cost, est_hours, hourly, actual_cost,
+                   assignee, creator, completed_offset=None, item_type='task',
+                   label_names=(), checklist=(), comments=(), labels=None):
+        """Create a Task + its TaskCost + checklist + comments in one shot.
 
-**Medium Priority:**
-4. **Build REST API endpoints** - Can proceed after auth
-5. **Create responsive dashboard** - Good for parallel work
-
-Would you like help with task estimation?""", 'tokens': 220, 'kb_used': True},
-                    {'role': 'user', 'content': 'Yes, how long should the authentication task take?', 'tokens': 75},
-                    {'role': 'assistant', 'content': """For the user authentication task, I estimate:
-
-**Development:** 3-5 days
-- Backend API: 2 days
-- Frontend integration: 1-2 days
-- Testing: 1 day
-
-**Dependencies:** Database schema must be ready first.
-
-**Risks:** Third-party OAuth integration may add 1-2 days if needed.
-
-This assumes one developer working full-time. Should I create subtasks?""", 'tokens': 195, 'kb_used': True, 'web_search': False},
-                ]
-            },
-            {
-                'title': 'Team Workload Analysis',
-                'description': 'Analyzing team capacity',
-                'is_active': False,
-                'days_ago': 2,
-                'board': 'software',
-                'messages': [
-                    {'role': 'user', 'content': 'Is anyone on my team overloaded?', 'tokens': 60},
-                    {'role': 'assistant', 'content': """I've analyzed the current workload:
-
-| Team Member | Tasks | Hours | Utilization |
-|-------------|-------|-------|-------------|
-| Sam Rivera | 11 | 44h | ⚠️ 110% |
-| Jordan Taylor | 12 | 38h | ✅ 95% |
-| Alex Chen | 7 | 28h | ✅ 70% |
-
-**⚠️ Alert:** Sam Rivera is overloaded with implementation tasks.
-
-**Recommendation:** Reassign 1-2 implementation tasks from Sam to balance the workload.""", 'tokens': 245, 'kb_used': True},
-                    {'role': 'user', 'content': 'Which tasks should I reassign?', 'tokens': 70},
-                    {'role': 'assistant', 'content': """I recommend reassigning these tasks:
-
-1. **Error Tracking & Monitoring** → Jordan Taylor - Configuration task, matches Jordan's QA skills
-2. **Security Audit & Fixes** → Jordan Taylor - Testing-adjacent, complements Jordan's QA role
-
-Both tasks are well-defined and don't require deep system knowledge. This will bring Sam down to 90% utilization while Jordan stays at a healthy 95%.""", 'tokens': 180, 'kb_used': True},
-                ]
-            },
-            {
-                'title': 'Bug Prioritization Strategy',
-                'description': 'Help prioritizing bugs',
-                'is_active': False,
-                'days_ago': 1,
-                'board': 'bug',
-                'messages': [
-                    {'role': 'user', 'content': 'How should I prioritize the bugs in our backlog?', 'tokens': 75},
-                    {'role': 'assistant', 'content': """Here's a prioritization framework:
-
-**🔴 Critical Priority (Fix Immediately)**
-1. **Login Authentication Failure** - 100% users blocked
-2. **Data Loss on Form Submit** - All submissions affected
-
-**🟠 High Priority (This Sprint)**
-3. **Dashboard Performance** - Page load > 10s
-4. **Email Notifications** - Alerts not delivered
-
-**🟡 Medium Priority (Next Sprint)**
-5. **UI Alignment Issues** - Minor UX issues
-
-Would you like a detailed fix plan?""", 'tokens': 230, 'kb_used': True},
-                ]
-            },
-            {
-                'title': 'Risk Assessment Query',
-                'description': 'Checking project risks',
-                'is_active': False,
-                'days_ago': 5,
-                'board': 'software',
-                'messages': [
-                    {'role': 'user', 'content': 'What are the biggest risks in my current sprint?', 'tokens': 75},
-                    {'role': 'assistant', 'content': """I've identified these key risks:
-
-**🔴 High Risk**
-- **Database Migration** - Not started, blocks 5 tasks
-- **Security Vulnerability** - Unpatched, production exposure
-
-**🟠 Medium Risk**
-- **API Dependencies** - External service reliability unknown
-- **Resource Overallocation** - Sam Rivera at 112% capacity
-
-**Mitigation Actions:**
-1. Start database migration immediately
-2. Apply security patch today
-3. Rebalance Sam's workload
-
-Would you like detailed mitigation plans?""", 'tokens': 280, 'kb_used': True, 'web_search': True},
-                    {'role': 'user', 'content': 'Yes, give me the security patch details', 'tokens': 70},
-                    {'role': 'assistant', 'content': """For the security vulnerability:
-
-**Issue:** SQL injection vulnerability in user input validation
-**Severity:** High - Production exposure
-**Fix:** Update to Django 4.2.8 (patch available)
-
-**Action Steps:**
-1. Update requirements.txt: `Django==4.2.8`
-2. Run: `pip install -r requirements.txt`
-3. Test authentication flows
-4. Deploy to staging, then production
-
-**Time Estimate:** 2-3 hours including testing
-
-This should be done today to prevent potential data breach.""", 'tokens': 240, 'web_search': True},
-                ]
-            },
-            {
-                'title': 'Marketing Campaign Insights',
-                'description': 'Strategy discussion',
-                'is_active': False,
-                'days_ago': 7,
-                'board': 'marketing',
-                'messages': [
-                    {'role': 'user', 'content': 'What should be our focus for the Q1 campaign?', 'tokens': 75},
-                    {'role': 'assistant', 'content': """Based on your board and project goals:
-
-**Primary Focus Areas:**
-1. **Social Media Campaign** - 40% of budget
-   - LinkedIn for B2B outreach
-   - Twitter for product updates
-   
-2. **Content Marketing** - 30% of budget
-   - Blog posts (2/week)
-   - Case studies (1/month)
-   
-3. **Email Marketing** - 20% of budget
-   - Newsletter series
-   - Product announcements
-
-**Success Metrics:**
-- Lead generation: 500+ qualified leads
-- Engagement rate: >5%
-- Conversion rate: >2%
-
-Should I help draft the campaign timeline?""", 'tokens': 320, 'kb_used': True, 'web_search': True},
-                ]
-            },
-            {
-                'title': 'Dependency Chain Analysis',
-                'description': 'Checking task dependencies',
-                'is_active': False,
-                'days_ago': 3,
-                'board': 'software',
-                'messages': [
-                    {'role': 'user', 'content': 'Show me the dependency chain for the API tasks', 'tokens': 75},
-                    {'role': 'assistant', 'content': """Here's the dependency chain:
-
-```
-Database Schema Design
-    ↓
-User Authentication API
-    ↓
-    ├→ Dashboard API Endpoints
-    ├→ Project Management API
-    └→ Reporting API
-        ↓
-        Frontend Integration
-```
-
-**Critical Path:** Database → Auth → Dashboard (12 days)
-
-**Parallel Work Possible:**
-- Documentation can start now
-- UI mockups independent of backend
-
-**Bottleneck:** User Authentication API - blocks 3 major tasks
-
-Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_used': True},
-                ]
-            },
-        ]
-
-    # =========================================================================
-    # TIME TRACKING DEMO DATA
-    # =========================================================================
-    def create_time_tracking_demo_data(self):
-        """Create comprehensive time tracking demo data for all demo users"""
-        entries_created = 0
-        now = timezone.now().date()
-        
-        # Time entry descriptions for variety
-        descriptions = [
-            "Worked on core implementation",
-            "Code review and testing",
-            "Bug fixing and debugging",
-            "Feature development",
-            "Documentation updates",
-            "Meeting and planning session",
-            "Research and analysis",
-            "Deployment and configuration",
-            "Performance optimization",
-            "Unit testing",
-            "Integration work",
-            "Design review",
-            "Sprint planning activities",
-            "Client communication",
-            "Technical documentation",
-            "Code refactoring",
-            "Security review",
-            "Database optimization",
-            "API development",
-            "UI/UX improvements",
-        ]
-        
-        # Create time entries for each demo user
-        users_with_entries = set()
-        
-        for board in self.demo_boards:
-            # Get tasks from this board that are in progress or done
-            tasks = Task.objects.filter(
-                column__board=board,
-                progress__gt=0
-            ).select_related('assigned_to')
-            
-            for task in tasks:
-                # Determine which user should log time
-                # Use assigned user or cycle through demo users
-                if task.assigned_to in self.demo_users:
-                    primary_user = task.assigned_to
-                else:
-                    # Assign to a random demo user
-                    primary_user = random.choice(self.demo_users) if self.demo_users else None
-                
-                if not primary_user:
-                    continue
-                
-                users_with_entries.add(primary_user.username)
-                
-                # Create 1-4 time entries per task based on progress
-                num_entries = 1
-                if task.progress >= 75:
-                    num_entries = random.randint(2, 4)
-                elif task.progress >= 50:
-                    num_entries = random.randint(2, 3)
-                elif task.progress >= 25:
-                    num_entries = random.randint(1, 2)
-                
-                for i in range(num_entries):
-                    # Hours based on task complexity and progress
-                    base_hours = random.uniform(0.5, 4.0)
-                    if hasattr(task, 'complexity') and task.complexity:
-                        base_hours *= (1 + task.complexity * 0.1)
-                    hours = Decimal(str(round(base_hours, 2)))
-                    
-                    # Spread entries over the last 14 days with realistic distribution
-                    # More recent entries for tasks with higher progress
-                    max_days_ago = 14 if task.progress < 50 else 7
-                    days_ago = random.randint(0, max_days_ago)
-                    entry_date = now - timedelta(days=days_ago)
-                    
-                    # Avoid weekends for more realistic data
-                    while entry_date.weekday() >= 5:  # Saturday=5, Sunday=6
-                        days_ago += 1
-                        entry_date = now - timedelta(days=days_ago)
-                    
-                    description = random.choice(descriptions)
-                    
-                    # Check if entry already exists
-                    existing = TimeEntry.objects.filter(
-                        task=task,
-                        user=primary_user,
-                        work_date=entry_date
-                    ).exists()
-                    
-                    if not existing:
-                        TimeEntry.objects.create(
-                            task=task,
-                            user=primary_user,
-                            hours_spent=hours,
-                            description=f"{description} - {task.title[:30]}",
-                            work_date=entry_date,
-                        )
-                        entries_created += 1
-                
-                # Occasionally add a secondary collaborator's time
-                if task.progress >= 50 and random.random() < 0.3:
-                    other_users = [u for u in self.demo_users if u != primary_user]
-                    if other_users:
-                        collaborator = random.choice(other_users)
-                        users_with_entries.add(collaborator.username)
-                        collab_hours = Decimal(str(round(random.uniform(0.5, 2.0), 2)))
-                        collab_date = now - timedelta(days=random.randint(0, 7))
-                        
-                        # Avoid weekends
-                        while collab_date.weekday() >= 5:
-                            collab_date = collab_date - timedelta(days=1)
-                        
-                        existing = TimeEntry.objects.filter(
-                            task=task,
-                            user=collaborator,
-                            work_date=collab_date
-                        ).exists()
-                        
-                        if not existing:
-                            TimeEntry.objects.create(
-                                task=task,
-                                user=collaborator,
-                                hours_spent=collab_hours,
-                                description=f"Collaboration on {task.title[:30]}",
-                                work_date=collab_date,
-                            )
-                            entries_created += 1
-        
-        return {
-            'entries': entries_created,
-            'users': len(users_with_entries)
-        }
-
-    def seed_demo_organization_goal(self):
+        `code` is a short opaque id (D1, P1, T2, ...) used for dependency wiring;
+        it is not stored on the model.
         """
-        Create (or ensure) a demo Organization Goal and link the demo Mission to it.
-        Idempotent — safe to run multiple times.
-        """
-        creator = self.alex or User.objects.filter(is_superuser=True).first()
+        due_date = _aware_due(self.TODAY + timedelta(days=due_offset))
+        start_date = self.TODAY + timedelta(days=start_offset)
+        completed_at = self._days_ago(completed_offset) if completed_offset is not None else None
 
-        # --- Organization Goal ---
-        goal, created = OrganizationGoal.objects.get_or_create(
-            name='Increase Market Share in Asia by 15%',
-            defaults=dict(
-                description=(
-                    'Capture 15% of the Asia-Pacific enterprise security market within 24 months '
-                    'by launching localized AI-driven security products, building a regional partner '
-                    'ecosystem, and establishing brand recognition in key markets including India, '
-                    'Japan, and Singapore.'
-                ),
-                target_metric='15% market share increase in Asia-Pacific',
-                status='active',
-                organization=self.demo_org,
-                created_by=creator,
-                is_demo=True,
-                is_seed_demo_data=True,
-            )
-        )
-
-        # --- Link the demo Mission to this Goal ---
-        linked_count = Mission.objects.filter(
-            name='Prevent AI Security Threats',
+        task = Task.objects.create(
+            title=title,
+            description=description,
+            column=column,
+            phase=phase,
+            parent_task=parent,
+            item_type=item_type,
+            priority=priority,
+            start_date=start_date,
+            due_date=due_date,
+            progress=progress,
+            complexity_score=complexity,
+            risk_likelihood=RISK[risk_l],
+            risk_impact=RISK[risk_i],
+            risk_score=RISK[risk_l] * RISK[risk_i],
+            risk_level=risk_level,
+            lss_classification=lss,
+            workload_impact=workload,
+            collaboration_required=collab,
+            assigned_to=assignee,
+            created_by=creator,
+            completed_at=completed_at,
             is_seed_demo_data=True,
-        ).exclude(organization_goal=goal).update(organization_goal=goal)
-
-        action = 'created' if created else 'already exists'
-        self.stdout.write(
-            f'   Organization Goal "{goal.name}" ({action}) | '
-            f'Missions linked/updated: {linked_count}'
         )
 
-    def seed_demo_mission_strategy(self):
-        """
-        Create (or ensure) a demo Mission and Strategy and link all official
-        demo boards to the Strategy. Idempotent — safe to run multiple times.
-        """
-        creator = self.alex or User.objects.filter(is_superuser=True).first()
+        if completed_at is not None and start_date is not None:
+            task.actual_duration_days = (completed_at.date() - start_date).days
+            task.save(update_fields=['actual_duration_days'])
 
-        # --- Mission ---
-        mission, _ = Mission.objects.get_or_create(
-            name='Build Enterprise Security Platform',
-            defaults=dict(
-                description=(
-                    'Enterprise security threats are growing rapidly, especially with the increasing adoption '
-                    'of AI tools. This Mission focuses on building a robust platform that helps organizations '
-                    'identify, monitor, and eliminate security vulnerabilities across their infrastructure.'
-                ),
-                status='active',
-                created_by=creator,
-                is_demo=True,
+        # Backdate created_at (auto_now_add bypass) so analytics that key off it
+        # — cycle-time, backlog-age, avg-cycle-time — read real durations instead
+        # of collapsing to "today". Kept relative to TODAY (a task is "created"
+        # when its work starts) so the demo stays evergreen across resets.
+        # Future-dated backlog items are clamped to today (never created in the future).
+        created_dt = _aware_due(self.TODAY + timedelta(days=min(start_offset, 0)))
+        Task.objects.filter(pk=task.pk).update(created_at=created_dt)
+
+        # actual_cost is the DIRECT (non-labor) cost only — labor is derived
+        # separately from logged time × hourly_rate in TaskCost.get_total_actual_cost().
+        # The per-task `actual_cost` figures passed in here were ~labor-sized, so
+        # writing them to this field double-counted labor (every task showed ~+100%
+        # overrun and "Spent" disagreed with the cost breakdown). Demo tasks have no
+        # separate materials cost, so this is 0; real actual spend comes from time entries.
+        TaskCost.objects.create(
+            task=task,
+            estimated_cost=Decimal(str(est_cost)),
+            estimated_hours=Decimal(str(est_hours)),
+            hourly_rate=Decimal(str(hourly)),
+            actual_cost=Decimal('0.00'),
+        )
+
+        if labels is not None:
+            for ln in label_names:
+                if ln in labels:
+                    task.labels.add(labels[ln])
+            # Tag with a Bug/Feature/Chore work-type so the analytics breakdown
+            # chart renders real categories instead of falling back to priority.
+            wt = _WORK_TYPE.get(code)
+            if wt and wt in labels:
+                task.labels.add(labels[wt])
+
+        for pos, (text, done) in enumerate(checklist):
+            ChecklistItem.objects.create(
+                task=task, title=text, is_completed=done, position=pos,
+                completed_at=self.NOW - timedelta(days=1) if done else None,
+                completed_by=assignee if done else None,
+            )
+
+        for author, text, days_ago in comments:
+            c = Comment.objects.create(task=task, user=author, content=text)
+            # Backdate created_at (auto_now_add bypass)
+            Comment.objects.filter(pk=c.pk).update(
+                created_at=self.NOW - timedelta(days=days_ago)
+            )
+
+        return task
+
+    # ------------------------------------------------------------------
+    # Epics
+    # ------------------------------------------------------------------
+    def _create_epics(self, labels):
+        """Create 4 epic parent tasks in the Backlog column."""
+        backlog = self.columns['Backlog']
+        common = dict(
+            column=backlog, item_type='epic', progress=0, parent=None,
+            risk_l='medium', risk_i='medium', risk_level='medium',
+            lss=LSS_VA, workload='high', collab=True,
+            est_cost=0, est_hours=0, hourly=0, actual_cost=0,
+            creator=self.priya, label_names=['Epic'], labels=labels,
+        )
+        epic_foundation = self._make_task(
+            code='E1', title='EPIC: Foundation & Infrastructure',
+            description=('All tasks related to setting up the development environment, '
+                         'system architecture, and foundational infrastructure that all '
+                         'other work depends on.'),
+            phase=PHASE_FOUNDATION, priority='high',
+            start_offset=-56, due_offset=-21, complexity=9,
+            assignee=self.marcus, **common,
+        )
+        epic_auth = self._make_task(
+            code='E2', title='EPIC: Authentication & Security',
+            description=('All tasks related to user authentication, authorization, OAuth '
+                         'integrations, and security hardening across the platform.'),
+            phase=PHASE_CORE, priority='urgent',
+            start_offset=-35, due_offset=7, complexity=9,
+            assignee=self.priya, **common,
+        )
+        epic_api = self._make_task(
+            code='E3', title='EPIC: Core API & Database Layer',
+            description=('REST API endpoints, database schema design, migrations, and '
+                         'the data access layer powering all product features.'),
+            phase=PHASE_CORE, priority='high',
+            start_offset=-28, due_offset=14, complexity=8,
+            assignee=self.priya, **common,
+        )
+        epic_integrations = self._make_task(
+            code='E4', title='EPIC: Integrations & Notifications',
+            description=('Third-party service integrations including OAuth providers, '
+                         'push notification systems, and external API connectors.'),
+            phase=PHASE_INTEGRATIONS, priority='medium',
+            start_offset=14, due_offset=49, complexity=7,
+            assignee=self.elena, **common,
+        )
+        return {
+            'foundation': epic_foundation,
+            'auth': epic_auth,
+            'api': epic_api,
+            'integrations': epic_integrations,
+        }
+
+    # ------------------------------------------------------------------
+    # 32 child tasks
+    # ------------------------------------------------------------------
+    def _create_child_tasks(self, epics, labels):
+        """Create the 32 child tasks across all columns. Returns code -> task."""
+        col = self.columns
+        out = {}
+
+        # ===================== DONE (12) =====================
+        out['D1'] = self._make_task(
+            code='D1', title='Requirements Analysis & Planning',
+            description=('Define functional and non-functional requirements for the platform. '
+                         'Conduct stakeholder interviews, document user stories, establish acceptance '
+                         'criteria, and create the product requirements document (PRD) that will guide '
+                         'the entire development programme.'),
+            column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['foundation'],
+            priority='high', start_offset=-56, due_offset=-49, progress=100,
+            complexity=5, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_NVA, workload='medium', collab=True,
+            est_cost=3200, est_hours=40, hourly=80, actual_cost=3050,
+            assignee=self.priya, creator=self.priya, completed_offset=49,
+            label_names=['Documentation', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Conduct stakeholder interviews with all department heads', True),
+                ('Draft and review product requirements document (PRD)', True),
+                ('Define acceptance criteria for all major user stories', True),
+            ],
+            comments=[
+                (self.priya, 'Stakeholder interviews completed. Three rounds of review needed before sign-off - more iterations than planned but the final PRD is solid.', 51),
+                (self.marcus, 'PRD approved by all stakeholders. Ready to move to architecture.', 49),
+            ],
+        )
+        out['D2'] = self._make_task(
+            code='D2', title='Development Environment Setup',
+            description=('Configure local development environments, set up Docker containers, '
+                         'establish the CI/CD pipeline with GitHub Actions, configure code quality '
+                         'tools (linting, formatting, pre-commit hooks), and document the onboarding '
+                         'process for new developers.'),
+            column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['foundation'],
+            priority='high', start_offset=-52, due_offset=-40, progress=100,
+            complexity=6, risk_l='low', risk_i='high', risk_level='medium',
+            lss=LSS_NVA, workload='high', collab=True,
+            est_cost=2800, est_hours=32, hourly=87.5, actual_cost=2650,
+            assignee=self.elena, creator=self.priya, completed_offset=41,
+            label_names=['DevOps', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Set up Docker Compose for local development', True),
+                ('Configure GitHub Actions CI pipeline with test + lint', True),
+                ('Write developer onboarding documentation', True),
+            ],
+            comments=[
+                (self.elena, 'Docker setup is done. The CI pipeline runs in under 4 minutes with dependency caching. All green.', 46),
+                (self.marcus, 'Onboarding doc is excellent - I got up and running in 30 minutes as a test.', 44),
+            ],
+        )
+        out['D3'] = self._make_task(
+            code='D3', title='System Architecture Design',
+            description=('Design the overall system architecture including the Django backend, '
+                         'REST API layer, WebSocket server, Celery task queue, Redis caching '
+                         'strategy, PostgreSQL schema approach, and deployment topology on Google '
+                         'Cloud Run. Produce architecture decision records (ADRs) for all major '
+                         'technology choices.'),
+            column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['foundation'],
+            priority='urgent', start_offset=-48, due_offset=-37, progress=100,
+            complexity=9, risk_l='medium', risk_i='high', risk_level='high',
+            lss=LSS_VA, workload='high', collab=True,
+            est_cost=5600, est_hours=64, hourly=87.5, actual_cost=5950,
+            assignee=self.marcus, creator=self.priya, completed_offset=38,
+            label_names=['Backend', 'Documentation', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Design Django app structure and module boundaries', True),
+                ('Document API versioning strategy and REST conventions', True),
+                ('Write ADRs for PostgreSQL, Redis, and Celery decisions', True),
+                ('Review architecture with full team and incorporate feedback', True),
+            ],
+            comments=[
+                (self.marcus, 'Architecture review completed. Decision to use Django Channels for WebSockets was debated - Celery + Redis pub/sub was considered but Channels won on simplicity grounds.', 43),
+                (self.priya, 'ADRs approved. Slight over-budget due to extra review cycles but the rigour was worth it.', 40),
+            ],
+        )
+        out['D4'] = self._make_task(
+            code='D4', title='Database Schema Design',
+            description=('Design the complete PostgreSQL database schema including all entities, '
+                         'relationships, indexes, and constraints. Create ER diagrams, write the '
+                         'initial Django migrations, establish naming conventions, and document the '
+                         'data model with field-level descriptions.'),
+            column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['api'],
+            priority='high', start_offset=-39, due_offset=-31, progress=100,
+            complexity=7, risk_l='low', risk_i='high', risk_level='medium',
+            lss=LSS_VA, workload='medium', collab=False,
+            est_cost=3500, est_hours=40, hourly=87.5, actual_cost=3325,
+            # Delivered 4 days past its deadline (due_offset -31) so the On-Time
+            # vs Late analytics shows a realistic mix instead of 100% on-time.
+            assignee=self.fourth_member, creator=self.marcus, completed_offset=27,
+            label_names=['Database', 'Backend', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Create ER diagram for all core entities', True),
+                ('Write and test initial Django migration set', True),
+                ('Add indexes for all foreign keys and frequent query fields', True),
+            ],
+            comments=[
+                (self.fourth_member, 'Added GIN indexes for full-text search fields. The initial migration set covers 23 tables. Composite indexes on (board_id, created_at) are showing sub-10ms query times in local testing.', 35),
+                (self.marcus, 'Schema looks solid. Good call on the composite indexes.', 33),
+            ],
+        )
+        out['D5'] = self._make_task(
+            code='D5', title='Security Architecture Patterns',
+            description=('Define and implement the security architecture for the platform: '
+                         'authentication middleware, JWT token lifecycle management, CSRF protection, '
+                         'Content Security Policy headers, SQL injection prevention via ORM-only '
+                         'queries, XSS sanitization with bleach, and brute-force protection with '
+                         'django-axes.'),
+            column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['auth'],
+            priority='urgent', start_offset=-38, due_offset=-23, progress=100,
+            complexity=8, risk_l='low', risk_i='high', risk_level='medium',
+            lss=LSS_VA, workload='high', collab=True,
+            est_cost=4200, est_hours=48, hourly=87.5, actual_cost=4050,
+            assignee=self.priya, creator=self.priya, completed_offset=24,
+            label_names=['Security', 'Backend', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Implement JWT authentication middleware', True),
+                ('Configure django-axes brute-force protection', True),
+                ('Set up CSP headers and XSS sanitization', True),
+            ],
+            comments=[
+                (self.priya, 'All security layers implemented and tested. Penetration test checklist passed. Brute-force lockout triggers after 5 failed attempts with exponential backoff.', 30),
+                (self.elena, 'Ran OWASP ZAP scan - no critical findings. Two medium findings resolved.', 28),
+            ],
+        )
+        out['D6'] = self._make_task(
+            code='D6', title='Base API Structure',
+            description=('Establish the Django REST Framework foundation: router configuration, '
+                         'base serializer classes, pagination classes, global exception handler, '
+                         'API versioning under /api/v1/, token authentication setup, and standardized '
+                         'response envelope format. This is the foundation all feature APIs will build on.'),
+            column=col['Done'], phase=PHASE_CORE, parent=epics['api'],
+            priority='high', start_offset=-30, due_offset=-24, progress=100,
+            complexity=6, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_VA, workload='medium', collab=False,
+            est_cost=2800, est_hours=32, hourly=87.5, actual_cost=2650,
+            # Delivered 3 days past its deadline (due_offset -24) — second of two
+            # intentionally-late Done tasks feeding the On-Time vs Late chart.
+            assignee=self.fourth_member, creator=self.marcus, completed_offset=21,
+            label_names=['Backend', 'API', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Configure DRF router and URL patterns under /api/v1/', True),
+                ('Write base serializer and exception handler classes', True),
+                ('Add token authentication and standardized response format', True),
+            ],
+            comments=[
+                (self.fourth_member, 'API foundation is complete. Standardized error responses, pagination, and filtering are all in. Ready for feature teams to build on top.', 23),
+            ],
+        )
+        out['D7'] = self._make_task(
+            code='D7', title='Authentication Testing Suite',
+            description=('Write comprehensive automated tests for all authentication flows: '
+                         'registration, login, logout, password reset, JWT token refresh, session '
+                         'expiry, brute-force lockout, and RBAC permission checks. Achieve minimum '
+                         '90% code coverage on auth module.'),
+            column=col['Done'], phase=PHASE_CORE, parent=epics['auth'],
+            priority='high', start_offset=-25, due_offset=-16, progress=100,
+            complexity=5, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_VA, workload='medium', collab=False,
+            est_cost=2400, est_hours=28, hourly=85, actual_cost=2380,
+            assignee=self.elena, creator=self.priya, completed_offset=19,
+            label_names=['Testing', 'Security', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Write unit tests for JWT token generation and validation', True),
+                ('Write integration tests for login/logout/reset flows', True),
+                ('Verify 90%+ code coverage on auth module', True),
+            ],
+            comments=[
+                (self.elena, 'Coverage is at 94% on the auth module. 47 tests total, all passing. Brute-force lockout and token expiry edge cases were the trickiest to test correctly.', 17),
+            ],
+        )
+        out['D8'] = self._make_task(
+            code='D8', title='Role-Based Access Control (RBAC)',
+            description=('Implement the four-tier RBAC system: Org Admin, Owner, Member, and '
+                         'Viewer roles. Build permission predicates using django-rules, enforce '
+                         'board-level access checks on all views, implement automatic downward '
+                         'permission inheritance through the Goal -> Mission -> Strategy -> Board '
+                         'hierarchy, and add upward read-only visibility for board members.'),
+            column=col['Done'], phase=PHASE_CORE, parent=epics['auth'],
+            priority='urgent', start_offset=-22, due_offset=-12, progress=100,
+            complexity=8, risk_l='low', risk_i='high', risk_level='medium',
+            lss=LSS_VA, workload='high', collab=True,
+            est_cost=4800, est_hours=56, hourly=85, actual_cost=4650,
+            assignee=self.fourth_member, creator=self.priya, completed_offset=18,
+            label_names=['Security', 'Backend', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Implement django-rules permission predicates for all roles', True),
+                ('Enforce board-level access on all views and API endpoints', True),
+                ('Test permission inheritance through the hierarchy', True),
+            ],
+            comments=[
+                (self.fourth_member, 'RBAC implementation complete. All 4 roles tested across the hierarchy. django-rules predicates are clean and easy to extend. Every view now has @permission_required decorators.', 13),
+                (self.marcus, 'Security review passed. No privilege escalation paths found in testing.', 12),
+            ],
+        )
+
+        # D9-D12 fill out a steady delivery cadence (~2 tasks/week) across the
+        # velocity window so the Burndown "Velocity History" reads as a healthy,
+        # consistently-delivering team instead of a few sparse spikes. They are
+        # low-risk, on-time foundation/core chores. completed_offset values are
+        # spaced ~3-7 days apart; after the daily refresh's uniform shift they
+        # land evenly across the last ~6 weeks.
+        out['D9'] = self._make_task(
+            code='D9', title='Logging & Observability Setup',
+            description=('Stand up structured logging and observability for the platform: '
+                         'JSON log formatting, request correlation IDs, centralized log '
+                         'aggregation, error tracking via Sentry, and dashboards for latency, '
+                         'error rate, and Celery queue depth.'),
+            column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['foundation'],
+            priority='medium', start_offset=-56, due_offset=-53, progress=100,
+            complexity=5, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_NVA, workload='medium', collab=False,
+            est_cost=2600, est_hours=30, hourly=87.5, actual_cost=2520,
+            assignee=self.elena, creator=self.marcus, completed_offset=53,
+            label_names=['DevOps', 'Backend', 'Necessary NVA'], labels=labels,
+            checklist=[
+                ('Configure JSON structured logging with correlation IDs', True),
+                ('Integrate Sentry error tracking', True),
+                ('Build latency / error-rate / queue-depth dashboards', True),
+            ],
+            comments=[
+                (self.elena, 'Observability stack is live. Correlation IDs make tracing a request across services trivial now. Sentry is catching issues before users report them.', 54),
+            ],
+        )
+        out['D10'] = self._make_task(
+            code='D10', title='CI Test Coverage Gates',
+            description=('Enforce automated quality gates in the CI pipeline: minimum 80% '
+                         'coverage threshold, fail-on-new-untested-code policy, parallel test '
+                         'execution to keep the pipeline under 5 minutes, and a coverage trend '
+                         'report posted to each pull request.'),
+            column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['foundation'],
+            priority='medium', start_offset=-50, due_offset=-45, progress=100,
+            complexity=4, risk_l='low', risk_i='low', risk_level='low',
+            lss=LSS_NVA, workload='low', collab=False,
+            est_cost=1800, est_hours=20, hourly=90, actual_cost=1750,
+            assignee=self.elena, creator=self.priya, completed_offset=46,
+            label_names=['Testing', 'DevOps', 'Necessary NVA'], labels=labels,
+            checklist=[
+                ('Add coverage gate (80% min) to CI pipeline', True),
+                ('Parallelize the test suite under 5 minutes', True),
+                ('Post coverage trend report to each PR', True),
+            ],
+            comments=[
+                (self.elena, 'Coverage gate is enforced. The suite runs in 4m20s with parallelization. PRs now get an automatic coverage delta comment.', 48),
+            ],
+        )
+        out['D11'] = self._make_task(
+            code='D11', title='API Reference Documentation',
+            description=('Auto-generate and publish interactive API reference documentation '
+                         'from the OpenAPI schema: drf-spectacular schema generation, a hosted '
+                         'Swagger UI / Redoc portal, request/response examples for every '
+                         'endpoint, and authentication walkthroughs for API consumers.'),
+            column=col['Done'], phase=PHASE_CORE, parent=epics['api'],
+            priority='medium', start_offset=-37, due_offset=-34, progress=100,
+            complexity=5, risk_l='low', risk_i='low', risk_level='low',
+            lss=LSS_VA, workload='medium', collab=False,
+            est_cost=2200, est_hours=26, hourly=85, actual_cost=2150,
+            assignee=self.marcus, creator=self.priya, completed_offset=34,
+            label_names=['Documentation', 'API', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Generate OpenAPI schema with drf-spectacular', True),
+                ('Publish hosted Swagger UI / Redoc portal', True),
+                ('Add request/response examples for every endpoint', True),
+            ],
+            comments=[
+                (self.marcus, 'API docs portal is live and auto-updates from the schema on every deploy. Examples for all endpoints are in. External integrators will love this.', 35),
+            ],
+        )
+        out['D12'] = self._make_task(
+            code='D12', title='Health Check & Readiness Probes',
+            description=('Implement liveness and readiness probe endpoints for Cloud Run: '
+                         'database connectivity check, Redis reachability, Celery worker '
+                         'heartbeat, and a dependency-aware readiness gate that keeps traffic '
+                         'off an instance until all downstream services are confirmed healthy.'),
+            column=col['Done'], phase=PHASE_CORE, parent=epics['api'],
+            priority='medium', start_offset=-34, due_offset=-31, progress=100,
+            complexity=4, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_NVA, workload='low', collab=False,
+            est_cost=1600, est_hours=18, hourly=87.5, actual_cost=1540,
+            assignee=self.fourth_member, creator=self.marcus, completed_offset=31,
+            label_names=['DevOps', 'API', 'Necessary NVA'], labels=labels,
+            checklist=[
+                ('Implement /healthz liveness probe', True),
+                ('Implement /readyz readiness gate with dependency checks', True),
+                ('Wire probes into the Cloud Run deployment config', True),
+            ],
+            comments=[
+                (self.fourth_member, 'Probes are wired into Cloud Run. Rolling deploys now wait for readiness before shifting traffic — zero-downtime deploys confirmed in staging.', 32),
+            ],
+        )
+
+        # ===================== IN REVIEW (2) =====================
+        # R1 - OVERDUE SCENARIO: code review running 4 days past deadline.
+        # The daily refresh pins this task to always appear 4 days past-due
+        # (see _OVERDUE_PINS in demo_date_refresh.py).
+        out['R1'] = self._make_task(
+            code='R1', title='Authentication System',
+            description=('Implement the complete user authentication system: email/password '
+                         'registration with verification, secure login with remember-me functionality, '
+                         'password reset via email tokens, session management, and integration with '
+                         'the JWT middleware established in the security architecture phase. '
+                         'Currently waiting for security sign-off from the Security Officer (James Okonkwo) '
+                         'before this PR can be merged to main — the review was requested 4 days ago '
+                         'and remains outstanding.'),
+            column=col['In Review'], phase=PHASE_CORE, parent=epics['auth'],
+            priority='urgent', start_offset=-26, due_offset=-20, progress=90,
+            complexity=8, risk_l='low', risk_i='high', risk_level='medium',
+            lss=LSS_VA, workload='high', collab=False,
+            est_cost=5200, est_hours=60, hourly=87.5, actual_cost=4980,
+            assignee=self.priya, creator=self.priya,
+            label_names=['Backend', 'Security', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Implement email/password registration with verification', True),
+                ('Build secure login and password reset flows', True),
+                ('Integrate JWT middleware and session management', True),
+            ],
+            comments=[
+                (self.priya, 'Implementation complete. Submitted for code review. All auth flows working, including edge cases like expired reset tokens and concurrent session handling.', 4),
+                (self.marcus, 'Reviewing now. The token rotation logic is clean. One question on the session expiry behaviour - left a comment in the PR.', 2),
+            ],
+        )
+        out['R2'] = self._make_task(
+            code='R2', title='File Upload System',
+            description=('Build secure file upload functionality for task attachments: MIME type '
+                         'validation, malicious content detection, file size limits, storage on '
+                         'Google Cloud Storage with signed URLs, and AI-powered content extraction '
+                         'for document attachments (PDF, DOCX, TXT).'),
+            column=col['In Review'], phase=PHASE_CORE, parent=epics['api'],
+            priority='medium', start_offset=-14, due_offset=2, progress=88,
+            complexity=6, risk_l='medium', risk_i='medium', risk_level='medium',
+            lss=LSS_VA, workload='medium', collab=False,
+            est_cost=3200, est_hours=36, hourly=87.5, actual_cost=2950,
+            assignee=self.marcus, creator=self.priya,
+            label_names=['Backend', 'API', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Implement MIME type validation and malicious content scan', True),
+                ('Configure GCS bucket with signed URL generation', True),
+                ('Build AI content extraction for PDF/DOCX attachments', False),
+            ],
+            comments=[
+                (self.marcus, 'MIME validation and GCS integration done. AI extraction working for PDFs - DOCX support needs one more day. Overall 88% complete.', 3),
+            ],
+        )
+
+        # ===================== IN PROGRESS (4) =====================
+        out['P1'] = self._make_task(
+            code='P1', title='User Registration Flow',
+            description=("Build the complete user registration experience: signup form with "
+                         "real-time validation, email verification with single-use tokens, "
+                         "onboarding wizard that guides new users to create their first board, "
+                         "and AI-assisted workspace setup that generates a starter project "
+                         "structure based on the user's stated goals."),
+            column=col['In Progress'], phase=PHASE_CORE, parent=epics['auth'],
+            priority='urgent', start_offset=-10, due_offset=4, progress=75,
+            complexity=7, risk_l='medium', risk_i='medium', risk_level='medium',
+            lss=LSS_VA, workload='medium', collab=True,
+            est_cost=4200, est_hours=48, hourly=87.5, actual_cost=3150,
+            assignee=self.marcus, creator=self.priya,
+            label_names=['Frontend', 'Backend', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Build signup form with real-time field validation', True),
+                ('Implement email verification with single-use token links', True),
+                ('Build onboarding wizard and AI workspace setup', False),
+            ],
+            comments=[
+                (self.marcus, 'Signup form and email verification are working. The onboarding wizard is 60% done - the AI workspace generation is the last piece. On track for the deadline.', 2),
+                (self.priya, 'Tested the verification flow - smooth experience. The real-time validation is a nice touch.', 1),
+            ],
+        )
+        # P2 - OVERDUE SCENARIO: rollback complexity caused 3-day slip.
+        # The daily refresh pins this task to always appear 3 days past-due
+        # (see _OVERDUE_PINS in demo_date_refresh.py).
+        out['P2'] = self._make_task(
+            code='P2', title='Database Schema & Migrations',
+            description=('Implement the full production database schema: write all Django '
+                         'migrations for the 23-table schema, create database seed scripts for '
+                         'lookup tables, implement migration testing in the CI pipeline, write '
+                         'rollback procedures for each migration, and document the upgrade path '
+                         'for production deployment. This task requires the Authentication System '
+                         '(R1) API contract to be finalised before the oauth_tokens migration can '
+                         'be validated against the live auth layer in CI. Currently slipping due '
+                         'to a circular reference between Board and Organization that complicates '
+                         'the rollback procedures.'),
+            column=col['In Progress'], phase=PHASE_CORE, parent=epics['api'],
+            priority='high', start_offset=-31, due_offset=-19, progress=55,
+            complexity=7, risk_l='medium', risk_i='high', risk_level='high',
+            lss=LSS_VA, workload='high', collab=False,
+            est_cost=3800, est_hours=44, hourly=87.5, actual_cost=2090,
+            assignee=self.priya, creator=self.marcus,
+            label_names=['Database', 'Backend', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Write migrations for all 23 tables with proper constraints', True),
+                ('Create seed scripts for lookup and reference tables', True),
+                ('Write rollback procedures and test in staging', False),
+            ],
+            comments=[
+                (self.priya, 'Migrations for all core tables are done. Currently working on the rollback procedures - they are more complex than estimated because of the circular reference between Board and Organization. May need 2 extra days.', 1),
+            ],
+        )
+        # P3 - OVERDUE SCENARIO: seed values are deeply negative so the task is
+        # overdue right after population. The daily refresh pins this task to
+        # always appear 8 days past-due (see _OVERDUE_PINS in demo_date_refresh.py).
+        out['P3'] = self._make_task(
+            code='P3', title='Social Login Integration',
+            description=('Implement OAuth 2.0 social login for Google and GitHub providers using '
+                         'django-allauth. This task is blocked by two upstream dependencies: '
+                         'Database Schema & Migrations (P2) must complete the oauth_provider_tokens '
+                         'table before provider tokens can be stored, and the Authentication System '
+                         '(R1) depends on final security sign-off before the session integration '
+                         'layer can be wired in. Handle account linking for users who register with '
+                         'email first then try to login with social, manage token storage, implement '
+                         'the consent screen flows, and add social login buttons to the authentication UI.'),
+            column=col['In Progress'], phase=PHASE_CORE, parent=epics['auth'],
+            priority='high', start_offset=-26, due_offset=-24, progress=45,
+            complexity=6, risk_l='high', risk_i='medium', risk_level='high',
+            lss=LSS_VA, workload='medium', collab=False,
+            est_cost=3000, est_hours=34, hourly=87.5, actual_cost=1350,
+            assignee=self.priya, creator=self.marcus,  # SAME ASSIGNEE AS P2 - intentional conflict
+            label_names=['Backend', 'Security', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Configure django-allauth for Google OAuth 2.0', True),
+                ('Implement GitHub OAuth provider and token storage', False),
+                ('Handle account linking edge cases', False),
+            ],
+            comments=[
+                (self.priya, 'Google OAuth is working but I am blocked on two things simultaneously - the DB migrations are taking longer than expected AND the GitHub OAuth has an undocumented scope behaviour I need to investigate. Flagging for tomorrow\'s standup.', 1),
+                (self.priya, "Noted. This is now past due. Let's discuss reprioritisation - Marcus can you pair with Priya on the GitHub OAuth piece?", 0),
+            ],
+        )
+        out['P4'] = self._make_task(
+            code='P4', title='API Gateway Configuration',
+            description=('Configure the API gateway layer: implement global rate limiting '
+                         '(100 requests/minute per user), set up API key management for external '
+                         'integrations, add request/response logging middleware, configure CORS '
+                         'policies for the frontend and mobile PWA, and establish API health check '
+                         'endpoints.'),
+            column=col['In Progress'], phase=PHASE_CORE, parent=epics['api'],
+            priority='medium', start_offset=-8, due_offset=10, progress=35,
+            complexity=5, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_VA, workload='medium', collab=False,
+            est_cost=2400, est_hours=28, hourly=85, actual_cost=840,
+            assignee=self.elena, creator=self.priya,
+            label_names=['DevOps', 'API', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Implement rate limiting middleware with per-user quotas', True),
+                ('Configure CORS policies for frontend and PWA origins', False),
+                ('Set up API health check and readiness endpoints', False),
+            ],
+            comments=[
+                (self.elena, 'Rate limiting is live. CORS configuration is next - need to confirm the production domain list with the team before locking it down.', 2),
+            ],
+        )
+
+        # ===================== TO DO (6) =====================
+        out['T1'] = self._make_task(
+            code='T1', title='Google OAuth 2.0 Integration',
+            description=('Full Google OAuth 2.0 integration for user login and Google Calendar '
+                         'sync. Implement the OAuth consent screen, handle token storage with '
+                         'AES-256 encryption, build the token refresh mechanism, and set up the '
+                         'two-way Google Calendar sync that automatically mirrors task due dates '
+                         'as Calendar events.'),
+            column=col['To Do'], phase=PHASE_INTEGRATIONS, parent=epics['integrations'],
+            priority='high', start_offset=3, due_offset=16, progress=0,
+            complexity=7, risk_l='medium', risk_i='medium', risk_level='medium',
+            lss=LSS_VA, workload='medium', collab=False,
+            est_cost=3600, est_hours=40, hourly=90, actual_cost=0,
+            assignee=self.priya, creator=self.priya,
+            label_names=['Backend', 'API', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Implement Google OAuth consent screen and callback handler', False),
+                ('Build AES-256 encrypted token storage and refresh logic', False),
+                ('Set up two-way Google Calendar sync for task due dates', False),
+            ],
+            comments=[
+                (self.priya, 'This is a key enterprise feature. Priority is high - calendar sync is one of the top-requested items from beta users.', 3),
+            ],
+        )
+        out['T2'] = self._make_task(
+            code='T2', title='GitHub OAuth 2.0 Integration',
+            description=('Implement GitHub OAuth 2.0 login and the GitHub Webhook Receiver that '
+                         'automatically moves tasks to "In Review" when a pull request mentions a '
+                         'task ID (e.g., SD-101) in its title or description. Includes per-board '
+                         'configuration, HMAC-SHA256 secret verification, and the PR-to-task linking '
+                         'logic.'),
+            column=col['To Do'], phase=PHASE_INTEGRATIONS, parent=epics['integrations'],
+            priority='high', start_offset=5, due_offset=18, progress=0,
+            complexity=6, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_VA, workload='medium', collab=False,
+            est_cost=3200, est_hours=36, hourly=90, actual_cost=0,
+            assignee=self.marcus, creator=self.priya,
+            label_names=['Backend', 'API', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Implement GitHub OAuth callback and account linking', False),
+                ('Build webhook receiver with HMAC-SHA256 verification', False),
+                ('Implement PR title/body task ID parsing and column move', False),
+            ],
+            comments=[
+                (self.marcus, 'Picked this up as a natural follow-on from the social login work. The webhook receiver should be straightforward - the PR parsing logic is the interesting part.', 4),
+            ],
+        )
+        out['T3'] = self._make_task(
+            code='T3', title='Mobile Push Notifications',
+            description=('Implement real-time push notifications for the mobile PWA using '
+                         'Firebase Cloud Messaging (FCM). Cover notification types: task '
+                         'assignment, comment mentions, deadline warnings, and AI Coach alerts. '
+                         'Include per-user notification preference management and a unified '
+                         'notification centre in the app header.'),
+            column=col['To Do'], phase=PHASE_INTEGRATIONS, parent=epics['integrations'],
+            priority='medium', start_offset=10, due_offset=24, progress=0,
+            complexity=7, risk_l='medium', risk_i='medium', risk_level='medium',
+            lss=LSS_VA, workload='medium', collab=True,
+            est_cost=4200, est_hours=48, hourly=87.5, actual_cost=0,
+            assignee=self.marcus, creator=self.priya,
+            label_names=['Frontend', 'Backend', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Configure Firebase Cloud Messaging and service worker', False),
+                ('Implement 4 notification types with payload schemas', False),
+                ('Build notification preference centre and unread badge', False),
+            ],
+            comments=[
+                (self.priya, "This is gated on the API gateway work. Make sure Elena's rate limiting covers the FCM callback endpoints.", 5),
+            ],
+        )
+        out['T4'] = self._make_task(
+            code='T4', title='iOS APNs Integration',
+            description=('Integrate Apple Push Notification Service (APNs) for iOS users of the '
+                         'mobile PWA. Implement APNs token registration, the server-side APNs '
+                         'delivery via the HTTP/2 APNs API, certificate management, and fallback '
+                         'to FCM for cross-platform notification unification.'),
+            column=col['To Do'], phase=PHASE_INTEGRATIONS, parent=epics['integrations'],
+            priority='medium', start_offset=18, due_offset=30, progress=0,
+            complexity=6, risk_l='medium', risk_i='low', risk_level='low',
+            lss=LSS_VA, workload='medium', collab=False,
+            est_cost=2800, est_hours=32, hourly=87.5, actual_cost=0,
+            assignee=self.elena, creator=self.priya,
+            label_names=['DevOps', 'Backend', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Configure APNs certificates and HTTP/2 delivery client', False),
+                ('Implement APNs token registration flow on iOS', False),
+                ('Build fallback logic to FCM for cross-platform unification', False),
+            ],
+            comments=[
+                (self.elena, 'Blocked on T3 (Mobile Push Notifications) completing first - APNs is the iOS-specific layer on top of the FCM foundation.', 6),
+            ],
+        )
+        out['T5'] = self._make_task(
+            code='T5', title='API Rate Limiting & Abuse Prevention',
+            description=('Implement comprehensive API abuse prevention: per-user and per-IP rate '
+                         'limiting with configurable thresholds, free-tier AI credit quotas, model '
+                         'tiering for BYOK users, response length caps, circuit breaker pattern for '
+                         'external AI provider calls, and a self-service rate limit dashboard for '
+                         'API key holders.'),
+            column=col['To Do'], phase=PHASE_LAUNCH, parent=epics['api'],
+            priority='high', start_offset=22, due_offset=35, progress=0,
+            complexity=7, risk_l='medium', risk_i='high', risk_level='high',
+            lss=LSS_NVA, workload='high', collab=True,
+            est_cost=3800, est_hours=44, hourly=85, actual_cost=0,
+            assignee=self.elena, creator=self.priya,
+            label_names=['DevOps', 'Backend', 'Necessary NVA'], labels=labels,
+            checklist=[
+                ('Implement per-user and per-IP rate limiting with Redis', False),
+                ('Build AI credit quota system with model tiering', False),
+                ('Implement circuit breaker for external AI provider calls', False),
+            ],
+            comments=[
+                (self.priya, 'This is critical for open source launch. Without abuse prevention the BYOK model will be exploited. Do not deprioritise this.', 7),
+            ],
+        )
+        out['T6'] = self._make_task(
+            code='T6', title='Accessibility Compliance (WCAG 2.1 AA)',
+            description=('Audit and remediate the entire frontend for WCAG 2.1 AA compliance: '
+                         'keyboard navigation for all interactive elements, ARIA labels on complex '
+                         'components, color contrast ratio fixes (minimum 4.5:1 for normal text), '
+                         'focus management in modals and drawers, screen reader testing with NVDA '
+                         'and VoiceOver, and an automated accessibility test suite in CI.'),
+            column=col['To Do'], phase=PHASE_LAUNCH, parent=epics['foundation'],
+            priority='medium', start_offset=28, due_offset=42, progress=0,
+            complexity=6, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_NVA, workload='medium', collab=True,
+            est_cost=3200, est_hours=36, hourly=87.5, actual_cost=0,
+            assignee=self.marcus, creator=self.priya,
+            label_names=['Frontend', 'Testing', 'Necessary NVA'], labels=labels,
+            checklist=[
+                ('Run automated WCAG audit and document all findings', False),
+                ('Fix keyboard navigation and ARIA labelling issues', False),
+                ('Add axe-core accessibility tests to CI pipeline', False),
+            ],
+            comments=[
+                (self.marcus, 'Scheduled for Phase 4. Running a preliminary axe-core scan this week to scope the effort - want to flag any surprises early.', 8),
+            ],
+        )
+
+        # ===================== BACKLOG (8) =====================
+        out['B1'] = self._make_task(
+            code='B1', title='Performance Optimisation Sprint',
+            description=('Systematic performance audit and improvement: Django query optimisation '
+                         'using select_related/prefetch_related, Redis caching strategy for '
+                         'expensive computations, database query plan analysis and index tuning, '
+                         'frontend bundle size reduction via code splitting, Lighthouse score '
+                         'targets (Performance > 90 on mobile), and load testing with 500 concurrent '
+                         'users.'),
+            column=col['Backlog'], phase=PHASE_LAUNCH, parent=epics['foundation'],
+            priority='high', start_offset=35, due_offset=49, progress=0,
+            complexity=8, risk_l='medium', risk_i='high', risk_level='high',
+            lss=LSS_VA, workload='high', collab=True,
+            est_cost=5600, est_hours=64, hourly=87.5, actual_cost=0,
+            assignee=self.elena, creator=self.priya,
+            label_names=['DevOps', 'Backend', 'Performance', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Profile all API endpoints and identify N+1 queries', False),
+                ('Implement Redis caching for board analytics queries', False),
+                ('Run load test and document baseline performance metrics', False),
+            ],
+        )
+        out['B2'] = self._make_task(
+            code='B2', title='Production Deployment to Google Cloud Run',
+            description=('Deploy PrizmAI to Google Cloud Run with full production configuration: '
+                         'Neon PostgreSQL for the database, Redis on Cloud Memorystore, Cloud '
+                         'Storage for file uploads, environment variable management via Secret '
+                         'Manager, custom domain configuration with SSL, health check endpoints, '
+                         'auto-scaling configuration, and a staged rollout plan (dev -> staging -> '
+                         'production).'),
+            column=col['Backlog'], phase=PHASE_LAUNCH, parent=epics['foundation'],
+            priority='urgent', start_offset=50, due_offset=60, progress=0,
+            complexity=9, risk_l='high', risk_i='high', risk_level='high',
+            lss=LSS_NVA, workload='high', collab=True,
+            est_cost=6400, est_hours=72, hourly=90, actual_cost=0,
+            assignee=self.elena, creator=self.priya,
+            label_names=['DevOps', 'Necessary NVA'], labels=labels,
+            checklist=[
+                ('Configure Cloud Run service with auto-scaling policies', False),
+                ('Set up Neon PostgreSQL and run production migration', False),
+                ('Configure Secret Manager and production environment vars', False),
+                ('Execute staged rollout with rollback plan', False),
+            ],
+        )
+        out['B3'] = self._make_task(
+            code='B3', title='Slack & Microsoft Teams Webhooks',
+            description=('Implement outbound webhook integrations for Slack and Microsoft Teams: '
+                         'formatted message delivery for task events (created, completed, overdue, '
+                         'at-risk), AI Digest summaries posted on a schedule, one-click quick-setup '
+                         'presets in the board settings UI, HMAC signature verification on incoming '
+                         'webhooks, and a webhook activity log.'),
+            column=col['Backlog'], phase=PHASE_LAUNCH, parent=epics['integrations'],
+            priority='medium', start_offset=32, due_offset=45, progress=0,
+            complexity=5, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_VA, workload='medium', collab=False,
+            est_cost=2800, est_hours=32, hourly=87.5, actual_cost=0,
+            assignee=self.priya, creator=self.priya,
+            label_names=['Backend', 'API', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Build Slack webhook sender with Block Kit formatting', False),
+                ('Build MS Teams webhook sender with Adaptive Cards', False),
+                ('Add quick-setup preset UI in board settings', False),
+            ],
+        )
+        out['B4'] = self._make_task(
+            code='B4', title='Zapier Integration',
+            description=('Build the Zapier integration: Django REST polling endpoints for New '
+                         'Task, Task Completed, and Task Assigned triggers; Create Task and Update '
+                         'Status actions; a self-contained Zapier CLI app in zapier-app/ directory; '
+                         'and comprehensive documentation for publishing to the Zapier marketplace.'),
+            column=col['Backlog'], phase=PHASE_LAUNCH, parent=epics['integrations'],
+            priority='low', start_offset=38, due_offset=50, progress=0,
+            complexity=5, risk_l='low', risk_i='low', risk_level='low',
+            lss=LSS_VA, workload='low', collab=False,
+            est_cost=2400, est_hours=28, hourly=85, actual_cost=0,
+            assignee=self.marcus, creator=self.priya,
+            label_names=['Backend', 'API', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Build REST polling endpoints for all Zapier triggers', False),
+                ('Write Zapier CLI app with authentication and test suite', False),
+                ('Document marketplace submission requirements', False),
+            ],
+        )
+        out['B5'] = self._make_task(
+            code='B5', title='Open Source Launch Preparation',
+            description=('Prepare PrizmAI for open source release: write CONTRIBUTING.md with '
+                         'contribution guidelines and PR template, create INTEGRATIONS.md with '
+                         'integration template for community contributions, write developer-facing '
+                         'README architecture section, set up GitHub issue templates, configure '
+                         'GitHub Actions for community PR CI, and produce a technical blog post '
+                         'explaining the architecture.'),
+            column=col['Backlog'], phase=PHASE_LAUNCH, parent=epics['foundation'],
+            priority='high', start_offset=61, due_offset=72, progress=0,
+            complexity=4, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_NVA, workload='medium', collab=True,
+            est_cost=2400, est_hours=28, hourly=85, actual_cost=0,
+            assignee=self.priya, creator=self.priya,
+            label_names=['Documentation', 'Necessary NVA'], labels=labels,
+            checklist=[
+                ('Write CONTRIBUTING.md and GitHub issue/PR templates', False),
+                ('Create INTEGRATIONS.md with community contribution guide', False),
+                ('Write architecture blog post for technical audiences', False),
+            ],
+        )
+        out['B6'] = self._make_task(
+            code='B6', title='End-to-End Test Suite',
+            description=('Build a comprehensive end-to-end test suite using Playwright: cover '
+                         'all critical user journeys (registration -> board creation -> task '
+                         'management -> collaboration -> AI features), implement visual regression '
+                         'testing for key UI components, set up test data factories, and integrate '
+                         'E2E tests into the CI pipeline with parallel test execution.'),
+            column=col['Backlog'], phase=PHASE_LAUNCH, parent=epics['foundation'],
+            priority='medium', start_offset=30, due_offset=44, progress=0,
+            complexity=7, risk_l='medium', risk_i='medium', risk_level='medium',
+            lss=LSS_NVA, workload='medium', collab=False,
+            est_cost=4000, est_hours=46, hourly=87.5, actual_cost=0,
+            assignee=self.elena, creator=self.priya,
+            label_names=['Testing', 'DevOps', 'Necessary NVA'], labels=labels,
+            checklist=[
+                ('Set up Playwright with test data factories and fixtures', False),
+                ('Write E2E tests for all 8 critical user journeys', False),
+                ('Integrate into CI with parallel execution and reporting', False),
+            ],
+        )
+        out['B7'] = self._make_task(
+            code='B7', title='API Documentation (Swagger/OpenAPI)',
+            description=('Generate and publish comprehensive API documentation: auto-generate '
+                         'OpenAPI 3.0 spec from DRF serializers, host interactive Swagger UI at '
+                         '/api/docs/, write human-readable guides for authentication, pagination, '
+                         'error handling, and rate limiting, add request/response examples for all '
+                         '40+ endpoints, and create a Postman collection for developer testing.'),
+            column=col['Backlog'], phase=PHASE_LAUNCH, parent=epics['api'],
+            priority='medium', start_offset=40, due_offset=52, progress=0,
+            complexity=4, risk_l='low', risk_i='low', risk_level='low',
+            lss=LSS_NVA, workload='low', collab=False,
+            est_cost=1800, est_hours=20, hourly=90, actual_cost=0,
+            assignee=self.priya, creator=self.priya,
+            label_names=['Documentation', 'API', 'Necessary NVA'], labels=labels,
+            checklist=[
+                ('Configure drf-spectacular for OpenAPI 3.0 auto-generation', False),
+                ('Write narrative guides for auth, pagination, and errors', False),
+                ('Export Postman collection and publish to team workspace', False),
+            ],
+        )
+        out['B8'] = self._make_task(
+            code='B8', title='Cognitive Load & Burnout Monitoring',
+            description=('Enhance the Cognitive Load Guardian feature with richer monitoring: '
+                         'implement per-member context-switching frequency scoring, add a weekly '
+                         'cognitive load trend chart on the team dashboard, configure automated '
+                         'alerts when any member exceeds the 80% overload threshold for 3 '
+                         'consecutive days, and integrate recommendations into the AI Coach '
+                         'recovery suggestions.'),
+            column=col['Backlog'], phase=PHASE_LAUNCH, parent=epics['api'],
+            priority='low', start_offset=46, due_offset=56, progress=0,
+            complexity=6, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_VA, workload='medium', collab=True,
+            est_cost=3200, est_hours=36, hourly=87.5, actual_cost=0,
+            assignee=self.marcus, creator=self.priya,
+            label_names=['Backend', 'Frontend', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Build context-switching frequency scoring algorithm', False),
+                ('Add cognitive load trend chart to team dashboard', False),
+                ('Wire burnout alerts into AI Coach recommendation engine', False),
+            ],
+        )
+
+        self.stdout.write(f'  [OK] Created 4 epics + {len(out)} child tasks')
+        return out
+
+    # ------------------------------------------------------------------
+    # Timeline dependencies
+    # ------------------------------------------------------------------
+    def _link_dependencies(self, t):
+        """Set the M2M Task.dependencies arrows that drive the Gantt chart.
+
+        Each phase carries its own internal chain so the Gantt shows realistic
+        intra-phase links (not just cross-phase handoffs), and CPM has enough
+        edges to compute meaningful slack inside each phase.
+        """
+        pairs = [
+            # Phase 1 -- Foundation: requirements feed architecture, architecture
+            # feeds DB schema and security patterns. D2 (env setup) runs in parallel.
+            ('D1', 'D3'),
+            ('D3', 'D4'),
+            ('D3', 'D5'),
+            # DevOps chain: observability is stood up first, then the CI coverage
+            # gates build on it; the gates then feed the automated test suite.
+            ('D9', 'D10'),
+            ('D10', 'D7'),
+            # API design documents itself (architecture -> API reference docs).
+            ('D3', 'D11'),
+            # The readiness probe's DB-connectivity check depends on the schema,
+            # and the probes in turn gate the production deployment.
+            ('D4', 'D12'),
+            ('D12', 'B2'),
+            # Security architecture feeds the auth-test suite and RBAC.
+            ('D5', 'D7'),
+            ('D5', 'D8'),
+            # Phase 1 -> Phase 2 handoffs
+            ('D4', 'P2'),
+            ('D4', 'D6'),
+            ('D5', 'P3'),
+            ('D5', 'R1'),
+            # Phase 2 -- Core Features
+            ('D6', 'P4'),
+            ('D6', 'R2'),
+            ('R1', 'P1'),
+            # Phase 2 -> Phase 3 handoffs
+            ('P1', 'T1'),
+            ('P1', 'T2'),
+            # Phase 3 -- Integrations
+            ('T1', 'T3'),
+            ('T3', 'T4'),
+            # Phase 2 / 3 -> Phase 4 handoffs
+            ('P4', 'T5'),
+            # Phase 4 -- Launch Readiness: perf + rate limit + E2E tests gate
+            # the prod deploy; deploy + accessibility + API docs gate the OSS launch.
+            # The API gateway also feeds the perf sprint and the outbound integrations.
+            ('P4', 'B1'),
+            ('P4', 'B3'),
+            ('P4', 'B4'),
+            ('B1', 'B2'),
+            ('T5', 'B2'),
+            ('B6', 'B2'),
+            ('B2', 'B5'),
+            ('T6', 'B5'),
+            ('B7', 'B5'),
+        ]
+        for from_code, to_code in pairs:
+            t[to_code].dependencies.add(t[from_code])
+        self.stdout.write(f'  [OK] Linked {len(pairs)} timeline dependencies')
+
+    # ------------------------------------------------------------------
+    # Milestones
+    # ------------------------------------------------------------------
+    def _create_milestones(self, tasks_by_code):
+        """Create 3 milestone Tasks (item_type='milestone') for the Gantt chart.
+
+        Each milestone is anchored to the last task of its phase via
+        position_after_task so it renders inline after that task in the Gantt
+        row order (see buildOrderedTaskList in gantt_chart.html). Without the
+        anchor, milestones fall through to the end of the list.
+        """
+        col = self.columns['Backlog']
+        ms_defs = [
+            ('Foundation Architecture Complete',
+             'All Phase 1 infrastructure, architecture, and environment setup tasks completed and verified.',
+             -21, 'completed', PHASE_FOUNDATION, 'D8'),
+            ('Core Authentication Ready',
+             'Complete authentication system, RBAC, security patterns, and auth test suite all passing.',
+             7, 'upcoming', PHASE_CORE, 'P4'),
+            ('Integration Sprint Complete',
+             'All third-party integrations (Google, GitHub, FCM, APNs, webhooks) built, tested, and deployed.',
+             49, 'upcoming', PHASE_INTEGRATIONS, 'T5'),
+        ]
+        for title, desc, due_off, status, phase, anchor_code in ms_defs:
+            ms = Task.objects.create(
+                title=title,
+                description=desc,
+                column=col,
+                phase=phase,
+                item_type='milestone',
+                milestone_status=status,
+                priority='high',
+                start_date=self.TODAY + timedelta(days=due_off),
+                due_date=_aware_due(self.TODAY + timedelta(days=due_off)),
+                progress=100 if status == 'completed' else 0,
+                completed_at=self._days_ago(-due_off) if status == 'completed' else None,
+                assigned_to=self.priya,
+                created_by=self.priya,
+                position_after_task=tasks_by_code[anchor_code],
                 is_seed_demo_data=True,
             )
-        )
-
-        # --- Strategy ---
-        strategy, _ = Strategy.objects.get_or_create(
-            name='Develop Security Software Platform',
-            mission=mission,
-            defaults=dict(
-                description=(
-                    'Build a comprehensive enterprise software platform with built-in security features '
-                    'including real-time threat detection, automated vulnerability scanning, '
-                    'and secure user management with role-based access controls.'
-                ),
-                status='active',
-                created_by=creator,
-                is_seed_demo_data=True,
+            # Keep created_at relative to TODAY (clamp future milestones to today)
+            # so the "all dates relative" invariant holds across resets.
+            Task.objects.filter(pk=ms.pk).update(
+                created_at=_aware_due(self.TODAY + timedelta(days=min(due_off, 0)))
             )
+        self.stdout.write('  [OK] Created 3 milestones')
+
+    # ------------------------------------------------------------------
+    # Budget & time tracking
+    # ------------------------------------------------------------------
+    def _create_budget_and_time(self, tasks_by_code, epics):
+        """Project budget + time entries for done/in-review/in-progress tasks."""
+        rng = random.Random(1310)  # deterministic so Time Tracking is stable across resets
+        ProjectBudget.objects.create(
+            board=self.board,
+            allocated_budget=Decimal('85000.00'),
+            currency='USD',
+            allocated_hours=Decimal('980.00'),
+            warning_threshold=75,
+            critical_threshold=92,
+            ai_optimization_enabled=True,
+            created_by=self.priya,
         )
 
-        # --- Link all official demo boards to the Strategy ---
-        linked = 0
-        for board in self.demo_boards:
-            if board.strategy_id != strategy.id:
-                board.strategy = strategy
-                board.save(update_fields=['strategy'])
-                linked += 1
+        time_entry_count = 0
+        for code, task in tasks_by_code.items():
+            if task.column.name == 'Done':
+                target_pct = 1.0
+            elif task.column.name == 'In Review':
+                target_pct = 0.9
+            elif task.column.name == 'In Progress':
+                target_pct = task.progress / 100.0
+            else:
+                continue
+
+            cost = task.cost  # OneToOne
+            total_hours = float(cost.estimated_hours) * target_pct
+            if total_hours <= 0 or not task.start_date:
+                continue
+
+            # Spread across enough entries that no single one reads as an
+            # impossible day. The old fixed 3-6 split charged a 160h task at
+            # ~25h per entry — legal per-row (the 16h field cap is per entry)
+            # but nonsense as a day's work, and visibly wrong anywhere hours are
+            # read per-day rather than as a total (Calendar Time Health).
+            # ~6h per entry keeps entries day-sized; still capped at the number
+            # of days actually available in the task window.
+            num_entries = max(3, min(int(round(total_hours / 6.0)), 40))
+            entries = self._distribute_hours(total_hours, num_entries, rng)
+
+            start = task.start_date
+            end_date = (task.completed_at.date()
+                        if task.completed_at
+                        else self.TODAY)
+            # Clamp window
+            span_days = max((end_date - start).days, 1)
+
+            descriptions = [
+                'Implementation work and unit tests',
+                'Pair programming session and code review',
+                'Bug fixing and edge case handling',
+                'Integration testing and verification',
+                'Refactoring and documentation updates',
+                'Code review feedback and follow-up changes',
+            ]
+
+            for i, hrs in enumerate(entries):
+                offset = int((i + 1) * span_days / (num_entries + 1))
+                # Short window: the formula above maps every ordinal to the same
+                # day, stacking a task's whole effort onto one date. Give each
+                # entry its own day instead (mirrors the same guard in
+                # demo_date_refresh._refresh_time_entry_dates).
+                if span_days < num_entries:
+                    offset = min(i, span_days)
+                work_date = start + timedelta(days=offset)
+                TimeEntry.objects.create(
+                    task=task,
+                    user=task.assigned_to,
+                    hours_spent=Decimal(f'{hrs:.2f}'),
+                    work_date=work_date,
+                    description=rng.choice(descriptions) + f' - {task.title}',
+                    is_billable=True,
+                )
+                time_entry_count += 1
 
         self.stdout.write(
-            f'   Mission: "{mission.name}" | Strategy: "{strategy.name}" | '
-            f'Boards linked: {linked}'
+            f'  [OK] Budget created. {time_entry_count} time entries logged.'
         )
 
-    def print_final_summary(self):
-        """Print final summary of all demo data"""
-        self.stdout.write(self.style.SUCCESS('\n' + '=' * 80))
-        self.stdout.write(self.style.SUCCESS('✅ ALL DEMO DATA POPULATION COMPLETE'))
+    @staticmethod
+    def _distribute_hours(total, n, rng):
+        """Split `total` hours across `n` entries with mild random variation."""
+        weights = [rng.uniform(0.7, 1.3) for _ in range(n)]
+        s = sum(weights)
+        return [max(0.25, round(total * w / s, 2)) for w in weights]
+
+    def _create_roi_snapshots(self, n=10):
+        """Seed a chronological ROI history (clear-and-replace).
+
+        Snapshots are created oldest-first so id-ascending == chronological, which
+        is the ordering `demo_date_refresh._refresh_roi_snapshot_dates` relies on
+        (it dates by id and assumes value/completion increase with id). Completion,
+        realized value and cost all RISE over time toward the project's current
+        state, so the ROI History/Trend tells a coherent forward story (the legacy
+        data was reversed — completion fell to 0 at the latest snapshot).
+        """
+        from kanban.budget_models import ProjectROI, ProjectBudget
+        from kanban.budget_utils import BudgetAnalyzer
+
+        ProjectROI.objects.filter(board=self.board).delete()
+
+        budget = ProjectBudget.objects.filter(board=self.board).first()
+        allocated = budget.allocated_budget if budget else Decimal('85000.00')
+
+        tasks = BudgetAnalyzer.get_board_tasks(self.board)
+        total_tasks = tasks.count()
+        current_completed = tasks.filter(progress=100).count()
+        current_cost = budget.get_spent_amount() if budget else Decimal('0.00')
+
+        # End state of the series (the latest snapshot = "now").
+        expected_value = Decimal('150000.00')
+        current_realized = Decimal('60000.00')  # 40% of expected delivered so far
+
+        created = 0
+        for i in range(n):
+            frac = Decimal(i + 1) / Decimal(n)          # 0.1 .. 1.0
+            completed = max(1, round(current_completed * float(frac)))
+            if i == n - 1:
+                completed = current_completed           # latest == real state
+            realized = (current_realized * frac).quantize(Decimal('0.01'))
+            total_cost = (current_cost * frac).quantize(Decimal('0.01'))
+            roi_pct = (((realized - allocated) / allocated) * 100).quantize(Decimal('0.01')) \
+                if allocated > 0 else None
+            snap = ProjectROI.objects.create(
+                board=self.board,
+                expected_value=expected_value,
+                realized_value=realized,
+                total_cost=total_cost,
+                roi_percentage=roi_pct,
+                completed_tasks=completed,
+                total_tasks=total_tasks,
+                snapshot_date=self.NOW - timedelta(days=(n - 1 - i) * 7),
+                created_by=self.priya,
+            )
+            ProjectROI.objects.filter(pk=snap.pk).update(
+                created_at=self.NOW - timedelta(days=(n - 1 - i) * 7)
+            )
+            created += 1
+
+        self.stdout.write(f'  [OK] ROI history: {created} chronological snapshots.')
+
+    # ------------------------------------------------------------------
+    # Stakeholders
+    # ------------------------------------------------------------------
+    def _create_stakeholders(self, tasks_by_code):
+        # Influence/interest spread so stakeholders span multiple Power/Interest
+        # quadrants (Manage Closely / Keep Satisfied / Keep Informed) rather than
+        # all collapsing into "Manage Closely".
+        defs = [
+            ('Sarah Mitchell', 'Product Director', 'sarah.mitchell@demo.prizmai.local',
+             'high', 'high', 'collaborate', 'empower'),    # Manage Closely
+            ('James Okonkwo', 'Security Officer', 'james.okonkwo@demo.prizmai.local',
+             'high', 'high', 'consult', 'consult'),        # Manage Closely
+            ('David Park', 'CTO', 'david.park@demo.prizmai.local',
+             'high', 'low', 'consult', 'inform'),          # Keep Satisfied
+            ('Rachel Torres', 'QA Lead', 'rachel.torres@demo.prizmai.local',
+             'low', 'high', 'involve', 'collaborate'),     # Keep Informed
+        ]
+        stakeholders = {}
+        for name, role, email, infl, intr, cur, des in defs:
+            sh, _ = ProjectStakeholder.objects.get_or_create(
+                board=self.board, name=name, email=email,
+                defaults={
+                    'role': role, 'organization': 'Acme Corporation',
+                    'influence_level': infl, 'interest_level': intr,
+                    'current_engagement': cur, 'desired_engagement': des,
+                    'created_by': self.priya,
+                },
+            )
+            stakeholders[name] = sh
+
+        # Link key stakeholders to key tasks
+        security_tasks = ['D5', 'D7', 'D8', 'R1', 'T5']
+        for code in security_tasks:
+            StakeholderTaskInvolvement.objects.get_or_create(
+                stakeholder=stakeholders['James Okonkwo'],
+                task=tasks_by_code[code],
+                defaults={'involvement_type': 'reviewer',
+                          'engagement_status': 'consulted'},
+            )
+        # Product Director on key Phase-2 deliverables
+        for code in ['R1', 'P1', 'D8']:
+            StakeholderTaskInvolvement.objects.get_or_create(
+                stakeholder=stakeholders['Sarah Mitchell'],
+                task=tasks_by_code[code],
+                defaults={'involvement_type': 'approver',
+                          'engagement_status': 'collaborated'},
+            )
+        for code in ['B6', 'R2']:
+            StakeholderTaskInvolvement.objects.get_or_create(
+                stakeholder=stakeholders['Rachel Torres'],
+                task=tasks_by_code[code],
+                defaults={'involvement_type': 'reviewer',
+                          'engagement_status': 'involved'},
+            )
+
+        self.stdout.write(f'  [OK] Created {len(defs)} stakeholders')
+
+    # ------------------------------------------------------------------
+    # Scope baseline
+    # ------------------------------------------------------------------
+    def _create_scope_baseline(self):
+        try:
+            from kanban.models import ScopeChangeSnapshot, Task
+            # Idempotent: a non-reset re-run must not stack another baseline
+            # row on top of the existing one.
+            existing = ScopeChangeSnapshot.objects.filter(
+                board=self.board, is_baseline=True,
+            ).first()
+            if existing:
+                self.stdout.write('  [OK] Scope baseline already present - skipped')
+                return
+            # Describe the baseline with the real task count so the note does
+            # not drift from the board (create_scope_snapshot counts item_type='task').
+            _baseline_count = Task.objects.filter(
+                column__board=self.board, item_type='task',
+            ).count()
+            self.board.create_scope_snapshot(
+                user=self.priya,
+                snapshot_type='manual',
+                is_baseline=True,
+                notes=(f'Initial project baseline - established at project kickoff '
+                       f'with {_baseline_count} tasks across 4 phases.'),
+            )
+            self.stdout.write('  [OK] Scope baseline snapshot recorded')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'  [WARN] Could not create scope snapshot: {e}'))
+
+    # ------------------------------------------------------------------
+    # Scope Autopsy (forensic scope growth report)
+    # ------------------------------------------------------------------
+    def _create_scope_autopsy(self):
+        """Seed a completed Scope Autopsy report with a believable
+        Scope Growth Timeline.
+
+        The Autopsy feature would normally be generated on demand by an AI
+        worker, but for the demo we pre-populate a finished report so visitors
+        immediately see the timeline, events, and recommendations without
+        burning AI quota. The story is intentionally a *mild* growth scenario
+        (16.7%, all documented) rather than a catastrophic one — the demo
+        should showcase the feature, not slander the demo project.
+        """
+        try:
+            from kanban.scope_autopsy_models import (
+                ScopeAutopsyReport, ScopeTimelineEvent, TaskScopeReason,
+            )
+            from kanban.models import Task
+            from decimal import Decimal
+
+            # Remove any prior report so re-running this seeder is idempotent
+            ScopeAutopsyReport.objects.filter(board=self.board).delete()
+
+            current_task_count = Task.objects.filter(
+                column__board=self.board, item_type='task',
+            ).count()
+            # Story: project started at a baseline and grew to the current count
+            # over the lifecycle. Every addition below is documented, so the AI
+            # verdict is "well-managed scope". The baseline is derived from the
+            # event list (current - documented additions) rather than a magic
+            # number so it stays correct no matter how many events we seed —
+            # this is what keeps the autopsy in sync with the Discovery-promoted
+            # "Regional Pricing" task that lands after the core board seed.
+            # (baseline_count / growth_pct are computed below, once
+            # events_payload is built.)
+
+            kickoff = self.NOW - timedelta(days=56)
+            baseline_date = kickoff + timedelta(hours=24)
+
+            # Pre-build timeline event payload — dates flow chronologically
+            # through Phases 1 and 2 so the timeline aligns with the rest of
+            # the demo's narrative.
+            events_payload = [
+                {
+                    'days_ago': 49,
+                    'title': 'Authentication Testing Suite added',
+                    'description': (
+                        'Security team requested a dedicated testing harness for the '
+                        'authentication flow after the threat-modeling workshop. Added 1 task '
+                        'and updated the Security Architecture Patterns acceptance criteria.'
+                    ),
+                    'source_type': 'task_added',
+                    'tasks_added': 1,
+                    'delay_days': 2,
+                    'budget_impact': Decimal('1800.00'),
+                    'added_by': self.priya,
+                    'reason': 'requirement_change',
+                    'reason_note': (
+                        'Security review at end of week 1 surfaced a gap in our auth test '
+                        'coverage; scoped a dedicated suite rather than expanding existing tests.'
+                    ),
+                },
+                {
+                    'days_ago': 38,
+                    'title': 'API Rate Limiting added during security review',
+                    'description': (
+                        'External penetration test highlighted brute-force exposure on the auth '
+                        'endpoints. Added rate-limiting middleware as a Phase 1 deliverable.'
+                    ),
+                    'source_type': 'scope_alert',
+                    'tasks_added': 1,
+                    'delay_days': 3,
+                    'budget_impact': Decimal('2400.00'),
+                    'added_by': self.elena,
+                    'reason': 'discovered_complexity',
+                    'reason_note': (
+                        'Pen-test finding — could not ship Phase 1 without remediation. '
+                        'Scoped as a hard requirement, accepted small delay.'
+                    ),
+                },
+                {
+                    'days_ago': 24,
+                    'title': 'Accessibility Compliance task added',
+                    'description': (
+                        'Product Director requested WCAG 2.1 AA compliance as a launch '
+                        'requirement. Added an accessibility audit and remediation task to '
+                        'Phase 2 ahead of the public beta.'
+                    ),
+                    'source_type': 'task_added',
+                    'tasks_added': 1,
+                    'delay_days': 2,
+                    'budget_impact': Decimal('1900.00'),
+                    'added_by': self.marcus,
+                    'reason': 'stakeholder_request',
+                    'reason_note': (
+                        'Sarah Mitchell (Product Director) confirmed accessibility is a '
+                        'launch gate; absorbed into Phase 2 with stakeholder sign-off.'
+                    ),
+                },
+                {
+                    'days_ago': 11,
+                    'title': 'Error Tracking & Monitoring added',
+                    'description': (
+                        'AI Coach suggestion accepted: add Sentry-based error tracking and '
+                        'a dashboard pre-launch so we can monitor the beta rollout.'
+                    ),
+                    'source_type': 'ai_suggestion',
+                    'tasks_added': 1,
+                    'delay_days': 1,
+                    'budget_impact': Decimal('1200.00'),
+                    'added_by': self.elena,
+                    'reason': 'discovered_complexity',
+                    'reason_note': (
+                        'Observability gap flagged by AI Coach; better to add it before '
+                        'launch than scramble post-launch.'
+                    ),
+                },
+                {
+                    # Promoted from PrizmDiscovery by the discovery sub-seeder
+                    # (populate_discovery_demo_data) AFTER the core board seed —
+                    # this is the 33rd task that the autopsy historically missed.
+                    # created_at on the promoted ticket is now - 9d6h, so anchor
+                    # the event ~9 days ago to match the timeline.
+                    'days_ago': 9,
+                    'title': 'Regional Pricing Tiers for APAC promoted from Discovery',
+                    'description': (
+                        'Market-specific pricing plans for South-East Asia and Japan, '
+                        'promoted from PrizmDiscovery after stakeholder review. USD-only '
+                        'pricing was identified as a conversion barrier in APAC; the idea '
+                        'was approved and promoted to a delivery ticket in Phase 3.'
+                    ),
+                    'source_type': 'task_added',
+                    'tasks_added': 1,
+                    'delay_days': 3,
+                    'budget_impact': Decimal('3000.00'),
+                    'added_by': self.marcus,
+                    'reason': 'stakeholder_request',
+                    'reason_note': (
+                        'Promoted from PrizmDiscovery — approved as a market-expansion '
+                        'requirement for APAC; scoped into Phase 3 with stakeholder sign-off.'
+                    ),
+                },
+            ]
+
+            # Baseline = current count minus all documented additions. With the
+            # five events above this resolves to 28 -> 33 (+17.9%).
+            baseline_count = max(1, current_task_count - sum(e['tasks_added'] for e in events_payload))
+            growth_pct = round(
+                ((current_task_count - baseline_count) / baseline_count) * 100, 1
+            )
+
+            total_delay = sum(e['delay_days'] for e in events_payload)
+            total_budget = sum(e['budget_impact'] for e in events_payload)
+
+            ai_summary = (
+                f'The Software Development project grew from {baseline_count} tasks at '
+                f'kickoff to {current_task_count} tasks today — a {growth_pct}% expansion '
+                f'over roughly 8 weeks. All five scope additions were recorded with a '
+                'documented reason, putting this project well below the 25%+ undocumented '
+                'growth typical of comparable engineering programs. Two additions (Rate '
+                'Limiting, Error Tracking) addressed real risks discovered during execution; '
+                'two more (Auth Test Suite, Accessibility) were planning gaps surfaced in '
+                'week-1 security review and stakeholder alignment; the most recent — Regional '
+                'Pricing Tiers for APAC — was a market-expansion idea promoted from '
+                'PrizmDiscovery with stakeholder sign-off.'
+            )
+            pattern_analysis = (
+                'Scope growth was front-loaded and event-driven rather than chaotic — three '
+                'of five additions came during Phase 1 security/quality reviews, which is '
+                'the *right* time to absorb new requirements. A later Phase 2 addition '
+                '(observability) was a coach-suggested gap closure, and the final Phase 3 '
+                'addition (regional pricing) was a deliberate, stakeholder-approved Discovery '
+                'promotion. There is no evidence of gold-plating or stakeholder churn.'
+            )
+            recommendations = [
+                {
+                    'title': 'Move the threat-modeling workshop into kickoff week',
+                    'description': (
+                        'The Auth Test Suite and Rate Limiting tasks were both surfaced by '
+                        'security reviews after kickoff. Folding a lightweight threat-modeling '
+                        'session into Day 2 of kickoff would have captured both during the '
+                        'initial baseline.'
+                    ),
+                    'applies_to': 'planning',
+                },
+                {
+                    'title': 'Confirm launch-gate requirements with stakeholders pre-baseline',
+                    'description': (
+                        'Accessibility compliance was added in Phase 2 but is a launch-gate '
+                        'requirement. A short pre-baseline stakeholder confirmation call (15 '
+                        'minutes per key stakeholder) would catch these earlier.'
+                    ),
+                    'applies_to': 'stakeholder_management',
+                },
+                {
+                    'title': 'Pre-commit observability into Phase 1 by default',
+                    'description': (
+                        'Error tracking is a standard launch requirement; rather than relying '
+                        'on coach suggestions in Phase 2, ship it as a default Phase 1 '
+                        'deliverable in the project template.'
+                    ),
+                    'applies_to': 'execution',
+                },
+            ]
+
+            board_snapshot = {
+                'board_name': self.board.name,
+                'project_context': self.board.name,
+                'baseline_task_count': baseline_count,
+                'baseline_date': str(baseline_date),
+                'final_task_count': current_task_count,
+                'growth_percentage': growth_pct,
+                'days_elapsed': 56,
+                'total_events': len(events_payload),
+            }
+
+            timeline_json = []
+            cumulative = baseline_count
+            for e in events_payload:
+                cumulative += e['tasks_added']
+                timeline_json.append({
+                    'date': str(self.NOW - timedelta(days=e['days_ago'])),
+                    'title': e['title'],
+                    'description': e['description'],
+                    'source_type': e['source_type'],
+                    'tasks_added': e['tasks_added'],
+                    'net_task_change': e['tasks_added'],
+                    'is_major_event': e['tasks_added'] >= 3,
+                    'estimated_delay_days': e['delay_days'],
+                    'estimated_budget_impact': float(e['budget_impact']),
+                    'added_by_name': (
+                        e['added_by'].get_full_name() or e['added_by'].username
+                    ) if e['added_by'] else '',
+                })
+
+            report = ScopeAutopsyReport.objects.create(
+                board=self.board,
+                created_by=self.priya,
+                status='complete',
+                baseline_task_count=baseline_count,
+                baseline_date=baseline_date,
+                final_task_count=current_task_count,
+                total_scope_growth_percentage=growth_pct,
+                total_delay_days=total_delay,
+                total_budget_impact=total_budget,
+                timeline_json=timeline_json,
+                pattern_analysis=pattern_analysis,
+                ai_summary=ai_summary,
+                recommendations=recommendations,
+                board_snapshot=board_snapshot,
+            )
+            # ScopeAutopsyReport.created_at uses auto_now_add — override so
+            # the report's "Analyzed" timestamp lives a few days back (the
+            # original analysis happened during the last sprint review,
+            # not literally today).
+            ScopeAutopsyReport.objects.filter(pk=report.pk).update(
+                created_at=self.NOW - timedelta(days=3),
+            )
+
+            # Timeline events (cumulative counts are computed inline)
+            cumulative = baseline_count
+            for e in events_payload:
+                cumulative += e['tasks_added']
+                ScopeTimelineEvent.objects.create(
+                    report=report,
+                    event_date=self.NOW - timedelta(days=e['days_ago']),
+                    title=e['title'],
+                    description=e['description'],
+                    source_type=e['source_type'],
+                    source_object_type='',
+                    source_object_id=None,
+                    tasks_added=e['tasks_added'],
+                    tasks_removed=0,
+                    net_task_change=e['tasks_added'],
+                    added_by=e['added_by'],
+                    estimated_delay_days=e['delay_days'],
+                    estimated_budget_impact=e['budget_impact'],
+                    cumulative_task_count=cumulative,
+                    is_major_event=e['tasks_added'] >= 3,
+                )
+
+            # Backfill TaskScopeReason rows so the timeline shows the
+            # documented reason + note alongside each task_added event. We
+            # match each seeded event to a real demo task by title-keyword so
+            # the Scope Reason modal isn't blank when the user clicks through.
+            reason_targets = [
+                ('Authentication Testing Suite',
+                 events_payload[0]['reason'], events_payload[0]['reason_note'],
+                 events_payload[0]['added_by']),
+                ('API Rate Limiting',
+                 events_payload[1]['reason'], events_payload[1]['reason_note'],
+                 events_payload[1]['added_by']),
+                ('Accessibility',
+                 events_payload[2]['reason'], events_payload[2]['reason_note'],
+                 events_payload[2]['added_by']),
+                ('Error Tracking',
+                 events_payload[3]['reason'], events_payload[3]['reason_note'],
+                 events_payload[3]['added_by']),
+                ('Regional Pricing',
+                 events_payload[4]['reason'], events_payload[4]['reason_note'],
+                 events_payload[4]['added_by']),
+            ]
+            for keyword, reason, note, recorder in reason_targets:
+                t = Task.objects.filter(
+                    column__board=self.board,
+                    item_type='task',
+                    title__icontains=keyword,
+                ).first()
+                if t:
+                    TaskScopeReason.objects.update_or_create(
+                        task=t,
+                        defaults={
+                            'board': self.board,
+                            'reason': reason,
+                            'note': note,
+                            'recorded_by': recorder,
+                        },
+                    )
+
+            self.stdout.write(
+                f'  [OK] Scope autopsy report seeded ({baseline_count} -> '
+                f'{current_task_count} tasks, +{growth_pct}%, '
+                f'{len(events_payload)} events)'
+            )
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(
+                f'  [WARN] Could not seed scope autopsy: {e}'
+            ))
+
+    # ------------------------------------------------------------------
+    # Project Confidence history (Triple Constraint → 30-Day Trend)
+    # ------------------------------------------------------------------
+    def _create_confidence_history(self):
+        """
+        Seed ~16 daily ProjectConfidenceScore rows so the "30-Day Confidence
+        Trend" chart renders out of the box. Without this, a fresh demo has zero
+        history and the chart shows "Not enough data yet" until the user clicks
+        Recalculate twice.
+
+        The arc tells a coherent story: confidence drifts down from ~86 to ~66
+        as scope-growth signals accumulate (mirroring the live composite the
+        user sees today — scope ~92, budget 100, schedule 70, with a negative
+        signal adjustment from the recent task additions). Budget stays healthy
+        throughout; the dip is driven by schedule pressure + scope signals.
+
+        Deterministic (no randomness) so the demo is reproducible. computed_at
+        is auto_now_add, so each row is backdated with a follow-up .update().
+        """
+        try:
+            from kanban.project_signals_models import ProjectConfidenceScore
+
+            # Idempotent clear-and-replace for this board.
+            ProjectConfidenceScore.objects.filter(board=self.board).delete()
+
+            # Weights mirror ProjectConfidenceService (scope .30 / budget .30 /
+            # schedule .40) so seeded composites are consistent with live ones.
+            W_SCOPE, W_BUDGET, W_SCHEDULE = 0.30, 0.30, 0.40
+
+            num_points = 16  # one per day, ending yesterday (today is the live recalc slot)
+            prev_composite = None
+            seeded = 0
+
+            for i in range(num_points):
+                days_ago = num_points - i  # 16 .. 1
+                frac = i / (num_points - 1)  # 0.0 -> 1.0
+
+                # Scope drifts 96 -> 92 (additions chip away at stability).
+                scope_score = round(96.0 - 4.0 * frac, 1)
+                # Budget stays healthy (well under the 70% utilisation knee).
+                budget_score = 100.0
+                # Schedule dips mid-history (crunch around the security review)
+                # then settles at 70. Small deterministic bowl shape.
+                schedule_score = round(74.0 - 6.0 * (1 - abs(0.5 - frac) * 2) - 0.0, 1)
+                # Signal adjustment grows more negative as scope-growth signals
+                # accumulate: ~-2 early -> ~-19 now (lands composite near 66).
+                signal_adjustment = round(-2.0 - 17.0 * frac, 1)
+
+                raw = (
+                    scope_score * W_SCOPE
+                    + budget_score * W_BUDGET
+                    + schedule_score * W_SCHEDULE
+                    + signal_adjustment
+                )
+                composite_score = round(max(0.0, min(100.0, raw)), 1)
+
+                if prev_composite is None:
+                    trend = 'stable'
+                else:
+                    delta = composite_score - prev_composite
+                    trend = 'improving' if delta > 3 else ('declining' if delta < -3 else 'stable')
+
+                computation_data = {
+                    'scope_score': scope_score,
+                    'budget_score': budget_score,
+                    'schedule_score': schedule_score,
+                    'signal_adjustment': signal_adjustment,
+                    'weights': {'scope': W_SCOPE, 'budget': W_BUDGET, 'schedule': W_SCHEDULE},
+                    'recent_signal_count': max(0, int(round(2 + 10 * frac))),
+                }
+
+                score = ProjectConfidenceScore.objects.create(
+                    board=self.board,
+                    scope_score=scope_score,
+                    budget_score=budget_score,
+                    schedule_score=schedule_score,
+                    signal_adjustment=signal_adjustment,
+                    composite_score=composite_score,
+                    trend=trend,
+                    previous_score=prev_composite,
+                    computation_data=computation_data,
+                )
+                # computed_at is auto_now_add; backdate it. Spread through the
+                # day so ordering is stable.
+                ProjectConfidenceScore.objects.filter(pk=score.pk).update(
+                    computed_at=self.NOW - timedelta(days=days_ago, hours=2),
+                )
+
+                prev_composite = composite_score
+                seeded += 1
+
+            self.stdout.write(
+                f'  [OK] Project confidence history seeded ({seeded} daily points)'
+            )
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(
+                f'  [WARN] Could not seed project confidence history: {e}'
+            ))
+
+    # ------------------------------------------------------------------
+    # Retrospective
+    # ------------------------------------------------------------------
+    def _create_retrospective(self):
+        # The dashboard, Lessons and Action Items pages read from the relational
+        # LessonLearned / RetrospectiveActionItem / ImprovementMetric models, NOT
+        # from the JSON snapshot fields on the retrospective. The real AI generator
+        # (RetrospectiveGenerator.create_retrospective) stores the JSON snapshot AND
+        # creates those relational records, so the demo seed mirrors that here.
+        recommendations = [
+            {'title': 'Adopt an ADR-first workflow for Phase 2',
+             'description': 'Make "ADR drafted and approved" a Definition-of-Ready gate for any '
+                            'task that introduces or changes architecture.',
+             'priority': 'high', 'action_type': 'process_change',
+             'expected_impact': 'Fewer mid-implementation architecture reversals and rework cycles.'},
+            {'title': 'Add a security review gate to the phase-milestone checklist',
+             'description': 'Schedule the security/penetration review at the start of the milestone, '
+                            'not the end, so findings never threaten the phase deadline.',
+             'priority': 'critical', 'action_type': 'process_change',
+             'expected_impact': 'Security findings surface early with slack to remediate before milestone.'},
+            {'title': 'Publish the Docker onboarding guide in the wiki',
+             'description': 'Document the Docker-first dev environment setup so onboarding stays '
+                            'self-service as the team grows.',
+             'priority': 'medium', 'action_type': 'documentation',
+             'expected_impact': 'New engineers productive in under 30 minutes without pairing.'},
+            {'title': 'Introduce planning poker for Phase 2 estimation',
+             'description': 'Use planning poker on tasks with hidden complexity (e.g. schema work) '
+                            'to surface estimation disagreement before commitment.',
+             'priority': 'high', 'action_type': 'process_change',
+             'expected_impact': 'Tighter estimates and fewer overruns on complex tasks.'},
+            {'title': 'Create an acceptance-criteria template for task creation',
+             'description': 'A reusable acceptance-criteria checklist on the task form so tasks are '
+                            'not started with thin criteria.',
+             'priority': 'medium', 'action_type': 'documentation',
+             'expected_impact': 'Fewer revision rounds caused by ambiguous requirements.'},
+        ]
+
+        # Reflect the configured AI provider rather than hard-coding a model name,
+        # so the demo's "Model Used" matches whatever provider this instance runs.
+        from ai_assistant.utils.ai_router import AIRouter
+        from ai_assistant.models import OrganizationAISettings
+        try:
+            demo_provider = self.board.workspace.ai_settings.provider or 'gemini'
+        except (OrganizationAISettings.DoesNotExist, AttributeError):
+            demo_provider = 'gemini'
+        demo_ai_model = AIRouter.get_model_name(demo_provider, 'complex')
+
+        retrospective = ProjectRetrospective.objects.create(
+            board=self.board,
+            title='Phase 1 Foundation Retrospective',
+            retrospective_type='milestone',
+            status='finalized',
+            period_start=(self.NOW - timedelta(days=56)).date(),
+            period_end=(self.NOW - timedelta(days=21)).date(),
+            # Keys must match what RetrospectiveGenerator.collect_metrics produces
+            # (total_tasks / completed_tasks / completion_rate / avg_completion_time),
+            # otherwise retrospective_detail falls back to live board counts and shows
+            # the current board state instead of this historical Phase-1 snapshot.
+            # 'phase_tag' marks this as live-trackable: _refresh_retrospective_metrics()
+            # (kanban/utils/demo_date_refresh.py) recomputes the numbers below from the
+            # actual Phase 1 Task rows on every demo refresh, so they never go stale
+            # relative to the task dates that get shifted forward over time. The values
+            # here are just the initial seed (used until the first refresh runs).
+            metrics_snapshot={
+                'phase_tag': PHASE_FOUNDATION,
+                'total_tasks': 8, 'completed_tasks': 8, 'completion_rate': 100,
+                'velocity': 8, 'avg_completion_time': 8.5,
+                'quality_score': 9.1, 'budget_variance': -3.2,
+            },
+            what_went_well=(
+                "Architecture decisions were well-documented with ADRs making future changes easier. "
+                "Development environment setup was smooth - Elena's Docker configuration had new "
+                "team members productive within 30 minutes. Security architecture was thorough - "
+                "the penetration test passed with only two medium findings, both resolved before "
+                "phase end. All 8 tasks delivered on time."
+            ),
+            what_needs_improvement=(
+                'Database schema design took longer than estimated due to circular reference '
+                'complexity. Some tasks had insufficiently detailed acceptance criteria leading '
+                'to two rounds of revision. The security review for RBAC should have been '
+                'scheduled earlier - it came close to blocking the phase milestone.'
+            ),
+            key_achievements=[
+                'All 8 Phase 1 tasks delivered on time and within budget',
+                'Security penetration test passed with zero critical findings',
+                'Developer onboarding reduced to 30 minutes with Docker setup',
+                'Architecture decision records (ADRs) written for all major choices',
+            ],
+            lessons_learned=[
+                {'lesson': 'ADRs should be written before implementation begins, not during',
+                 'priority': 'high', 'category': 'planning'},
+                {'lesson': 'Security review should be a gate before any phase milestone, not an afterthought',
+                 'priority': 'high', 'category': 'quality'},
+                {'lesson': 'Docker-first dev environments eliminate "works on my machine" entirely',
+                 'priority': 'medium', 'category': 'technical'},
+                {'lesson': 'Tasks with hidden complexity need detailed acceptance criteria before estimation',
+                 'priority': 'high', 'category': 'planning'},
+            ],
+            improvement_recommendations=recommendations,
+            overall_sentiment_score=Decimal('0.88'),
+            team_morale_indicator='high',
+            performance_trend='improving',
+            ai_generated_at=self.NOW - timedelta(days=20),
+            ai_confidence_score=Decimal('0.91'),
+            ai_model_used=demo_ai_model,
+            created_by=self.priya,
+            finalized_by=self.priya,
+            finalized_at=self.NOW - timedelta(days=20),
+        )
+
+        # --- Lessons Learned (relational records the Lessons page & dashboard read) ---
+        lesson_adr = LessonLearned.objects.create(
+            retrospective=retrospective, board=self.board,
+            title='Write ADRs before implementation, not during',
+            description=('Several architecture decisions were revisited mid-implementation because '
+                         'the ADRs were authored alongside the code rather than ahead of it.'),
+            category='planning', priority='high',
+            trigger_event='Two architecture choices were reversed after coding had already started.',
+            impact_description='Roughly three days of rework across the data-model and auth layers.',
+            recommended_action='Make "ADR approved" a Definition-of-Ready gate for architecture tasks.',
+            action_owner=self.priya, status='implemented',
+            implementation_date=(self.NOW - timedelta(days=15)).date(),
+            expected_benefit='Fewer mid-implementation reversals.',
+            actual_benefit='Phase 2 architecture tasks have had zero reversals so far.',
+            ai_suggested=True, ai_confidence=Decimal('0.90'),
+        )
+        lesson_security = LessonLearned.objects.create(
+            retrospective=retrospective, board=self.board,
+            title='Schedule security review as a phase-milestone gate',
+            description=('The RBAC security review was scheduled near the end of the phase and came '
+                         'close to blocking the milestone when two medium findings surfaced.'),
+            category='quality', priority='high',
+            trigger_event='Penetration test ran in the final week of Phase 1.',
+            impact_description='Milestone was at risk for ~48 hours while findings were remediated.',
+            recommended_action='Move the security review to the start of each milestone window.',
+            action_owner=self.elena, status='in_progress',
+            expected_benefit='Security findings surface with time to remediate.',
+            ai_suggested=True, ai_confidence=Decimal('0.88'),
+        )
+        lesson_docker = LessonLearned.objects.create(
+            retrospective=retrospective, board=self.board,
+            title='Standardise on Docker-first development environments',
+            description=('Elena\'s Docker configuration eliminated "works on my machine" issues and '
+                         'made onboarding effectively instant.'),
+            category='technical', priority='medium',
+            trigger_event='A new team member was productive within 30 minutes of joining.',
+            impact_description='Onboarding time dropped from roughly half a day to under 30 minutes.',
+            recommended_action='Keep the Docker setup as the single supported dev environment.',
+            action_owner=self.elena, status='validated',
+            implementation_date=(self.NOW - timedelta(days=44)).date(),
+            validation_date=(self.NOW - timedelta(days=18)).date(),
+            expected_benefit='Faster, consistent onboarding.',
+            actual_benefit='A second engineer onboarded in 25 minutes during Phase 2 with no setup issues.',
+            success_metrics=[{'metric': 'onboarding_time_minutes', 'before': 240, 'after': 25}],
+            ai_suggested=True, ai_confidence=Decimal('0.85'),
+        )
+        lesson_estimation = LessonLearned.objects.create(
+            retrospective=retrospective, board=self.board,
+            title='Tasks with hidden complexity need detailed acceptance criteria before estimation',
+            description=('Database schema work overran due to a circular reference between Board and '
+                         'Organization, and two tasks needed re-work because their acceptance criteria '
+                         'were too thin to estimate accurately.'),
+            category='planning', priority='high',
+            trigger_event='Schema task overran by two days; two tasks went through a second revision round.',
+            impact_description='Estimation accuracy suffered on the most complex tasks of the phase.',
+            recommended_action='Adopt planning poker and an acceptance-criteria template before estimating.',
+            action_owner=self.priya, status='identified',
+            is_recurring_issue=True, recurrence_count=2,
+            expected_benefit='More reliable estimates on complex work.',
+            ai_suggested=True, ai_confidence=Decimal('0.80'),
+        )
+
+        # --- Action Items (relational records the Action Items page & dashboard read) ---
+        # Each row mirrors one improvement recommendation, with realistic mixed statuses
+        # so the dashboard's completion rate and "Urgent Action Items" panel are populated.
+        action_specs = [
+            dict(rec=recommendations[0], owner=self.priya, related=lesson_adr,
+                 status='completed', progress=100,
+                 actual_completion_date=(self.NOW - timedelta(days=15)).date(),
+                 actual_impact='ADR-first gate added to the Phase 2 Definition of Ready.'),
+            dict(rec=recommendations[1], owner=self.elena, related=lesson_security,
+                 status='in_progress', progress=60,
+                 target_completion_date=(self.NOW + timedelta(days=10)).date()),
+            dict(rec=recommendations[2], owner=self.elena, related=lesson_docker,
+                 status='completed', progress=100,
+                 actual_completion_date=(self.NOW - timedelta(days=18)).date(),
+                 actual_impact='Docker onboarding guide published in the Engineering wiki.'),
+            dict(rec=recommendations[3], owner=self.priya, related=lesson_estimation,
+                 status='pending', progress=0,
+                 target_completion_date=(self.NOW + timedelta(days=14)).date()),
+            dict(rec=recommendations[4], owner=self.marcus, related=lesson_estimation,
+                 status='in_progress', progress=30,
+                 target_completion_date=(self.NOW + timedelta(days=20)).date()),
+        ]
+        for spec in action_specs:
+            rec = spec['rec']
+            RetrospectiveActionItem.objects.create(
+                retrospective=retrospective, board=self.board,
+                title=rec['title'], description=rec['description'],
+                action_type=rec['action_type'], priority=rec['priority'],
+                expected_impact=rec['expected_impact'],
+                status=spec['status'], progress_percentage=spec['progress'],
+                assigned_to=spec['owner'], related_lesson=spec['related'],
+                target_completion_date=spec.get('target_completion_date'),
+                actual_completion_date=spec.get('actual_completion_date'),
+                actual_impact=spec.get('actual_impact', ''),
+                ai_suggested=True, ai_confidence=Decimal('0.82'),
+            )
+
+        # --- Improvement Metrics (relational records the dashboard charts read) ---
+        metric_specs = [
+            ('velocity', 'Team Velocity', Decimal('8'), 'tasks', True),
+            ('quality', 'Completion Rate', Decimal('100'), 'percentage', True),
+            ('cycle_time', 'Average Completion Time', Decimal('8.5'), 'days', False),
+        ]
+        for mtype, mname, value, unit, higher_better in metric_specs:
+            ImprovementMetric.objects.create(
+                board=self.board, retrospective=retrospective,
+                metric_type=mtype, metric_name=mname, metric_value=value,
+                unit_of_measure=unit, higher_is_better=higher_better,
+                measured_at=retrospective.period_end,
+            )
+
+        self.stdout.write(
+            '  [OK] Phase 1 retrospective created '
+            '(4 lessons, 5 action items, 3 improvement metrics)'
+        )
+
+    # ------------------------------------------------------------------
+    # Chat rooms
+    # ------------------------------------------------------------------
+    def _create_chat_rooms(self):
+        rooms = [
+            ('#general', 'General team chat and announcements'),
+            ('#engineering', 'Technical discussion, PR reviews, debugging'),
+            ('#sprint-planning', 'Sprint goals, assignments, blockers'),
+        ]
+        msg_total = 0
+        for name, desc in rooms:
+            room, _ = ChatRoom.objects.get_or_create(
+                board=self.board, name=name,
+                defaults={'description': desc, 'created_by': self.priya},
+            )
+            room.members.add(self.priya, self.marcus, self.elena)
+            msg_total += self._seed_messages(room, name)
+        self.stdout.write(f'  [OK] Created 3 chat rooms with {msg_total} messages')
+
+    def _seed_messages(self, room, name):
+        if name == '#general':
+            msgs = [
+                (self.priya, 'Phase 1 retrospective is up in the Retros tab - please give it a read before standup tomorrow.', 9),
+                (self.elena, 'Onboarding doc update merged. New devs should be productive in <30 min now.', 7),
+                (self.marcus, 'Reminder: we are freezing scope changes until after the Phase 2 milestone.', 5),
+                (self.priya, 'Stakeholder demo on Friday. Authentication and File Upload need to be demo-ready.', 3),
+                (self.marcus, 'On it. R1 is in review, R2 is 88% complete.', 2),
+                (self.elena, 'I will run a full smoke test on Thursday afternoon so we can fix anything that breaks.', 1),
+            ]
+        elif name == '#engineering':
+            msgs = [
+                (self.priya, 'The circular FK reference in the migration is driving me crazy. Going with a nullable field and a data migration to populate it post-hoc. Not ideal but it unblocks P2.', 4),
+                (self.marcus, 'Pushed the R1 PR. The token rotation logic is mostly cribbed from the django-rest-knox docs.', 3),
+                (self.elena, 'CI build is flaky on the auth test - same lockout test failing intermittently. Looking now.', 3),
+                (self.priya, 'GitHub OAuth scope behaviour: confirmed undocumented. Filed a bug upstream but we need to work around it for P3.', 1),
+                (self.marcus, 'Cool - I can pair on the workaround later today.', 1),
+                (self.elena, 'CI fixed - the lockout test was racy. Bumped the timeout by 100ms.', 0),
+            ]
+        else:  # sprint-planning
+            msgs = [
+                (self.priya, 'Sprint goal for the week: get R1 merged, unblock P1, ship one OAuth provider end-to-end.', 6),
+                (self.marcus, 'Capacity check: I am full. Can someone take Slack/Teams webhooks (B3)?', 5),
+                (self.priya, 'It is in the backlog, no rush. Focus on P1 and finish R2.', 5),
+                (self.elena, 'I will keep P4 moving in parallel with the smoke test prep.', 4),
+                (self.priya, 'P3 is overdue. Marcus - can you pair with Priya on the GitHub OAuth scope issue?', 0),
+                (self.marcus, 'Yes. Will block out the afternoon.', 0),
+            ]
+
+        n = 0
+        for author, content, days_ago in msgs:
+            m = ChatMessage.objects.create(chat_room=room, author=author, content=content)
+            ChatMessage.objects.filter(pk=m.pk).update(
+                created_at=self.NOW - timedelta(days=days_ago, hours=random.randint(0, 9)),
+            )
+            n += 1
+        return n
+
+    # ------------------------------------------------------------------
+    # Coaching suggestions
+    # ------------------------------------------------------------------
+    def _create_coaching_suggestions(self, tasks_by_code):
+        from kanban.models import Task
+        # Derive the scope-creep figures from the live board so the card always
+        # matches what a user can count (item_type='task' is what
+        # Board.create_scope_snapshot() measures).  The narrative is "two tasks
+        # were added after the baseline", so baseline = current - 2.
+        _scope_added = 2
+        _scope_current = Task.objects.filter(
+            column__board=self.board, item_type='task',
+        ).count()
+        _scope_baseline = max(_scope_current - _scope_added, 1)
+        _scope_pct = round((_scope_added / _scope_baseline) * 100, 1)
+        items = [
+            dict(
+                suggestion_type='resource_overload', severity='critical', status='active',
+                title='Priya Sharma is critically overloaded — 3 overdue tasks',
+                message=('Priya is the assignee on three overdue tasks simultaneously: '
+                         'Social Login Integration (P3, 45%, 8 days past due), '
+                         'Database Schema & Migrations (P2, 55%, 3 days past due), and '
+                         'Authentication System (R1, 90%, 4 days past due in code review). '
+                         'Immediate redistribution is recommended to unblock the phase milestone.'),
+                recommended_actions=[
+                    {'action': 'Reassign Social Login Integration (P3) to Marcus Chen'},
+                    {'action': 'Pair Marcus with Priya on the GitHub OAuth scope workaround'},
+                    {'action': 'Ask Elena to take the R1 code review to free up Priya'},
+                ],
+                task=tasks_by_code['P3'], days_ago=4,
+            ),
+            dict(
+                suggestion_type='deadline_risk', severity='critical', status='active',
+                title='Core Authentication Ready milestone at risk',
+                message=('The "Core Authentication Ready" milestone is at risk because Social '
+                         'Login Integration (P3) is overdue and User Registration Flow (P1) '
+                         'depends on R1 (Authentication System) being merged.'),
+                recommended_actions=[
+                    {'action': 'Run a daily 15-min standup focused on P3 unblocking'},
+                    {'action': 'Prioritise R1 code review (Priya has the open PR)'},
+                ],
+                task=tasks_by_code['R1'], days_ago=3,
+            ),
+            dict(
+                suggestion_type='scope_creep', severity='medium', status='acknowledged',
+                title='Scope creep detected',
+                message=(f'Two tasks were added after the baseline was set. Original scope was '
+                         f'{_scope_baseline} tasks; current scope is {_scope_current} tasks '
+                         f'({_scope_pct}% increase). Review timeline impact.'),
+                recommended_actions=[
+                    {'action': 'Review whether the 2 new tasks are scope or scope-creep'},
+                    {'action': 'Update Phase 4 timeline estimate if needed'},
+                ],
+                task=None, days_ago=5,
+            ),
+            dict(
+                suggestion_type='best_practice', severity='low', status='acknowledged',
+                title='Mid-Phase retrospective recommended',
+                message=('Phase 2 work is ~60% complete but no mid-sprint retrospective is '
+                         'scheduled. A 45-minute checkpoint now will catch issues before they '
+                         'compound.'),
+                recommended_actions=[
+                    {'action': 'Schedule a 45-minute Phase 2 mid-sprint retrospective'},
+                ],
+                task=None, days_ago=4,
+            ),
+        ]
+        for it in items:
+            days_ago = it.pop('days_ago')
+            ack_user = self.priya if it['status'] == 'acknowledged' else None
+            ack_at = self.NOW - timedelta(days=days_ago - 1) if ack_user else None
+            cs = CoachingSuggestion.objects.create(
+                board=self.board,
+                acknowledged_by=ack_user,
+                acknowledged_at=ack_at,
+                generation_method='hybrid',
+                ai_model_used='gemini-2.5-flash',
+                confidence_score=Decimal('0.82'),
+                **it,
+            )
+            CoachingSuggestion.objects.filter(pk=cs.pk).update(
+                created_at=self.NOW - timedelta(days=days_ago),
+            )
+        self.stdout.write('  [OK] 4 coaching suggestions created')
+
+    def _finalize_scope_creep_figures(self):
+        """Recompute the scope-creep suggestion against the final board.
+
+        _create_coaching_suggestions runs before the Discovery sub-seeder
+        promotes the 33rd task, so the figures captured there are one short of
+        what a user can count on the board.  Recompute from the final
+        item_type='task' count (the same metric Board.create_scope_snapshot
+        uses), keeping the "two tasks added" narrative.
+        """
+        from kanban.models import Task
+        cs = CoachingSuggestion.objects.filter(
+            board=self.board, suggestion_type='scope_creep',
+        ).order_by('-created_at').first()
+        if not cs:
+            return
+        added = 2
+        current = Task.objects.filter(
+            column__board=self.board, item_type='task',
+        ).count()
+        baseline = max(current - added, 1)
+        pct = round((added / baseline) * 100, 1)
+        cs.message = (
+            f'Two tasks were added after the baseline was set. Original scope '
+            f'was {baseline} tasks; current scope is {current} tasks '
+            f'({pct}% increase). Review timeline impact.'
+        )
+        cs.save(update_fields=['message'])
+        self.stdout.write(f'  [OK] Scope-creep figures finalised ({baseline} -> {current} tasks)')
+
+    # ------------------------------------------------------------------
+    # Historical ML training data
+    # ------------------------------------------------------------------
+    def _create_historical_tasks_for_ml(self):
+        """Create 25 completed tasks on a hidden archive board for ML predictions.
+
+        These never appear on the Software Development board (separate board,
+        is_archived=True). The ML prediction service queries
+        column__board__organization=demo_org, so they still feed predictions.
+        """
+        archive, created = Board.objects.get_or_create(
+            name=ARCHIVE_BOARD_NAME,
+            organization=self.demo_org,
+            defaults={
+                'description': 'Hidden archive of historical completed tasks used only as ML training data. Not user-facing.',
+                'is_official_demo_board': False,
+                'is_seed_demo_data': True,
+                'is_archived': True,
+                'created_by': self.priya,
+                'owner': self.priya,
+            },
+        )
+        # Ensure flags stay correct on re-runs
+        archive.is_archived = True
+        archive.is_seed_demo_data = True
+        archive.save(update_fields=['is_archived', 'is_seed_demo_data'])
+
+        done, _ = Column.objects.get_or_create(
+            board=archive, name='Archive', defaults={'position': 0},
+        )
+
+        rng = random.Random(42)  # deterministic so re-runs are stable
+        # Include fourth_member (testuser1 when present) so history is spread
+        # across all demo workspace members, giving the AI enough per-user
+        # velocity and reliability data to generate reassignment suggestions.
+        task_templates = [
+            'Refactor user notification queue', 'Migrate legacy logging to structured JSON',
+            'Add audit trail for permission changes', 'Improve search relevance scoring',
+            'Fix flaky integration test for OAuth callback', 'Optimize dashboard query performance',
+            'Add CSV export to time tracking', 'Build admin tool for stuck task recovery',
+            'Implement project archiving flow', 'Add bulk task assignment endpoint',
+            'Migrate cron jobs to Celery beat', 'Add health check for Redis connection',
+            'Implement webhook retry with exponential backoff', 'Add SSO debug logging',
+            'Build feature flag admin UI', 'Cache board summary on the dashboard',
+            'Improve error messages for failed file uploads', 'Add task age tracking',
+            'Implement seat-based licence enforcement', 'Add billing event audit log',
+            'Build daily digest email job', 'Implement throttling for bulk operations',
+            'Add concurrency tests for board permissions', 'Add export to PDF for retrospectives',
+            'Implement password breach check on signup',
+        ]
+        priorities = ['low', 'medium', 'high', 'urgent']
+        assignees = [self.priya, self.marcus, self.elena, self.fourth_member]
+
+        for i, title in enumerate(task_templates):
+            complexity = rng.randint(2, 9)
+            duration_days = max(1.0, complexity * 1.5 * rng.uniform(0.7, 1.3))
+            completed_offset = rng.randint(60, 180)
+            start_offset = -int(completed_offset + duration_days)
+            assignee = rng.choice(assignees)
+            priority = rng.choices(priorities, weights=[1, 3, 3, 1])[0]
+
+            Task.objects.create(
+                title=title,
+                description=f'Historical reference task #{i+1}. Used for ML prediction training.',
+                column=done,
+                phase=None,
+                item_type='task',
+                priority=priority,
+                start_date=self.TODAY + timedelta(days=start_offset),
+                due_date=_aware_due(self.TODAY + timedelta(days=start_offset + int(duration_days))),
+                progress=100,
+                complexity_score=complexity,
+                completed_at=self._days_ago(completed_offset),
+                actual_duration_days=duration_days,
+                assigned_to=assignee,
+                created_by=self.priya,
+                is_seed_demo_data=True,
+            )
+        self.stdout.write('  [OK] 25 historical ML training tasks created (archive board)')
+
+    # ------------------------------------------------------------------
+    # Priority decisions
+    # ------------------------------------------------------------------
+    def _create_priority_decisions(self, tasks_by_code):
+        rng = random.Random(7)
+        all_tasks = list(tasks_by_code.values())
+        priorities = ['low', 'medium', 'high', 'urgent']
+        for i in range(30):
+            task = rng.choice(all_tasks)
+            accepted = rng.random() < 0.7
+            suggested = rng.choice(priorities)
+            actual = suggested if accepted else rng.choice(
+                [p for p in priorities if p != suggested]
+            )
+            pd = PriorityDecision.objects.create(
+                task=task, board=self.board,
+                suggested_priority=suggested, actual_priority=actual,
+                previous_priority=None,
+                decision_type='ai_accepted' if accepted else 'ai_rejected',
+                decided_by=rng.choice([self.priya, self.marcus, self.elena]),
+                confidence_score=round(rng.uniform(0.55, 0.95), 2),
+                was_correct=accepted,
+            )
+            PriorityDecision.objects.filter(pk=pd.pk).update(
+                decided_at=self.NOW - timedelta(days=rng.randint(1, 90)),
+            )
+        self.stdout.write('  [OK] 30 priority decisions created')
+
+    # ------------------------------------------------------------------
+    # Wiki pages
+    # ------------------------------------------------------------------
+    def _create_wiki_pages(self):
+        # Wiki seed. Mostly documentation pages, plus a "Meeting Notes" category
+        # whose pages use the live Meeting AI Assistant (driven by the category's
+        # ai_assistant_type='meeting') so the demo can showcase transcript
+        # analysis. Only the standalone Meeting *Hub* was retired - the per-page
+        # meeting assistant is still active (see templates/wiki/page_detail.html).
+        #
+        # Every category and page is stamped with the demo Workspace so the two
+        # category-listing surfaces (Knowledge Hub widget + /wiki/categories/)
+        # agree - workspace is the tenant boundary the wiki reads scope on.
+        demo_ws = self.board.workspace
+        categories_data = [
+            ('getting-started', 'Getting Started', {
+                'description': 'Onboarding guides for new engineers.',
+                'icon': 'rocket', 'color': '#2ecc71', 'position': 0,
+                'ai_assistant_type': 'documentation',
+            }),
+            ('engineering', 'Engineering', {
+                'description': 'Engineering reference pages and standards.',
+                'icon': 'code', 'color': '#6366f1', 'position': 1,
+                'ai_assistant_type': 'documentation',
+            }),
+            ('architecture', 'Architecture & Decisions', {
+                'description': 'System architecture and architecture decision records.',
+                'icon': 'sitemap', 'color': '#9b59b6', 'position': 2,
+                'ai_assistant_type': 'documentation',
+            }),
+            ('process-workflows', 'Process & Workflows', {
+                'description': 'Team process, code review, and incident procedures.',
+                'icon': 'diagram-project', 'color': '#e74c3c', 'position': 3,
+                'ai_assistant_type': 'documentation',
+            }),
+            ('meeting-notes', 'Meeting Notes', {
+                'description': 'Meeting minutes and transcripts - analyzed by the '
+                               'AI Meeting Assistant.',
+                'icon': 'users', 'color': '#0ea5e9', 'position': 4,
+                'ai_assistant_type': 'meeting',
+            }),
+        ]
+        cats = {}
+        for slug, name, extra in categories_data:
+            cats[slug], _ = WikiCategory.objects.get_or_create(
+                name=name,
+                organization=self.demo_org,
+                defaults={'workspace': demo_ws, **extra},
+            )
+            # Ensure workspace + assistant type are correct even on an existing
+            # row (get_or_create won't update defaults on a match).
+            if cats[slug].workspace_id != getattr(demo_ws, 'id', None) or \
+                    cats[slug].ai_assistant_type != extra['ai_assistant_type']:
+                cats[slug].workspace = demo_ws
+                cats[slug].ai_assistant_type = extra['ai_assistant_type']
+                cats[slug].save(update_fields=['workspace', 'ai_assistant_type'])
+        cat = cats['engineering']
+
+        engineering_pages = [
+            ('API Design Standards', (
+                "# API Design Standards\n\n"
+                "All public endpoints live under `/api/v1/`. Versioning is path-based; "
+                "breaking changes go to `/api/v2/` rather than mutating an existing endpoint.\n\n"
+                "## Naming\n\n"
+                "- Resources are plural nouns: `/tasks/`, `/boards/`, not `/getTask/`.\n"
+                "- Sub-resources nest when ownership is hard (`/boards/{id}/columns/`).\n"
+                "- Filters live in query params; never encode them into the path.\n\n"
+                "## Response envelope\n\n"
+                "Every successful response wraps the payload in `{data, meta}`. The "
+                "`meta` block carries pagination cursors, request IDs, and timing. Errors "
+                "return `{error: {code, message, details}}` with an HTTP status that matches.\n\n"
+                "## Pagination\n\n"
+                "Cursor-based by default. Page-based pagination is allowed only on "
+                "endpoints that can guarantee a stable ordering.\n\n"
+                "## Authentication\n\n"
+                "Token authentication via the `Authorization: Bearer <token>` header. "
+                "Tokens are short-lived (15 minutes) and refreshed via `/auth/refresh/`.\n"
+            )),
+            ('Security Guidelines', (
+                "# Security Guidelines\n\n"
+                "Security is non-negotiable. Every PR that touches authentication, "
+                "permissions, file handling, or external integrations requires explicit "
+                "sign-off from a second reviewer.\n\n"
+                "## Auth patterns\n\n"
+                "- All views use the `@permission_required` decorator with a "
+                "django-rules predicate; no ad-hoc permission checks.\n"
+                "- Session expiry: 60 minutes idle, 8 hours absolute.\n"
+                "- Brute-force protection via django-axes (5 attempts, exponential backoff).\n\n"
+                "## Secret management\n\n"
+                "Secrets live in Google Secret Manager - never in source. Local dev uses "
+                "`.env.local` (gitignored). Rotate every 90 days.\n\n"
+                "## Vulnerability reporting\n\n"
+                "Email `security@acme-corp.demo`. We acknowledge within 24 hours and "
+                "patch critical issues within 7 days.\n\n"
+                "## Required scans on every release\n\n"
+                "- Dependency scan (pip-audit + npm audit)\n"
+                "- OWASP ZAP baseline scan\n"
+                "- SAST via Semgrep\n"
+            )),
+            ('Sprint Process & Definition of Done', (
+                "# Sprint Process & Definition of Done\n\n"
+                "We run two-week sprints. Ceremonies are kept short: 30-minute planning, "
+                "15-minute daily standup, 45-minute retro at the end.\n\n"
+                "## Definition of Done\n\n"
+                "A task is Done only when ALL of the following are true:\n\n"
+                "1. Code merged to `main` via PR with at least one review approval.\n"
+                "2. Unit tests written and passing in CI.\n"
+                "3. Integration tests cover the happy path and one error path.\n"
+                "4. No new linter warnings; code coverage on the module is ≥ 80%.\n"
+                "5. Documentation updated (README, ADRs, or wiki as appropriate).\n"
+                "6. The PR description includes a manual test plan a reviewer can follow.\n\n"
+                "## Velocity tracking\n\n"
+                "We track velocity in completed-tasks per sprint, not story points. "
+                "Trends matter more than absolute numbers - a sudden 30% drop is a flag "
+                "for a retro conversation.\n\n"
+                "## Sprint planning\n\n"
+                "Each sprint starts with one over-arching goal. Tasks that do not "
+                "contribute to the goal are deferred to the backlog unless they are "
+                "blocking production issues.\n"
+            )),
+            ('Docker Dev Environment Setup', (
+                "# Docker Dev Environment Setup\n\n"
+                "The whole stack runs via `docker-compose up` - Postgres, Redis, and the "
+                "Django app in hot-reload mode. This replaced the old per-service local "
+                "install process after Phase 1's onboarding retro flagged setup time as a "
+                "recurring drag on new engineers.\n\n"
+                "## Quick start\n\n"
+                "```bash\n"
+                "git clone git@acme-corp.demo:acme/main-project.git\n"
+                "cd main-project\n"
+                "cp .env.example .env\n"
+                "docker-compose up --build\n"
+                "docker-compose exec web python manage.py migrate\n"
+                "docker-compose exec web python manage.py populate_all_demo_data\n"
+                "```\n\n"
+                "## What's included\n\n"
+                "- `web` - Django app with hot reload, mounted from the repo checkout\n"
+                "- `db` - Postgres 15, data persisted in a named volume\n"
+                "- `redis` - cache + Celery broker\n"
+                "- `worker` - Celery worker (solo pool, matches production concurrency "
+                "assumptions on Windows)\n\n"
+                "## Result\n\n"
+                "New engineers are productive in under 30 minutes without pairing - no more "
+                "\"works on my machine\" issues from mismatched local Postgres/Redis versions. "
+                "This is now the only supported way to run the stack locally.\n\n"
+                "---\n\n"
+                "*Owner: Elena Vasquez - ping #dev-support with setup issues*\n"
+            )),
+        ]
+
+        architecture_pages = [
+            ('System Architecture Overview', (
+                "# System Architecture Overview\n\n"
+                "## Components\n\n"
+                "- **API Gateway** - request routing, rate limiting, auth token validation\n"
+                "- **Core API** (Django) - boards, tasks, users, and business logic; the "
+                "system of record backed by Postgres\n"
+                "- **AI Service** - task suggestions and resource optimization, called "
+                "through the shared AI router rather than direct provider SDK calls\n"
+                "- **Redis** - cache + Celery broker\n\n"
+                "## Data flow\n\n"
+                "1. Client request hits the gateway; token validated and rate-limited.\n"
+                "2. Request routed to the Core API.\n"
+                "3. Core API reads/writes Postgres, and calls the AI service for anything "
+                "requiring model inference.\n"
+                "4. Cacheable responses are stored in Redis with a short TTL.\n\n"
+                "## Tenancy\n\n"
+                "Workspace is the tenant boundary - every board, task, and wiki page scopes "
+                "to the active workspace, not the legacy Organization field.\n\n"
+                "---\n\n"
+                "*Questions? Ask in #architecture on Slack*\n"
+            )),
+            ('Architecture Decision Log', (
+                "# Architecture Decision Log\n\n"
+                "Phase 1's retrospective made \"ADR approved\" a Definition-of-Ready gate for "
+                "any task that introduces or changes architecture - decisions get written "
+                "down before implementation starts, not alongside it. This index tracks the "
+                "significant ones.\n\n"
+                "## ADR-001: Workspace as the tenant boundary\n"
+                "**Status:** Accepted\n"
+                "Organization was nullable and legacy-only; Workspace became the sole "
+                "scoping boundary for boards, wiki, and analytics queries.\n\n"
+                "## ADR-002: Docker-first local development\n"
+                "**Status:** Accepted\n"
+                "Replaced per-service local installs after onboarding time became a "
+                "recurring complaint. See [Docker Dev Environment Setup](docker-dev-environment-setup).\n\n"
+                "## ADR-003: RBAC via django-rules + object-level checks\n"
+                "**Status:** Accepted\n"
+                "Chose django-rules predicates over ad-hoc permission checks scattered "
+                "across views, layered with `simple_access` helpers for board-level access.\n\n"
+                "## ADR-004: AI calls only through the shared router\n"
+                "**Status:** Accepted\n"
+                "No feature code instantiates a provider SDK directly - `AIRouter.complete()` "
+                "owns BYOK/org/platform key resolution so provider swaps stay centralized.\n\n"
+                "---\n\n"
+                "*New ADRs go through the #architecture channel for review before merge*\n"
+            )),
+        ]
+
+        process_pages = [
+            ('Code Review Guidelines', (
+                "# Code Review Guidelines\n\n"
+                "## Author checklist\n\n"
+                "- [ ] Self-review your changes first\n"
+                "- [ ] All tests pass locally\n"
+                "- [ ] No debug code or stray console/print statements\n"
+                "- [ ] PR description is clear and links the related issue\n\n"
+                "## What reviewers look for\n\n"
+                "1. **Correctness** - does it do what it claims, and are edge cases handled?\n"
+                "2. **Design** - does it fit existing patterns, is it maintainable?\n"
+                "3. **Performance** - N+1 queries, unnecessary re-renders?\n"
+                "4. **Security** - input validation, auth checks on every new endpoint?\n"
+                "5. **Tests** - adequate coverage on the changed behavior?\n\n"
+                "## Turnaround targets\n\n"
+                "| PR size | Target |\n"
+                "|---|---|\n"
+                "| Small (< 200 lines) | < 4 hours |\n"
+                "| Medium (200-500 lines) | < 8 hours |\n"
+                "| Large (> 500 lines) | < 24 hours |\n\n"
+                "## Approvals required\n\n"
+                "Feature and refactor PRs need 2 approvals; bug fixes and hotfixes need 1 "
+                "(hotfixes can be post-merge in a SEV1/SEV2).\n\n"
+                "---\n\n"
+                "*Remember: we review code, not people.*\n"
+            )),
+            ('Incident Response Procedure', (
+                "# Incident Response Procedure\n\n"
+                "## Severity levels\n\n"
+                "| Level | Description | Response time |\n"
+                "|---|---|---|\n"
+                "| SEV1 | Complete outage | 15 minutes |\n"
+                "| SEV2 | Major degradation | 30 minutes |\n"
+                "| SEV3 | Minor issue | 4 hours |\n"
+                "| SEV4 | Low impact | Next business day |\n\n"
+                "## Response steps\n\n"
+                "1. **Detect** - monitoring alert, support report, or internal discovery\n"
+                "2. **Acknowledge** - on-call engineer within the severity's response time\n"
+                "3. **Assess** - severity, affected systems, initial impact\n"
+                "4. **Communicate** - status page update, `#incident-YYYY-MM-DD` channel\n"
+                "5. **Mitigate** - temporary fix or rollback, actions documented as you go\n"
+                "6. **Resolve** - permanent fix, verify, close out the status page update\n"
+                "7. **Post-mortem** - scheduled within 48 hours; root cause and action items\n\n"
+                "## On-call rotation\n\n"
+                "| Week | Primary | Secondary |\n"
+                "|---|---|---|\n"
+                "| Current | Marcus Chen | Priya Sharma |\n"
+                "| Next | Priya Sharma | Elena Vasquez |\n"
+                "| Following | Elena Vasquez | Marcus Chen |\n\n"
+                "---\n\n"
+                "*Stay calm, communicate clearly, fix the issue.*\n"
+            )),
+        ]
+
+        getting_started_pages = [
+            ('Team Setup Guide', (
+                "# Team Setup Guide\n\n"
+                "This guide gets you from a fresh checkout to a running dev environment.\n\n"
+                "## Prerequisites\n\n"
+                "- Docker Desktop (see [Docker Dev Environment Setup](docker-dev-environment-setup) "
+                "for the full stack) or Python 3.11+ / Node 18+ for a bare-metal setup\n"
+                "- Git configured with SSH keys\n\n"
+                "## First week checklist\n\n"
+                "- [ ] Complete security training\n"
+                "- [ ] Get the stack running locally (Docker path recommended)\n"
+                "- [ ] Meet with your team lead\n"
+                "- [ ] Pick up your first starter task from the board\n\n"
+                "## Who to contact\n\n"
+                "| Role | Person |\n"
+                "|---|---|\n"
+                "| Backend Lead | Priya Sharma |\n"
+                "| Frontend / UX | Marcus Chen |\n"
+                "| DevOps / QA | Elena Vasquez |\n\n"
+                "---\n\n"
+                "*Need help? Reach out in #dev-support on Slack*\n"
+            )),
+            ('New Engineer Onboarding Checklist', (
+                "# New Engineer Onboarding Checklist\n\n"
+                "## Day 1\n\n"
+                "- [ ] Laptop, accounts, and access badges provisioned\n"
+                "- [ ] Welcome meeting with your manager\n"
+                "- [ ] Review [Team Setup Guide](team-setup-guide) and get the stack running\n\n"
+                "## Week 1\n\n"
+                "- [ ] Shadow a team member\n"
+                "- [ ] Attend your first standup and sprint ceremony\n"
+                "- [ ] Read [Coding Standards]"
+                # noqa placeholder link resolved below via API Design Standards page instead
+                "(api-design-standards) and [Security Guidelines](security-guidelines)\n"
+                "- [ ] Pick up a starter task\n\n"
+                "## Week 2-4\n\n"
+                "- [ ] Complete your first pull request end to end (see "
+                "[Code Review Guidelines](code-review-guidelines))\n"
+                "- [ ] 30-day check-in with your manager\n\n"
+                "---\n\n"
+                "*This checklist is reviewed every retro - see [Architecture Decision Log]"
+                "(architecture-decision-log) for how process changes get adopted.*\n"
+            )),
+        ]
+
+        # Meeting Notes pages - transcript-shaped so the AI Meeting Assistant
+        # (green panel + Import Transcript on the page) has real content to
+        # analyze. transcript_metadata drives the participants/date/duration the
+        # assistant reads.
+        meeting_date_1 = (self.TODAY - timedelta(days=10)).isoformat()
+        meeting_date_2 = (self.TODAY - timedelta(days=3)).isoformat()
+        meeting_pages = [
+            ('Phase 2 Sprint Planning - Meeting Notes', {
+                'meeting_date': meeting_date_2,
+                'duration_minutes': 45,
+                'participants': ['Priya Sharma', 'Marcus Chen', 'Elena Vasquez'],
+            }, (
+                "# Phase 2 Sprint Planning - Meeting Notes\n\n"
+                f"**Date:** {meeting_date_2}  |  **Duration:** 45 min  |  "
+                "**Attendees:** Priya Sharma, Marcus Chen, Elena Vasquez\n\n"
+                "## Transcript\n\n"
+                "**Priya:** Let's lock the Phase 2 goal. The headline is the AI "
+                "onboarding wizard - everything else is secondary this sprint.\n\n"
+                "**Marcus:** The signup form and email verification are already "
+                "working. The wizard UI is about 60% done; the AI workspace "
+                "generation is the last piece.\n\n"
+                "**Elena:** I'll own the Docker onboarding path so new engineers "
+                "aren't blocked. I can have the compose setup documented by "
+                "Wednesday.\n\n"
+                "**Priya:** Good. Decision: AI workspace generation is the sprint "
+                "commitment; the analytics polish moves to the backlog.\n\n"
+                "## Decisions\n\n"
+                "- Sprint goal: ship the AI onboarding wizard end to end.\n"
+                "- Analytics dashboard polish deferred to next sprint.\n\n"
+                "## Action items\n\n"
+                "- **Marcus** - finish the wizard UI and wire up AI workspace "
+                "generation.\n"
+                "- **Elena** - publish the Docker onboarding guide in the "
+                "Engineering wiki.\n"
+                "- **Priya** - review the AI prompt design before Thursday.\n"
+            )),
+            ('Phase 1 Retrospective - Meeting Notes', {
+                'meeting_date': meeting_date_1,
+                'duration_minutes': 40,
+                'participants': ['Priya Sharma', 'Marcus Chen', 'Elena Vasquez'],
+            }, (
+                "# Phase 1 Retrospective - Meeting Notes\n\n"
+                f"**Date:** {meeting_date_1}  |  **Duration:** 40 min  |  "
+                "**Attendees:** Priya Sharma, Marcus Chen, Elena Vasquez\n\n"
+                "## Transcript\n\n"
+                "**Priya:** Phase 1 shipped on time. What went well, and what "
+                "slowed us down?\n\n"
+                "**Elena:** Onboarding setup time was the biggest drag - new "
+                "engineers lost a day to local Postgres/Redis mismatches.\n\n"
+                "**Marcus:** Agreed. On the plus side, code review turnaround was "
+                "fast once we set the size-based SLA.\n\n"
+                "**Priya:** Let's make the ADR gate a Definition-of-Ready item so "
+                "architecture decisions get written down before we build.\n\n"
+                "## What went well\n\n"
+                "- Shipped Phase 1 on schedule.\n"
+                "- Code review SLA kept PRs moving.\n\n"
+                "## What to improve\n\n"
+                "- Local dev setup time - adopt Docker-first onboarding.\n"
+                "- Capture architecture decisions earlier (ADR gate).\n\n"
+                "## Action items\n\n"
+                "- **Elena** - stand up the Docker dev environment and document it.\n"
+                "- **Priya** - add 'ADR approved' to the Definition of Ready.\n"
+            )),
+            ('Weekly Team Standup - Meeting Notes', {
+                'meeting_date': (self.TODAY - timedelta(days=1)).isoformat(),
+                'duration_minutes': 15,
+                'participants': ['Priya Sharma', 'Marcus Chen', 'Elena Vasquez'],
+            }, (
+                "# Weekly Team Standup - Meeting Notes\n\n"
+                f"**Date:** {(self.TODAY - timedelta(days=1)).isoformat()}  |  "
+                "**Duration:** 15 min  |  "
+                "**Attendees:** Priya Sharma, Marcus Chen, Elena Vasquez\n\n"
+                "## Transcript\n\n"
+                "**Marcus:** Yesterday I finished the wizard UI polish. Today I'm "
+                "wiring the AI workspace generation call. No blockers.\n\n"
+                "**Elena:** Docker onboarding guide is published. Today I'm adding "
+                "the Redis service to the compose file. Blocked on a port conflict "
+                "I'll sort out this morning.\n\n"
+                "**Priya:** I reviewed the AI prompt design - approved with minor "
+                "tweaks. Today I'm pairing with Marcus on the generation call.\n\n"
+                "## Blockers\n\n"
+                "- Elena: local port conflict on Redis (self-resolving today).\n\n"
+                "## Action items\n\n"
+                "- **Marcus & Priya** - pair on AI workspace generation.\n"
+                "- **Elena** - resolve the Redis port conflict and finish compose.\n"
+            )),
+        ]
+
+        # Per-category tags so the pills reflect the actual category instead of a
+        # uniform "engineering" tag on every page.
+        cat_tags = {
+            cats['engineering']: ['engineering', 'standards'],
+            cats['architecture']: ['architecture', 'adr'],
+            cats['process-workflows']: ['process', 'standards'],
+            cats['getting-started']: ['onboarding', 'setup'],
+            cats['meeting-notes']: ['meeting', 'notes'],
+        }
+
+        # (category, title, content, author, transcript_metadata)
+        page_specs = (
+            [(cat, title, content, self.priya, None) for title, content in engineering_pages]
+            + [(cats['architecture'], title, content, self.elena, None) for title, content in architecture_pages]
+            + [(cats['process-workflows'], title, content, self.marcus, None) for title, content in process_pages]
+            + [(cats['getting-started'], title, content, self.priya, None) for title, content in getting_started_pages]
+            + [(cats['meeting-notes'], title, content, self.marcus if i % 2 == 0 else self.priya, meta)
+               for i, (title, meta, content) in enumerate(meeting_pages)]
+        )
+        for category, title, content, author, transcript_metadata in page_specs:
+            page, created = WikiPage.objects.get_or_create(
+                title=title, category=category, organization=self.demo_org,
+                defaults={
+                    'workspace': demo_ws,
+                    'content': content,
+                    'created_by': author, 'updated_by': author,
+                    'is_published': True,
+                    'tags': cat_tags.get(category, ['standards']),
+                    'transcript_metadata': transcript_metadata or {},
+                },
+            )
+            if not created and page.workspace_id != getattr(demo_ws, 'id', None):
+                page.workspace = demo_ws
+                page.save(update_fields=['workspace'])
+        self.stdout.write(
+            f'  [OK] Wiki: {len(cats)} categories + {len(page_specs)} pages created'
+        )
+
+    # ------------------------------------------------------------------
+    # Custom fields
+    # ------------------------------------------------------------------
+    def _create_custom_fields(self):
+        """Seed custom field definitions and sample values for the demo workspace.
+
+        Idempotent: uses get_or_create throughout so re-running is safe.
+        """
+        try:
+            workspace = self.board.workspace
+        except Workspace.DoesNotExist:
+            workspace = None
+        if workspace is None:
+            workspace = Workspace.objects.filter(
+                organization=self.demo_org, is_demo=True
+            ).first()
+            if workspace is not None:
+                # Self-heal: repoint board to the real workspace
+                self.board.workspace = workspace
+                self.board.save(update_fields=['workspace'])
+        if workspace is None:
+            self.stdout.write(self.style.WARNING(
+                '  [WARN] Custom fields: no demo workspace found — skipping.'
+            ))
+            return
+
+        # ── Field definitions ─────────────────────────────────────────────
+        # sandbox_owner=None keeps these as the shared TEMPLATE definitions; each
+        # demo user gets private clones (sandbox_owner=user) via
+        # _clone_custom_fields_for_user, so template rows must never carry an
+        # owner (the (workspace, sandbox_owner, name) uniqueness depends on it).
+        sprint_field, _ = CustomFieldDefinition.objects.get_or_create(
+            workspace=workspace, name='Sprint', is_active=True, sandbox_owner=None,
+            defaults={
+                'field_type': 'list',
+                'is_required': False,
+                'is_multi_select': False,
+                'applies_to_tasks': True,
+                'position': 1,
+            },
+        )
+        sprint_opts = {}
+        for pos, label in enumerate(
+            ['Sprint 1', 'Sprint 2', 'Sprint 3', 'Sprint 4 (Current)'], start=1
+        ):
+            opt, _ = CustomFieldOption.objects.get_or_create(
+                field=sprint_field, value=label,
+                defaults={'position': pos, 'is_default': label == 'Sprint 4 (Current)'},
+            )
+            sprint_opts[label] = opt
+
+        story_points_field, _ = CustomFieldDefinition.objects.get_or_create(
+            workspace=workspace, name='Story Points', is_active=True, sandbox_owner=None,
+            defaults={
+                'field_type': 'integer',
+                'is_required': False,
+                'applies_to_tasks': True,
+                'position': 2,
+            },
+        )
+
+        env_field, _ = CustomFieldDefinition.objects.get_or_create(
+            workspace=workspace, name='Environment', is_active=True, sandbox_owner=None,
+            defaults={
+                'field_type': 'list',
+                'is_required': False,
+                'is_multi_select': True,
+                'applies_to_tasks': True,
+                'position': 3,
+            },
+        )
+        env_opts = {}
+        for pos, label in enumerate(['Development', 'Staging', 'Production'], start=1):
+            opt, _ = CustomFieldOption.objects.get_or_create(
+                field=env_field, value=label,
+                defaults={'position': pos, 'is_default': False},
+            )
+            env_opts[label] = opt
+
+        category_field, _ = CustomFieldDefinition.objects.get_or_create(
+            workspace=workspace, name='Feature Category', is_active=True, sandbox_owner=None,
+            defaults={
+                'field_type': 'list',
+                'is_required': False,
+                'is_multi_select': False,
+                'applies_to_tasks': True,
+                'position': 4,
+            },
+        )
+        cat_opts = {}
+        for pos, label in enumerate(
+            ['Backend', 'Frontend', 'DevOps', 'QA', 'Documentation'], start=1
+        ):
+            opt, _ = CustomFieldOption.objects.get_or_create(
+                field=category_field, value=label,
+                defaults={'position': pos, 'is_default': False},
+            )
+            cat_opts[label] = opt
+
+        # ── Task values ───────────────────────────────────────────────────
+        # Map task title fragments → (sprint_label, story_pts, env_labels, category)
+        task_data = {
+            'Requirements Analysis':      ('Sprint 1', 3,  ['Development'],             'Documentation'),
+            'System Architecture':        ('Sprint 1', 8,  ['Development'],             'Backend'),
+            'CI/CD Pipeline':             ('Sprint 1', 5,  ['Development', 'Staging'],  'DevOps'),
+            'Development Environment':    ('Sprint 1', 3,  ['Development'],             'DevOps'),
+            'Database Schema':            ('Sprint 2', 8,  ['Development'],             'Backend'),
+            'User Registration':          ('Sprint 2', 5,  ['Development', 'Staging'],  'Backend'),
+            'OAuth Integration':          ('Sprint 2', 8,  ['Development', 'Staging'],  'Backend'),
+            'JWT Token':                  ('Sprint 2', 5,  ['Development'],             'Backend'),
+            'Role-Based Access':          ('Sprint 2', 8,  ['Development'],             'Backend'),
+            'REST API':                   ('Sprint 3', 13, ['Development', 'Staging'],  'Backend'),
+            'Unit Test Suite':            ('Sprint 3', 5,  ['Development'],             'QA'),
+            'Integration Test':           ('Sprint 3', 8,  ['Staging'],                 'QA'),
+            'Performance Optimisation':   ('Sprint 4 (Current)', 8,  ['Staging'],        'Backend'),
+            'Social Login Integration':   ('Sprint 4 (Current)', 8,  ['Development'],   'Backend'),
+            'Email Notification':         ('Sprint 4 (Current)', 5,  ['Development'],   'Backend'),
+            'Push Notification':          ('Sprint 4 (Current)', 5,  ['Development'],   'Backend'),
+            'Real-Time Dashboard':        ('Sprint 4 (Current)', 8,  ['Frontend'],       'Frontend'),
+            'Webhook':                    ('Sprint 4 (Current)', 5,  ['Staging'],        'Backend'),
+            'Mobile-Responsive':          ('Sprint 4 (Current)', 8,  ['Frontend'],       'Frontend'),
+            'Accessibility':              ('Sprint 4 (Current)', 5,  ['Frontend'],       'Frontend'),
+            'API Documentation':          ('Sprint 4 (Current)', 3,  ['Production'],     'Documentation'),
+            'Security Audit':             ('Sprint 4 (Current)', 8,  ['Staging', 'Production'], 'QA'),
+            'Load Testing':               ('Sprint 4 (Current)', 5,  ['Staging'],        'QA'),
+            'Deployment Pipeline':        ('Sprint 4 (Current)', 8,  ['Staging', 'Production'], 'DevOps'),
+            'Monitoring & Alerting':      ('Sprint 4 (Current)', 5,  ['Production'],     'DevOps'),
+            'Feature Flag':               ('Sprint 4 (Current)', 3,  ['Development'],   'DevOps'),
+            'User Onboarding Flow':       ('Sprint 4 (Current)', 8,  ['Frontend'],       'Frontend'),
+            'Analytics Integration':      ('Sprint 4 (Current)', 5,  ['Staging'],        'Backend'),
+        }
+
+        tasks = Task.objects.filter(
+            column__board=self.board,
+            item_type='task',
+            is_seed_demo_data=True,
+        )
+
+        updated = 0
+        for task in tasks:
+            matched_key = next(
+                (k for k in task_data if k.lower() in task.title.lower()), None
+            )
+            if matched_key is None:
+                continue
+            sprint_label, pts, envs, category = task_data[matched_key]
+
+            # Sprint
+            sprint_val, _ = TaskCustomFieldValue.objects.get_or_create(
+                task=task, field=sprint_field,
+            )
+            sprint_val.selected_options.set([sprint_opts[sprint_label]])
+
+            # Story Points
+            pts_val, _ = TaskCustomFieldValue.objects.get_or_create(
+                task=task, field=story_points_field,
+            )
+            from decimal import Decimal as D
+            pts_val.value_number = D(pts)
+            pts_val.save(update_fields=['value_number', 'updated_at'])
+
+            # Environment (multi-select)
+            env_val, _ = TaskCustomFieldValue.objects.get_or_create(
+                task=task, field=env_field,
+            )
+            env_val.selected_options.set(
+                [env_opts[e] for e in envs if e in env_opts]
+            )
+
+            # Feature Category
+            cat_val, _ = TaskCustomFieldValue.objects.get_or_create(
+                task=task, field=category_field,
+            )
+            if category in cat_opts:
+                cat_val.selected_options.set([cat_opts[category]])
+
+            updated += 1
+
+        self.stdout.write(
+            f'  [OK] Custom fields: 4 definitions + values on {updated} tasks'
+        )
+
+    # ------------------------------------------------------------------
+    # Velocity snapshots
+    # ------------------------------------------------------------------
+    def _create_velocity_snapshots(self):
+        """Seed TeamVelocitySnapshot records by running the predictor's snapshot
+        builder against the just-created tasks.  This ensures the Velocity History
+        chart shows a realistic spread of bars immediately after demo reset instead
+        of waiting for the first burndown page visit."""
+        try:
+            from kanban.utils.burndown_predictor import BurndownPredictor
+            predictor = BurndownPredictor()
+            predictor._ensure_velocity_snapshots(self.board)
+            self.stdout.write('  [OK] Velocity snapshots seeded')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'  [WARN] Could not seed velocity snapshots: {e}'))
+
+    # ------------------------------------------------------------------
+    # Optional sub-seeders
+    # ------------------------------------------------------------------
+    def _call_optional_subseeders(self):
+        """Best-effort calls to feature-specific sub-seeders. Failures are non-fatal."""
+        subs = [
+            'populate_commitment_demo_data',
+            'populate_calendar_demo_data',
+            'populate_knowledge_demo_data',
+            'populate_discovery_demo_data',
+            'populate_automation_demo_data',
+            'fix_premortem_stress_demo',
+            'seed_exit_protocol_demo',
+        ]
+        # populate_calendar_demo_data links some events to Task rows by title
+        # (linked_task). _reset_demo_data() above deletes and recreates every
+        # Task on --reset, which cascades linked_task to NULL on any
+        # already-existing CalendarEvent (on_delete=SET_NULL) — so on every
+        # --reset after the first, this subseeder's own idempotency check
+        # ("events already exist, skip") would otherwise leave those links
+        # permanently null instead of re-pointing them at the fresh Task rows.
+        # Forward --reset through so it recreates (and correctly re-links)
+        # its events whenever the board's tasks were just rebuilt.
+        subs_needing_reset_passthrough = {'populate_calendar_demo_data'}
+        for name in subs:
+            try:
+                if self.reset and name in subs_needing_reset_passthrough:
+                    call_command(name, '--reset')
+                else:
+                    call_command(name)
+                self.stdout.write(f'  [OK] {name}')
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f'  [WARN] {name} skipped: {e}'))
+
+        # NOTE: do NOT call refresh_demo_dates here - our seed already writes
+        # dynamic dates relative to TODAY, and the refresh command resets
+        # progress/checklists/dates in a way that wipes the carefully-tuned
+        # narrative (intentional overdue task, mid-progress states, etc.).
+
+        try:
+            call_command('detect_conflicts', '--clear')
+            self.stdout.write('  [OK] detect_conflicts')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'  [WARN] detect_conflicts skipped: {e}'))
+
+    # ------------------------------------------------------------------
+    # Verification
+    # ------------------------------------------------------------------
+    def _print_verification_report(self):
+        b = self.board
+        tasks = Task.objects.filter(column__board=b)
+        children = tasks.exclude(item_type='milestone').exclude(item_type='epic')
+
+        self.stdout.write('')
         self.stdout.write(self.style.SUCCESS('=' * 80))
-        
-        # Count all data
-        task_count = Task.objects.filter(column__board__in=self.demo_boards).count()
-        wiki_pages = WikiPage.objects.filter(organization=self.demo_org).count()
-        wiki_categories = WikiCategory.objects.filter(organization=self.demo_org).count()
-        chat_rooms = ChatRoom.objects.filter(board__in=self.demo_boards).count()
-        chat_messages = ChatMessage.objects.filter(chat_room__board__in=self.demo_boards).count()
-        conflicts = ConflictDetection.objects.filter(board__in=self.demo_boards).count()
-        ai_sessions = AIAssistantSession.objects.filter(user__in=self.demo_users).count()
-        ai_messages = AIAssistantMessage.objects.filter(session__user__in=self.demo_users).count()
-        ai_analytics = AIAssistantAnalytics.objects.filter(user__in=self.demo_users).count()
-        kb_entries = ProjectKnowledgeBase.objects.filter(board__in=self.demo_boards).count()
-        ai_recommendations = AITaskRecommendation.objects.filter(board__in=self.demo_boards).count()
-        time_entries = TimeEntry.objects.filter(task__column__board__in=self.demo_boards).count()
-        
-        self.stdout.write(f'''
-📊 Demo Data Summary:
-   ├── Tasks: {task_count}
-   ├── Wiki: {wiki_categories} categories, {wiki_pages} pages
-   ├── Messaging: {chat_rooms} rooms, {chat_messages} messages
-   ├── Conflicts: {conflicts}
-   ├── AI Assistant: {ai_sessions} sessions, {ai_messages} messages
-   │   ├── Analytics: {ai_analytics} daily records
-   │   ├── Knowledge Base: {kb_entries} entries
-   │   └── Recommendations: {ai_recommendations}
-   └── Time Entries: {time_entries}
+        self.stdout.write(self.style.SUCCESS('DEMO DATA VERIFICATION REPORT'))
+        self.stdout.write(self.style.SUCCESS('=' * 80))
+        self.stdout.write(f'Board: {b.name}')
+        self.stdout.write(f'Total task rows: {tasks.count()}  (expected: 40 - 4 epics + 32 tasks + 3 milestones + 1 sub-seeder task)')
+        for c in b.columns.all().order_by('position'):
+            self.stdout.write(
+                f'  {c.name:<14} {tasks.filter(column=c).count():>3}'
+                f'   (children only: {children.filter(column=c).count()})'
+            )
 
-🎉 Demo environment is now fully populated!
+        overdue = children.filter(due_date__lt=self.NOW, progress__lt=100)
+        self.stdout.write(
+            f'Overdue tasks: {overdue.count()}  '
+            '(expected: 3 - Social Login Integration P3 + '
+            'Authentication System R1 in review + Database Schema P2 slightly overdue)'
+        )
 
-To access the demo:
-   • Visit: http://localhost:8000
-   • Login as demo user or view demo boards
-''')
+        dep_count = sum(t.dependencies.count() for t in children)
+        self.stdout.write(f'Total dependency links: {dep_count}  (expected: 31)')
+
+        for username in PERSONA_USERNAMES:
+            ok = User.objects.filter(username=username).exists()
+            self.stdout.write(f'  Persona {username}: {"[OK]" if ok else "[FAIL] MISSING"}')
+
+        archive = Board.objects.filter(
+            name=ARCHIVE_BOARD_NAME, organization=self.demo_org,
+        ).first()
+        if archive:
+            hist = Task.objects.filter(column__board=archive).count()
+            self.stdout.write(f'Historical ML tasks: {hist}  (expected: 25, on hidden archive board)')
+
+        self.stdout.write('')
+        self.stdout.write(f' All dates relative to TODAY = {self.TODAY}')
+        self.stdout.write(' Re-run anytime to slide the project forward.')
+        self.stdout.write(self.style.SUCCESS('=' * 80))

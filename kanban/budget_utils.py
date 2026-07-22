@@ -697,7 +697,9 @@ class BudgetAnalyzer:
         completed_tasks = tasks.filter(progress=100).count()
         total_tasks = tasks.count()
         
-        # Calculate ROI - use snapshot data consistently for historical tracking
+        # Calculate ROI - use allocated_budget as the true investment baseline
+        # so the percentage reflects realistic project return rather than
+        # artificially inflating it against only the amount spent to date.
         roi_percentage = None
         expected_value = Decimal('0.00')
         realized_value = Decimal('0.00')
@@ -705,9 +707,12 @@ class BudgetAnalyzer:
         if latest_roi:
             expected_value = latest_roi.expected_value or Decimal('0.00')
             realized_value = latest_roi.realized_value or Decimal('0.00')
-            # Use snapshot's total_cost instead of mixing with current costs
-            roi_percentage = float(latest_roi.roi_percentage) if latest_roi.roi_percentage else 0
-            # Use snapshot's cost for display consistency
+            # Recalculate ROI against allocated budget (not just actual spend)
+            if budget.allocated_budget > 0:
+                value = realized_value if realized_value > 0 else expected_value
+                if value > 0:
+                    roi_percentage = float((value - budget.allocated_budget) / budget.allocated_budget * 100)
+            # Use snapshot's cost for historical display
             total_cost = latest_roi.total_cost
         
         # Calculate completion rate
@@ -725,11 +730,12 @@ class BudgetAnalyzer:
         
         return {
             'budget': budget,
-            'total_investment': float(total_cost),
+            'total_investment': float(budget.allocated_budget),
+            'actual_spend': float(total_cost),
             'expected_value': float(expected_value),
             'realized_value': float(realized_value),
-            'roi_percent': round(roi_percentage, 2) if roi_percentage else 0,
-            'roi_percentage': round(roi_percentage, 2) if roi_percentage else None,
+            'roi_percent': round(roi_percentage, 2) if roi_percentage is not None else 0,
+            'roi_percentage': round(roi_percentage, 2) if roi_percentage is not None else None,
             'tasks_completed': completed_tasks,
             'completed_tasks': completed_tasks,
             'total_tasks': total_tasks,
@@ -758,27 +764,43 @@ class BudgetAnalyzer:
         end_date = timezone.now()
         start_date = end_date - timedelta(days=days)
         
-        # Daily time entries
+        # Daily time entries with per-task hourly rates
         daily_hours = TimeEntry.objects.filter(
             task__column__board=board,
             work_date__gte=start_date.date()
-        ).values('work_date').annotate(
+        ).select_related('task').values(
+            'work_date', 'task_id'
+        ).annotate(
             total_hours=Sum('hours_spent')
         ).order_by('work_date')
+        
+        # Build a map of task_id -> hourly_rate from TaskCost
+        task_rates = {}
+        for tc in TaskCost.objects.filter(task__column__board=board):
+            task_rates[tc.task_id] = tc.hourly_rate if tc.hourly_rate else Decimal('0.00')
+        
+        # Aggregate daily costs using actual hourly rates
+        daily_cost_map = {}
+        daily_hours_map = {}
+        for entry in daily_hours:
+            d = entry['work_date']
+            rate = task_rates.get(entry['task_id'], Decimal('0.00'))
+            cost = entry['total_hours'] * rate
+            daily_cost_map[d] = daily_cost_map.get(d, Decimal('0.00')) + cost
+            daily_hours_map[d] = daily_hours_map.get(d, Decimal('0.00')) + entry['total_hours']
         
         # Calculate cumulative costs
         cumulative_data = []
         cumulative_cost = Decimal('0.00')
         
-        for entry in daily_hours:
-            # Estimate cost (this is simplified - actual calculation would need hourly rates)
-            estimated_daily_cost = entry['total_hours'] * Decimal('50.00')  # Default rate
-            cumulative_cost += estimated_daily_cost
+        for d in sorted(daily_cost_map.keys()):
+            daily_cost = daily_cost_map[d]
+            cumulative_cost += daily_cost
             
             cumulative_data.append({
-                'date': entry['work_date'],  # Keep as date object for template formatting
-                'daily_hours': float(entry['total_hours']),
-                'daily_cost_estimate': float(estimated_daily_cost),
+                'date': d,
+                'daily_hours': float(daily_hours_map[d]),
+                'daily_cost_estimate': float(daily_cost),
                 'cumulative_cost': float(cumulative_cost),
             })
         
@@ -801,9 +823,13 @@ class BudgetAnalyzer:
             List of task cost breakdowns
         """
         from kanban.budget_models import TaskCost, TimeEntry, ProjectBudget
-        
+
+        # Only real tasks (item_type='task') — EPIC/milestone rows have TaskCost
+        # records too (at 0 cost) and would inflate the "N Tasks" badge (36 vs 33)
+        # and add empty bars to the "Top 10 Expensive Tasks" chart.
         task_costs = TaskCost.objects.filter(
-            task__column__board=board
+            task__column__board=board,
+            task__item_type='task',
         ).select_related('task', 'task__assigned_to')
         
         # Get budget for percent calculation
@@ -895,11 +921,37 @@ class BudgetAnalyzer:
             days_remaining_display = str(days_remaining_int)
             projected_end_date = board.project_deadline
 
-        # Sustainability: will the remaining budget cover the remaining days at this burn rate?
+        # Sustainability: compare remaining budget against the estimated cost of
+        # incomplete tasks rather than blindly extrapolating the historical burn
+        # rate.  Pure burn-rate projection is misleading because it includes
+        # past overruns on already-completed tasks — the remaining work is what
+        # actually needs to fit in the remaining budget.
+        #
+        # Fallback: if no TaskCost estimates exist, use burn-rate projection.
         is_sustainable = False
-        if has_deadline and days_remaining_int > 0 and daily_burn_rate > 0:
-            expected_remaining_spend = daily_burn_rate * days_remaining_int
-            is_sustainable = remaining_budget >= expected_remaining_spend
+        if has_deadline and days_remaining_int > 0:
+            from kanban.models import Task as _Task
+            from kanban.budget_models import TaskCost as _TaskCost
+            from django.db.models import Sum as _Sum
+
+            incomplete_task_ids = list(
+                _Task.objects.filter(
+                    column__board=board, progress__lt=100
+                ).values_list('id', flat=True)
+            )
+            remaining_estimated = (
+                _TaskCost.objects.filter(task_id__in=incomplete_task_ids)
+                .aggregate(total=_Sum('estimated_cost'))['total']
+                or Decimal('0.00')
+            )
+
+            if remaining_estimated > 0:
+                # Primary check: remaining budget covers estimated remaining work
+                is_sustainable = remaining_budget >= remaining_estimated
+            elif daily_burn_rate > 0:
+                # Fallback: use burn-rate projection when no estimates available
+                expected_remaining_spend = daily_burn_rate * days_remaining_int
+                is_sustainable = remaining_budget >= expected_remaining_spend
 
         return {
             'period_days': period_days,
@@ -976,18 +1028,25 @@ class ROICalculator:
         # Calculate current costs
         task_costs = TaskCost.objects.filter(task__column__board=board)
         total_cost = sum([tc.get_total_actual_cost() for tc in task_costs])
-        
-        # Task metrics - use progress instead of column name
-        tasks = Task.objects.filter(column__board=board)
+
+        # Task metrics - use progress instead of column name, and the canonical
+        # board task queryset (item_type='task') so the snapshot's totals match
+        # every other budget surface (otherwise EPIC/milestone rows inflate the
+        # count, e.g. 36 vs 33).
+        tasks = BudgetAnalyzer.get_board_tasks(board)
         completed_tasks = tasks.filter(progress=100).count()
         total_tasks = tasks.count()
-        
-        # Calculate ROI
+
+        # Calculate ROI against allocated budget (not just task-tracked costs) so
+        # history snapshots are consistent with the header ROI card formula.
+        from kanban.budget_models import ProjectBudget as _ProjectBudget
+        _budget = _ProjectBudget.objects.filter(board=board).first()
         roi_percentage = None
         if expected_value or realized_value:
             value = realized_value or expected_value or Decimal('0.00')
-            if total_cost > 0:
-                roi_percentage = ((value - total_cost) / total_cost) * 100
+            cost_basis = _budget.allocated_budget if (_budget and _budget.allocated_budget > 0) else total_cost
+            if cost_basis > 0:
+                roi_percentage = ((value - cost_basis) / cost_basis) * 100
         
         # Create snapshot
         snapshot = ProjectROI.objects.create(

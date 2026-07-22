@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Organization, UserProfile
-from kanban.models import Board, Column, Task
+from kanban.models import Board, BoardMembership, Column, Task
 
 
 class ExitProtocolTestBase(TestCase):
@@ -30,7 +30,7 @@ class ExitProtocolTestBase(TestCase):
             organization=self.org,
             created_by=self.user,
         )
-        self.board.members.add(self.user)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user, defaults={'role': 'member'})
 
         # Backdate creation for the 7-day minimum
         self.board.created_at = timezone.now() - timedelta(days=30)
@@ -43,8 +43,11 @@ class ExitProtocolTestBase(TestCase):
         for i in range(10):
             t = Task.objects.create(column=self.col_todo, title=f'Task {i}', created_by=self.user)
             if i < 3:
+                # progress=100 is the canonical "done" marker — Task.save() then
+                # sets completed_at. Setting completed_at directly would be wiped,
+                # since save() clears it whenever progress < 100.
                 t.column = self.col_done
-                t.completed_at = timezone.now()
+                t.progress = 100
                 t.save()
 
         self.client = Client()
@@ -64,7 +67,7 @@ class ModelTests(ExitProtocolTestBase):
         )
         self.assertEqual(signal.board, self.board)
         self.assertAlmostEqual(signal.hospice_risk_score, 0.42)
-        self.assertEqual(str(signal), f"{self.board.name} — 0.42 @ {signal.recorded_at}")
+        self.assertEqual(str(signal), f"HealthSignal({self.board.id}, score=0.42, valid=True)")
 
     def test_create_hospice_session(self):
         from .models import HospiceSession
@@ -381,7 +384,9 @@ class BurialTaskTests(ExitProtocolTestBase):
         self.assertIsNotNone(entry)
         self.assertEqual(entry.project_name, 'Project Omega')
         self.assertEqual(entry.cause_of_death, 'velocity_collapse')
-        self.assertEqual(entry.total_tasks, 13)  # 10 + 3 completed
+        # setUp creates 10 tasks total, 3 of which are moved to Done/completed.
+        self.assertEqual(entry.total_tasks, 10)
+        self.assertEqual(entry.completed_tasks, 3)
 
         # Verify board archived
         self.board.refresh_from_db()

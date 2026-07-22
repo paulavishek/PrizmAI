@@ -70,7 +70,7 @@
 }
 
 .demo-stat-value {
-    color: #333;
+    color: var(--text-primary);
     font-weight: 600;
 }
 
@@ -119,7 +119,7 @@
     display: inline-block;
     padding: 6px 12px;
     margin: 5px;
-    background: #f8f9fc;
+    background: var(--bg-tertiary);
     border: 1px solid #667eea;
     border-radius: 20px;
     color: #667eea;
@@ -131,7 +131,7 @@
 .demo-task-item {
     padding: 12px;
     border-left: 3px solid #667eea;
-    background: #f8f9fc;
+    background: var(--bg-tertiary);
     border-radius: 5px;
     margin-bottom: 10px;
     transition: all 0.2s;
@@ -162,9 +162,9 @@
         <i class="fas fa-graduation-cap no-demo-icon"></i>
         <h2>Demo Environment Not Available</h2>
         <p class="text-muted">{{ message }}</p>
-        <button onclick="goBack()" class="btn btn-primary mt-3">
+        <a href="{% url 'dashboard' %}" class="btn-prizm-back mt-3">
             <i class="fas fa-arrow-left me-2"></i>Go Back
-        </button>
+        </a>
     </div>
 {% else %}
     <!-- New Demo Mode Banner -->
@@ -420,7 +420,7 @@
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body" style="background: #f8f9fc;">
+                <div class="modal-body" style="background: var(--bg-tertiary);">
                     <div class="row mb-4">
                         <div class="col-12 text-center">
                             <h2 class="display-3 mb-3" style="color: #f6c23e; font-weight: bold;">{{ completion_rate }}%</h2>
@@ -452,7 +452,7 @@
                     <div class="card border-0 shadow-sm mb-4">
                         <div class="card-body">
                             <h6 class="font-weight-bold mb-3"><i class="fas fa-calculator me-2"></i>How We Calculate This:</h6>
-                            <div class="calculation-formula p-3 rounded" style="background: white; border: 2px dashed #dee2e6;">
+                            <div class="calculation-formula p-3 rounded" style="background: var(--card-bg); border: 2px dashed #dee2e6;">
                                 <p class="mb-2 text-center" style="font-family: 'Courier New', monospace; font-size: 1.1rem;">
                                     <span style="color: #1cc88a; font-weight: bold;">{{ completed_count }}</span>
                                     <span class="text-muted"> (completed) </span>

@@ -19,11 +19,11 @@
     }
     .resolution-card.selected {
         border-color: #28a745;
-        background: #f0f9f4;
+        background: rgba(40, 167, 69, 0.12);
     }
     .confidence-bar {
         height: 8px;
-        background: #e9ecef;
+        background: var(--bg-tertiary);
         border-radius: 4px;
         overflow: hidden;
     }
@@ -39,7 +39,7 @@
         display: inline-block;
         padding: 0.5rem 1rem;
         border-radius: 6px;
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         margin: 0.25rem;
     }
     .user-avatar {
@@ -70,14 +70,27 @@
         border-radius: 50%;
         background: #007bff;
     }
+    /* Rendered markdown inside resolution cards */
+    .conflict-ai-reasoning p {
+        font-size: 0.8rem;
+        margin-bottom: 0.25rem;
+    }
+    .conflict-ai-reasoning p:last-child {
+        margin-bottom: 0;
+    }
+    .conflict-ai-reasoning strong {
+        font-weight: 600;
+    }
+    .conflict-ai-reasoning ul,
+    .conflict-ai-reasoning ol {
+        font-size: 0.8rem;
+        padding-left: 1.25rem;
+        margin-bottom: 0.25rem;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<!-- Demo Mode Banner -->
-{% if is_demo_mode %}
-    {% include 'demo/partials/demo_banner.html' %}
-{% endif %}
 
 <div class="container-fluid py-4">
     <!-- Breadcrumb -->
@@ -173,7 +186,7 @@
                                 <div class="card border-0 bg-light h-100">
                                     <div class="card-body">
                                         <small class="text-muted d-block mb-1">Task ID</small>
-                                        <strong>#{{ conflict.conflict_data.task_id }}</strong>
+                                        <strong>{{ conflict.board.get_task_prefix }}-{{ conflict.conflict_data.task_id }}</strong>
                                     </div>
                                 </div>
                             </div>
@@ -293,7 +306,7 @@
                                         </button>
                                         {% endif %}
                                     </div>
-                                    <small class="d-block mt-1">{{ resolution.ai_reasoning }}</small>
+                                    <div class="mt-1 conflict-ai-reasoning">{{ resolution.ai_reasoning|render_markdown }}</div>
                                     
                                     <!-- Enhanced Explainability Section -->
                                     {% if resolution.contributing_factors or resolution.assumptions or resolution.success_indicators %}
@@ -368,10 +381,15 @@
                             </div>
                         </form>
                     {% else %}
-                        <div class="text-center py-4">
-                            <i class="fas fa-spinner fa-spin fa-3x text-muted mb-3"></i>
-                            <p class="text-muted">Generating AI suggestions...</p>
-                        </div>
+                        <div id="conflict-gen-loader"></div>
+                        <script>
+                            (function() {
+                                var host = document.getElementById('conflict-gen-loader');
+                                if (host && window.PrizmLoading) {
+                                    PrizmLoading.showSpectra(host, { messageKey: 'conflictResolution', subtitle: '' });
+                                }
+                            })();
+                        </script>
                     {% endif %}
                 </div>
             </div>
@@ -388,9 +406,9 @@
                     <button class="btn btn-warning w-100 mb-2" onclick="ignoreConflict()">
                         <i class="fas fa-eye-slash"></i> Ignore This Conflict
                     </button>
-                    <button onclick="goBack()" class="btn btn-outline-secondary w-100">
+                    <a href="{% url 'conflict_dashboard' %}" class="btn-prizm-back w-100">
                         <i class="fas fa-arrow-left"></i> Back
-                    </button>
+                    </a>
                 </div>
             </div>
 
@@ -507,6 +525,61 @@
     </div>
 </div>
 
+<!-- Reschedule Review Modal (shown after a reschedule/adjust_dates resolution
+     that moved the task's dates but has no dependents needing a cascade) -->
+<div class="modal fade" id="rescheduleReviewModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-calendar-check"></i> Task Rescheduled
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="rescheduleReviewMessage" class="mb-2"></p>
+                <small class="text-muted">Please review the Gantt chart and make any manual adjustments if needed.</small>
+            </div>
+            <div class="modal-footer">
+                <a href="{% url 'gantt_chart' conflict.board.id %}" target="_blank" class="btn btn-outline-secondary">
+                    <i class="fas fa-chart-bar"></i> Open Gantt Chart
+                </a>
+                <button type="button" class="btn btn-primary" onclick="skipRescheduleReview()">Got It</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dependency Cascade Modal (shown after a reschedule/adjust_dates resolution
+     if the newly-changed dates leave dependent tasks starting too early) -->
+<div class="modal fade" id="dependencyCascadeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Dependent Tasks May Need Adjusting
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="dependencyCascadeMessage" class="mb-3"></p>
+                <ul id="dependencyCascadeList" class="list-group mb-2"></ul>
+                <small class="text-muted">This resolution only changed the dates of the task above &mdash; it does not
+                    automatically move tasks that depend on it. Double-check the schedule in the Gantt chart.</small>
+            </div>
+            <div class="modal-footer">
+                <a href="{% url 'gantt_chart' conflict.board.id %}" target="_blank" class="btn btn-outline-secondary">
+                    <i class="fas fa-chart-bar"></i> Open Gantt Chart
+                </a>
+                <button type="button" class="btn btn-secondary" onclick="skipDependencyCascade()">I'll Review Manually</button>
+                <button type="button" class="btn btn-warning" id="dependencyCascadeShiftBtn" onclick="shiftDependencyCascade()">
+                    Shift Task(s) Now
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -612,12 +685,23 @@ function confirmApplyResolution() {
       .then(data => {
           if (data.success) {
               appliedResolutionId = selectedResolutionId;
-              // Show feedback modal
-              const modal = new bootstrap.Modal(document.getElementById('feedbackModal'));
-              modal.show();
               // Reset button
               btn.disabled = false;
               btn.innerHTML = '<i class="fas fa-check"></i> Apply Selected Resolution';
+
+              // If this resolution rescheduled a task and left dependents
+              // starting too early, offer to cascade-shift them. If it moved
+              // the task's dates but has no dependents to worry about, still
+              // ask the user to review the Gantt. Otherwise go straight to the
+              // feedback modal.
+              if (data.affected_dependents && data.affected_dependents.length > 0) {
+                  showDependencyCascadeModal(data);
+              } else if (data.rescheduled_task) {
+                  showRescheduleReviewModal(data);
+              } else {
+                  const modal = new bootstrap.Modal(document.getElementById('feedbackModal'));
+                  modal.show();
+              }
           } else {
               alert('Error: ' + data.error);
               btn.disabled = false;
@@ -664,6 +748,110 @@ function submitFeedback() {
 // Skip feedback
 function skipFeedback() {
     window.location.href = '{% url "conflict_dashboard" %}';
+}
+
+// Dependency cascade: shown after a reschedule/adjust_dates resolution when
+// the response reports dependents that now start before the rescheduled
+// task's new due date (mirrors the Gantt drag "Shift N tasks" banner).
+let _pendingCascadeData = null;
+
+function showDependencyCascadeModal(data) {
+    _pendingCascadeData = data;
+    const dependents = data.affected_dependents || [];
+    const task = data.rescheduled_task || {};
+    const count = dependents.length;
+    const skipped = Math.max(0, (data.total_dependents || count) - count);
+
+    let message = `"${task.title || 'This task'}" now starts ${task.start_date || ''} and is due ` +
+        `${task.due_date || ''}. That leaves <strong>${count}</strong> dependent task${count > 1 ? 's' : ''} ` +
+        `starting before it finishes:`;
+    if (skipped > 0) {
+        message += ` (${skipped} other dependent${skipped > 1 ? 's' : ''} already start${skipped > 1 ? '' : 's'} late enough and needs no change.)`;
+    }
+    document.getElementById('dependencyCascadeMessage').innerHTML = message;
+
+    const list = document.getElementById('dependencyCascadeList');
+    list.innerHTML = dependents.map(d =>
+        `<li class="list-group-item d-flex justify-content-between align-items-center">
+            ${d.title}
+            <span class="badge bg-secondary">starts ${d.start_date || 'n/a'}</span>
+        </li>`
+    ).join('');
+
+    const shiftBtn = document.getElementById('dependencyCascadeShiftBtn');
+    shiftBtn.disabled = false;
+    shiftBtn.innerHTML = `Shift ${count} Task${count > 1 ? 's' : ''} Now`;
+
+    const modal = new bootstrap.Modal(document.getElementById('dependencyCascadeModal'));
+    modal.show();
+}
+
+function _closeDependencyCascadeModal() {
+    const modalEl = document.getElementById('dependencyCascadeModal');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+}
+
+function _proceedToFeedback() {
+    _pendingCascadeData = null;
+    const modal = new bootstrap.Modal(document.getElementById('feedbackModal'));
+    modal.show();
+}
+
+function skipDependencyCascade() {
+    _closeDependencyCascadeModal();
+    _proceedToFeedback();
+}
+
+function shiftDependencyCascade() {
+    if (!_pendingCascadeData || !_pendingCascadeData.rescheduled_task) {
+        _closeDependencyCascadeModal();
+        _proceedToFeedback();
+        return;
+    }
+    const task = _pendingCascadeData.rescheduled_task;
+    const shiftBtn = document.getElementById('dependencyCascadeShiftBtn');
+    shiftBtn.disabled = true;
+    shiftBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Shifting...';
+
+    fetch(`/api/tasks/${task.id}/cascade-reschedule/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ start_date: task.start_date, due_date: task.due_date })
+    }).then(response => response.json())
+      .then(data => {
+          if (!data.success) {
+              alert('Error: ' + (data.error || 'Could not shift dependent tasks.'));
+          }
+          _closeDependencyCascadeModal();
+          _proceedToFeedback();
+      }).catch(() => {
+          alert('Error shifting dependent tasks. Please review the Gantt chart manually.');
+          _closeDependencyCascadeModal();
+          _proceedToFeedback();
+      });
+}
+
+// Reschedule review: shown after a reschedule/adjust_dates resolution that
+// moved the task's dates but has no dependents needing a cascade. Just informs
+// the user of the new dates and nudges them to review the Gantt.
+function showRescheduleReviewModal(data) {
+    const task = data.rescheduled_task || {};
+    const message = `"${task.title || 'The task'}" now starts <strong>${task.start_date || 'n/a'}</strong> ` +
+        `and is due <strong>${task.due_date || 'n/a'}</strong>.`;
+    document.getElementById('rescheduleReviewMessage').innerHTML = message;
+    const modal = new bootstrap.Modal(document.getElementById('rescheduleReviewModal'));
+    modal.show();
+}
+
+function skipRescheduleReview() {
+    const modalEl = document.getElementById('rescheduleReviewModal');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+    _proceedToFeedback();
 }
 
 // Ignore conflict

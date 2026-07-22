@@ -6,6 +6,7 @@ from django.db.models import Q, Sum, Count
 from django.http import JsonResponse
 from django.urls import reverse_lazy, reverse
 from django.utils.decorators import method_decorator
+from django.utils.http import urlencode
 from django.views.decorators.http import require_http_methods
 from django.contrib import messages
 
@@ -24,6 +25,41 @@ from kanban.favorite_views import is_user_favorite as _is_fav
 from accounts.models import Organization
 
 
+def _wiki_scope_q(request):
+    """Workspace-scope Q for function-based views (delegates to the shared helper)."""
+    from wiki.scoping import wiki_scope_q
+    return wiki_scope_q(request)
+
+
+def _attach_scoped_page_counts(categories, scope_q):
+    """Stamp a ``scoped_page_count`` on each category using the same scope +
+    is_published filter as the page list, so category badges match reality.
+
+    ``categories`` must be a materialized list (attributes are set in place).
+    One grouped query, no N+1.
+    """
+    counts = (
+        WikiPage.objects.filter(scope_q, is_published=True)
+        .values('category_id')
+        .annotate(n=Count('id'))
+    )
+    count_map = {row['category_id']: row['n'] for row in counts}
+    for cat in categories:
+        cat.scoped_page_count = count_map.get(cat.id, 0)
+    return categories
+
+
+def _category_assistant_map(form):
+    """Map each selectable category's id -> ai_assistant_type, for the wiki page
+    form's live "which AI assistant" indicator. The assistant is a property of
+    the category, so the category dropdown is how the user picks it.
+    """
+    field = form.fields.get('category') if form else None
+    if field is None or getattr(field, 'queryset', None) is None:
+        return {}
+    return {str(c.pk): c.ai_assistant_type for c in field.queryset}
+
+
 class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
     """Base view for wiki operations - MVP mode without organization requirement"""
     
@@ -32,102 +68,115 @@ class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
         # All authenticated users can access wiki content
         return self.request.user.is_authenticated
     
+    def _is_viewing_demo(self):
+        """Check if the current user is in demo mode."""
+        profile = getattr(self.request.user, 'profile', None)
+        return getattr(profile, 'is_viewing_demo', False)
+
+    def _sandbox_owner(self):
+        """Owner stamp for wiki rows the user creates.
+
+        In the shared demo workspace, new categories/pages must belong to the
+        user's private per-user set (sandbox_owner=user) or they'd bleed to every
+        other demo user. Real rows carry no sandbox_owner. Mirrors Discovery's
+        ``_demo_owner_filter``.
+        """
+        return self.request.user if self._is_viewing_demo() else None
+    
     def get_organization(self):
         """
-        Get organization - MVP mode uses demo organization for all wiki data.
-        Returns demo org or user's org (can be None in MVP mode).
+        Get organization scoped to current workspace mode.
+        Demo mode: returns demo org.  Real mode: returns user's org (or None).
         """
         org_id = self.kwargs.get('org_id')
         if org_id:
             return get_object_or_404(Organization, pk=org_id)
         
-        # MVP Mode: First try user's org, then fall back to demo org
-        if hasattr(self.request.user, 'profile') and self.request.user.profile and self.request.user.profile.organization:
-            return self.request.user.profile.organization
-        
-        # Fall back to demo organization for wiki content
-        return Organization.objects.filter(is_demo=True).first()
+        if self._is_viewing_demo():
+            return Organization.objects.filter(is_demo=True).first()
+
+        # Real mode: derive the effective org from the active workspace (the
+        # tenant boundary), falling back to the profile's org.  Each owned
+        # workspace lives under the user's own org, so this is behaviour-
+        # preserving while no longer reading profile.organization as primary.
+        profile = getattr(self.request.user, 'profile', None)
+        ws = getattr(profile, 'active_workspace', None)
+        if ws and not ws.is_demo and ws.organization_id:
+            return ws.organization
+        if profile and profile.organization:
+            return profile.organization
+
+        return None
+    
+    def get_workspace(self):
+        """Active workspace = the wiki tenant boundary.
+
+        Middleware already resets stale/foreign active workspaces, so the
+        profile's active_workspace is safe to trust here.
+        """
+        profile = getattr(self.request.user, 'profile', None)
+        return getattr(profile, 'active_workspace', None)
+
+    def _wiki_org_filter(self):
+        """Return a Q filter scoping wiki objects to the active WORKSPACE.
+
+        Delegates to the single shared ``wiki_scope_q`` helper so the class-based
+        views, the function-based views, and the AI-analysis API all scope wiki
+        content identically (the Knowledge Hub category widget and the
+        /wiki/categories/ page can no longer disagree).
+        """
+        return _wiki_scope_q(self.request)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         org = self.get_organization()
         context['organization'] = org
         
-        # MVP Mode: Show all wiki categories (from demo org)
-        demo_org = Organization.objects.filter(is_demo=True).first()
-        if demo_org:
-            context['categories'] = WikiCategory.objects.filter(
-                Q(organization=demo_org) | Q(organization__isnull=True)
-            ).distinct()
-        else:
-            context['categories'] = WikiCategory.objects.all()
+        # Categories scoped to current workspace mode
+        context['categories'] = WikiCategory.objects.filter(
+            self._wiki_org_filter()
+        ).distinct()
         return context
 
 
 class WikiCategoryListView(WikiBaseView, ListView):
-    """List all wiki categories - MVP mode shows all categories"""
+    """List all wiki categories - scoped to current workspace mode"""
     model = WikiCategory
     template_name = 'wiki/category_list.html'
     context_object_name = 'categories'
     paginate_by = 20
-    
-    def get_queryset(self):
-        # MVP Mode: Show all wiki categories (from demo org primarily)
-        demo_org = Organization.objects.filter(is_demo=True).first()
-        if demo_org:
-            return WikiCategory.objects.filter(
-                Q(organization=demo_org) | Q(organization__isnull=True)
-            ).prefetch_related('pages').distinct()
-        return WikiCategory.objects.all().prefetch_related('pages')
 
-
-class WikiPageListView(WikiBaseView, ListView):
-    """List all wiki pages - MVP mode shows all pages"""
-    model = WikiPage
-    template_name = 'wiki/page_list.html'
-    context_object_name = 'pages'
-    paginate_by = 20
-    
     def get_queryset(self):
-        # MVP Mode: Show all wiki pages (from demo org primarily)
-        demo_org = Organization.objects.filter(is_demo=True).first()
-        if demo_org:
-            org_filter = Q(organization=demo_org) | Q(organization__isnull=True)
-        else:
-            org_filter = Q()
-        
-        queryset = WikiPage.objects.filter(org_filter, is_published=True)
-        
-        category_id = self.kwargs.get('category_id')
-        if category_id:
-            queryset = queryset.filter(category_id=category_id)
-        
-        # Search functionality
-        query = self.request.GET.get('q')
-        if query:
-            # Build the query - avoid JSONField contains lookup for SQLite compatibility
-            search_query = Q(title__icontains=query) | Q(content__icontains=query)
-            
-            # Try to add tags search, but handle SQLite limitation
-            try:
-                # PostgreSQL/MySQL support: use contains lookup on JSONField
-                from django.db import connection
-                if connection.vendor != 'sqlite':
-                    search_query |= Q(tags__contains=query)
-            except Exception:
-                # If there's any issue, skip tags search
-                pass
-            
-            queryset = queryset.filter(search_query)
-        
-        return queryset.select_related('category', 'created_by').order_by('-is_pinned', '-updated_at')
-    
+        return WikiCategory.objects.filter(
+            self._wiki_org_filter()
+        ).distinct()
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        org = self.get_organization()
-        context['search_form'] = WikiPageSearchForm(self.request.GET, organization=org)
-        context['category_id'] = self.kwargs.get('category_id')
+        # Scoped page counts matching the visible page list (see helper).
+        _attach_scoped_page_counts(
+            list(context['categories']), self._wiki_org_filter()
+        )
         return context
+
+
+@login_required
+def wiki_page_list_redirect(request, category_id=None):
+    """The old sidebar-style wiki list page (page_list.html) was retired in
+    favour of the single Knowledge Hub. This keeps the old URLs working by
+    redirecting to the hub, carrying the category filter and search query so
+    bookmarks and in-app links still land on the right view.
+    """
+    params = {}
+    if category_id:
+        params['category'] = category_id
+    q = request.GET.get('q')
+    if q:
+        params['q'] = q
+    url = reverse('wiki:knowledge_hub_home')
+    if params:
+        url = f'{url}?{urlencode(params)}'
+    return redirect(url)
 
 
 class WikiPageDetailView(WikiBaseView, DetailView):
@@ -139,35 +188,20 @@ class WikiPageDetailView(WikiBaseView, DetailView):
     slug_url_kwarg = 'slug'
     
     def test_func(self):
-        """Allow access to user's org pages AND demo org pages"""
-        # First try to get the page to check its organization
+        """Allow access to pages within the user's current workspace scope."""
         slug = self.kwargs.get('slug')
         if slug:
-            demo_org_names = ['Demo - Acme Corporation']
-            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-            
-            # Check if the page is in demo org
+            # Allow access if the page is within the user's workspace scope
             page = WikiPage.objects.filter(
-                Q(slug=slug),
-                Q(organization__in=demo_orgs)
+                self._wiki_org_filter(),
+                slug=slug,
             ).first()
             if page:
-                return True  # Allow access to demo pages
-        
-        # Otherwise, use the default test (user's org)
+                return True
         return super().test_func()
     
     def get_queryset(self):
-        org = self.get_organization()
-        # Also allow access to demo organization wiki pages
-        demo_org_names = ['Demo - Acme Corporation']
-        demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-        
-        # Include both user's org and demo org pages
-        queryset = WikiPage.objects.filter(
-            Q(organization=org) | Q(organization__in=demo_orgs)
-        )
-        return queryset
+        return WikiPage.objects.filter(self._wiki_org_filter())
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -223,11 +257,16 @@ class WikiPageCreateView(WikiBaseView, CreateView):
         tpl = self._get_active_template()
         if tpl:
             org = self.get_organization()
-            # Auto-create the suggested category for this org if it doesn't exist yet
+            ws = self.get_workspace()
+            # Auto-create the suggested category for this workspace if missing
+            # yet. Scope by sandbox_owner in demo so it lands in the user's own
+            # per-user set rather than becoming a shared row.
             category, _ = WikiCategory.objects.get_or_create(
                 name=tpl.category_name,
-                organization=org,
+                workspace=ws,
+                sandbox_owner=self._sandbox_owner(),
                 defaults={
+                    'organization': org,
                     'icon': 'folder-open',
                     'color': tpl.color,
                     'ai_assistant_type': 'meeting' if 'meeting' in tpl.category_name.lower() else 'documentation',
@@ -241,20 +280,25 @@ class WikiPageCreateView(WikiBaseView, CreateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['active_template'] = self._get_active_template()
+        context['category_assistant_map'] = _category_assistant_map(context['form'])
         return context
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['organization'] = self.get_organization()
+        kwargs['workspace'] = self.get_workspace()
+        kwargs['scope_q'] = self._wiki_org_filter()
         return kwargs
-    
+
     def form_valid(self, form):
         org = self.get_organization()
         form.instance.organization = org
+        form.instance.workspace = self.get_workspace()
+        form.instance.sandbox_owner = self._sandbox_owner()
         form.instance.created_by = self.request.user
         form.instance.updated_by = self.request.user
         response = super().form_valid(form)
-        
+
         # Create initial version
         WikiPageVersion.objects.create(
             page=self.object,
@@ -281,23 +325,22 @@ class WikiPageUpdateView(WikiBaseView, UpdateView):
     slug_url_kwarg = 'slug'
     
     def get_queryset(self):
-        org = self.get_organization()
-        # MVP Mode: Include demo organization content for all users
-        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-        if org:
-            org_filter = Q(organization=org)
-            if demo_org:
-                org_filter |= Q(organization=demo_org)
-            return WikiPage.objects.filter(org_filter)
-        elif demo_org:
-            return WikiPage.objects.filter(organization=demo_org)
-        return WikiPage.objects.none()
+        # Workspace-scoped (the tenant boundary). Editing is limited to pages in
+        # the user's active workspace.
+        return WikiPage.objects.filter(self._wiki_org_filter())
     
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['organization'] = self.get_organization()
+        kwargs['workspace'] = self.get_workspace()
+        kwargs['scope_q'] = self._wiki_org_filter()
         return kwargs
-    
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['category_assistant_map'] = _category_assistant_map(context['form'])
+        return context
+
     def form_valid(self, form):
         old_content = WikiPage.objects.get(pk=self.object.pk).content
         form.instance.updated_by = self.request.user
@@ -328,11 +371,10 @@ class WikiPageDeleteView(WikiBaseView, DeleteView):
     template_name = 'wiki/page_confirm_delete.html'
     slug_field = 'slug'
     slug_url_kwarg = 'slug'
-    
+
     def get_queryset(self):
-        org = self.get_organization()
-        return WikiPage.objects.filter(organization=org)
-    
+        return WikiPage.objects.filter(self._wiki_org_filter())
+
     def get_success_url(self):
         return reverse_lazy('wiki:category_list')
 
@@ -346,6 +388,8 @@ class WikiCategoryCreateView(WikiBaseView, CreateView):
     def form_valid(self, form):
         org = self.get_organization()
         form.instance.organization = org
+        form.instance.workspace = self.get_workspace()
+        form.instance.sandbox_owner = self._sandbox_owner()
         response = super().form_valid(form)
         messages.success(self.request, f'Category "{self.object.name}" created!')
         return response
@@ -360,11 +404,10 @@ class WikiCategoryUpdateView(WikiBaseView, UpdateView):
     form_class = WikiCategoryForm
     template_name = 'wiki/category_form.html'
     pk_url_kwarg = 'pk'
-    
+
     def get_queryset(self):
-        org = self.get_organization()
-        return WikiCategory.objects.filter(organization=org)
-    
+        return WikiCategory.objects.filter(self._wiki_org_filter())
+
     def form_valid(self, form):
         response = super().form_valid(form)
         messages.success(self.request, f'Category "{self.object.name}" updated!')
@@ -379,13 +422,11 @@ class WikiCategoryDeleteView(WikiBaseView, DeleteView):
     model = WikiCategory
     template_name = 'wiki/category_confirm_delete.html'
     pk_url_kwarg = 'pk'
-    
+
     def get_queryset(self):
-        org = self.get_organization()
-        return WikiCategory.objects.filter(organization=org)
-    
+        return WikiCategory.objects.filter(self._wiki_org_filter())
+
     def delete(self, request, *args, **kwargs):
-        org = self.get_organization()
         messages.success(request, f'Category deleted successfully!')
         return super().delete(request, *args, **kwargs)
     
@@ -402,6 +443,7 @@ class WikiLinkCreateView(WikiBaseView, CreateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['organization'] = self.get_organization()
+        kwargs['workspace'] = self.get_workspace()
         return kwargs
     
     def get_context_data(self, **kwargs):
@@ -410,17 +452,17 @@ class WikiLinkCreateView(WikiBaseView, CreateView):
         if page_slug:
             context['page'] = get_object_or_404(
                 WikiPage,
+                self._wiki_org_filter(),
                 slug=page_slug,
-                organization=self.get_organization()
             )
         return context
-    
+
     def form_valid(self, form):
         page_slug = self.kwargs.get('slug')
         page = get_object_or_404(
             WikiPage,
+            self._wiki_org_filter(),
             slug=page_slug,
-            organization=self.get_organization()
         )
         form.instance.wiki_page = page
         form.instance.created_by = self.request.user
@@ -444,11 +486,10 @@ class WikiLinkCreateView(WikiBaseView, CreateView):
 
 @login_required
 def wiki_search(request):
-    """Search wiki pages"""
-    org = request.user.profile.organization if hasattr(request.user, 'profile') else None
-    if not org:
-        return redirect('dashboard')
-    
+    """Search wiki pages — scoped to the user's active workspace + accessible boards."""
+    profile = getattr(request.user, 'profile', None)
+    org = getattr(profile, 'organization', None)
+
     query = request.GET.get('q', '')
     results = {
         'pages': [],
@@ -456,40 +497,33 @@ def wiki_search(request):
         'tasks': [],
         'boards': []
     }
-    
+
     if query:
-        # Search wiki pages
+        from kanban.utils.demo_protection import get_user_boards
+        user_boards = get_user_boards(request.user)
+
+        # Search wiki pages through the shared scope helper — workspace-scoped in
+        # real mode, per-user (sandbox_owner) in demo so results never bleed
+        # across demo users.
         results['pages'] = WikiPage.objects.filter(
-            organization=org,
-            is_published=True
+            _wiki_scope_q(request),
+            is_published=True,
         ).filter(
             Q(title__icontains=query) |
             Q(content__icontains=query)
         )[:10]
-        
-        # Search meeting notes - DISABLED
-        # results['notes'] = MeetingNotes.objects.filter(
-        #     organization=org
-        # ).filter(
-        #     Q(title__icontains=query) |
-        #     Q(content__icontains=query)
-        # )[:10]
-        
-        # Search tasks
-        from kanban.models import Board
+
+        # Search tasks — limited to boards the user can access
         results['tasks'] = Task.objects.filter(
-            column__board__organization=org
+            column__board__in=user_boards
         ).filter(
             Q(title__icontains=query) |
             Q(description__icontains=query)
         )[:10]
-        
-        # Search boards
-        results['boards'] = Board.objects.filter(
-            organization=org,
-            name__icontains=query
-        )[:10]
-    
+
+        # Search boards — limited to boards the user can access
+        results['boards'] = user_boards.filter(name__icontains=query)[:10]
+
     return render(request, 'wiki/search_results.html', {
         'query': query,
         'results': results,
@@ -589,13 +623,11 @@ def quick_link_wiki(request, content_type, object_id):
     if not org:
         org = demo_org
     
-    # MVP Mode: Get all accessible boards (demo boards + user boards)
-    demo_boards = Board.objects.filter(is_official_demo_board=True)
-    user_boards = Board.objects.filter(
-        Q(created_by=request.user) | Q(members=request.user)
-    )
-    accessible_boards = (demo_boards | user_boards).distinct()
-    
+    # Get boards scoped to user's current workspace (demo-aware)
+    from kanban.utils.demo_protection import get_user_boards
+    accessible_boards = get_user_boards(request.user)
+    ws = getattr(getattr(request.user, 'profile', None), 'active_workspace', None)
+
     if content_type == 'task':
         # MVP Mode: Allow tasks from any accessible board
         item = get_object_or_404(Task, pk=object_id, column__board__in=accessible_boards)
@@ -604,17 +636,21 @@ def quick_link_wiki(request, content_type, object_id):
         item = get_object_or_404(Board, pk=object_id, id__in=accessible_boards.values_list('id', flat=True))
     else:
         return JsonResponse({'error': 'Invalid content type'}, status=400)
-    
+
+    # Scope linkable pages through the shared helper so demo users only see their
+    # own per-user wiki clones (workspace alone can't isolate the shared demo ws).
+    scope_q = _wiki_scope_q(request)
+
     if request.method == 'GET':
-        form = QuickWikiLinkForm(organization=org)
+        form = QuickWikiLinkForm(organization=org, workspace=ws, scope_q=scope_q)
         return render(request, 'wiki/quick_link_modal.html', {
             'form': form,
             'content_type': content_type,
             'object_id': object_id,
             'item': item
         })
-    
-    form = QuickWikiLinkForm(request.POST, organization=org)
+
+    form = QuickWikiLinkForm(request.POST, organization=org, workspace=ws, scope_q=scope_q)
     if form.is_valid():
         pages = form.cleaned_data['wiki_pages']
         for page in pages:
@@ -626,6 +662,17 @@ def quick_link_wiki(request, content_type, object_id):
                     'created_by': request.user,
                     'description': form.cleaned_data['link_description']
                 }
+            )
+        
+        # Record activity log for wiki page linking on tasks
+        if content_type == 'task':
+            from kanban.models import TaskActivity
+            page_names = ', '.join([p.title for p in pages])
+            TaskActivity.objects.create(
+                task=item,
+                user=request.user,
+                activity_type='updated',
+                description=f"Linked wiki page(s) '{page_names}' to '{item.title}'"
             )
         
         # Check if this is an AJAX request
@@ -658,8 +705,15 @@ def delete_wiki_link(request, link_id):
     """Delete a wiki link"""
     link = get_object_or_404(WikiLink, pk=link_id)
     
-    # Access restriction removed - all authenticated users can delete wiki links
-    can_delete = True
+    # RBAC: user must have edit permission on the linked board
+    if link.board:
+        if not request.user.has_perm('prizmai.edit_board', link.board):
+            from django.http import Http404
+            raise Http404
+    elif link.task and link.task.column and link.task.column.board:
+        if not request.user.has_perm('prizmai.edit_board', link.task.column.board):
+            from django.http import Http404
+            raise Http404
     
     # Store the redirect URL before deleting
     if link.board:
@@ -680,37 +734,25 @@ def delete_wiki_link(request, link_id):
 @login_required
 def wiki_page_history(request, slug):
     """View wiki page version history"""
-    org = request.user.profile.organization if hasattr(request.user, 'profile') and request.user.profile else None
-    
-    # MVP Mode: Fall back to demo organization if user has no org
-    if not org:
-        org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-    
-    # Try to get page from user's org first, then from any org (for demo pages)
-    page = WikiPage.objects.filter(slug=slug).first()
+    # Workspace-scoped page lookup (the tenant boundary)
+    page = WikiPage.objects.filter(_wiki_scope_q(request), slug=slug).first()
     if not page:
         return redirect('wiki:page_list')
-    
+
     versions = page.versions.all()
-    
+
     return render(request, 'wiki/page_history.html', {
         'page': page,
         'versions': versions,
-        'organization': org
+        'organization': page.organization,
     })
 
 
 @login_required
 def wiki_page_restore(request, slug, version_number):
     """Restore a previous version of a wiki page"""
-    org = request.user.profile.organization if hasattr(request.user, 'profile') and request.user.profile else None
-    
-    # MVP Mode: Fall back to demo organization if user has no org
-    if not org:
-        org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-    
-    # Try to get page by slug (works for both user's org and demo pages)
-    page = WikiPage.objects.filter(slug=slug).first()
+    # Workspace-scoped page lookup (the tenant boundary)
+    page = WikiPage.objects.filter(_wiki_scope_q(request), slug=slug).first()
     if not page:
         messages.error(request, 'Page not found')
         return redirect('wiki:page_list')
@@ -764,27 +806,39 @@ def template_gallery(request):
 def knowledge_hub_home(request):
     """Unified Knowledge Hub - Wiki Documentation with AI"""
     org = request.user.profile.organization if hasattr(request.user, 'profile') else None
-    
+
     # Get search query
     search_query = request.GET.get('q', '')
-    
-    # Include demo organization content for all authenticated users
-    demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-    
-    # Build organization filter
-    if org:
-        org_filter = Q(organization=org)
-        if demo_org:
-            org_filter |= Q(organization=demo_org)
-    elif demo_org:
-        # If user has no org, show only demo org content
-        org_filter = Q(organization=demo_org)
-    else:
-        # No org at all, show empty results
-        org_filter = Q(pk=None)
-    
-    # Get wiki pages from user's org AND demo org
+
+    # Optional category filter (?category=<id>) - the Knowledge Hub is now the
+    # single wiki list page, so it also serves the category-filtered view that
+    # the retired page_list used to.
+    category_id = request.GET.get('category')
+    selected_category = None
+
+    # Workspace-scoped filter (the tenant boundary). In demo mode this isolates
+    # to the user's own per-user wiki clones (sandbox_owner).
+    org_filter = _wiki_scope_q(request)
+
+    # Self-heal: demo sandboxes provisioned before wiki became per-user have no
+    # clones yet, so their Knowledge Hub would render empty. Clone the demo wiki
+    # once on first visit (idempotent — clears+rebuilds the user's clone set).
+    profile = getattr(request.user, 'profile', None)
+    if getattr(profile, 'is_viewing_demo', False):
+        if not WikiPage.objects.filter(org_filter).exists():
+            try:
+                from kanban.sandbox_views import _clone_wiki_for_user
+                from kanban.utils.demo_protection import allow_demo_writes
+                with allow_demo_writes():
+                    _clone_wiki_for_user(request.user)
+            except Exception:
+                pass
+
+    # Get wiki pages scoped to the active workspace
     wiki_pages = WikiPage.objects.filter(org_filter, is_published=True).select_related('category', 'created_by')
+    if category_id:
+        selected_category = WikiCategory.objects.filter(org_filter, pk=category_id).first()
+        wiki_pages = wiki_pages.filter(category_id=category_id)
     if search_query:
         wiki_pages = wiki_pages.filter(
             Q(title__icontains=search_query) |
@@ -798,14 +852,22 @@ def knowledge_hub_home(request):
         total=Sum('view_count'))['total'] or 0
     
     # Get wiki categories (include demo org categories)
-    wiki_categories = WikiCategory.objects.filter(org_filter).prefetch_related('pages').distinct()
-    
+    wiki_categories = list(
+        WikiCategory.objects.filter(org_filter).distinct()
+    )
+    # Scoped page counts: count only pages visible under the same scope +
+    # is_published filter as the page list above, so a category's badge matches
+    # what the user actually sees when they open it (the raw category.pages.count
+    # is unscoped and would leak other-workspace / unpublished pages).
+    _attach_scoped_page_counts(wiki_categories, org_filter)
+
     wiki_templates = WikiTemplate.objects.filter(is_active=True).order_by('order')
 
     return render(request, 'wiki/knowledge_hub_home.html', {
         'organization': org,
         'wiki_pages': wiki_pages,
         'search_query': search_query,
+        'selected_category': selected_category,
         'total_wiki_pages': total_wiki_pages,
         'total_views': total_views,
         'wiki_categories': wiki_categories,

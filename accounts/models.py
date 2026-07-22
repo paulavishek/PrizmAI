@@ -1,21 +1,27 @@
 import pytz
+import uuid
+from datetime import timedelta
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import EmailValidator, RegexValidator
+from django.utils import timezone
 
 COMMON_TIMEZONES = sorted(pytz.common_timezones)
 
 class Organization(models.Model):
     name = models.CharField(max_length=100)
     domain = models.CharField(
-        max_length=100, 
+        max_length=100,
+        blank=True,
+        default='',
         validators=[
             RegexValidator(
                 regex=r'^[a-zA-Z0-9]+([\-\.]{1}[a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$',
                 message='Enter a valid domain (e.g., example.com)'
             )
         ],
-        help_text="Domain used for email validation (e.g., example.com)"
+        help_text="Domain used for email validation (e.g., example.com). Optional for auto-created workspaces."
     )
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_organizations')
@@ -64,7 +70,54 @@ class UserProfile(models.Model):
         default='light',
         help_text='Preferred display mode for the interface'
     )
-    
+
+    # AI response-style profile ("custom instructions" / style memory).
+    # Applied to narrative AI surfaces (PrizmBrief, Retrospectives, AI Coach,
+    # Spectra chat) via accounts.style_profile.build_ai_style_directive().
+    # 'default' + blank custom_ai_instructions => no directive emitted, so
+    # existing behavior is preserved for anyone who never touches these.
+    RESPONSE_TONE_CHOICES = [
+        ('default', 'Default'),
+        ('formal', 'Formal'),
+        ('conversational', 'Conversational'),
+        ('executive', 'Executive'),
+    ]
+    RESPONSE_LENGTH_CHOICES = [
+        ('default', 'Default'),
+        ('brief', 'Brief'),
+        ('standard', 'Standard'),
+        ('detailed', 'Detailed'),
+    ]
+    RESPONSE_STRUCTURE_CHOICES = [
+        ('default', 'Default'),
+        ('bullets', 'Bullet-heavy'),
+        ('narrative', 'Narrative paragraphs'),
+    ]
+    response_tone = models.CharField(
+        max_length=20,
+        choices=RESPONSE_TONE_CHOICES,
+        default='default',
+        help_text='Preferred tone for AI-generated prose (briefs, retros, coaching, Spectra)'
+    )
+    response_length = models.CharField(
+        max_length=20,
+        choices=RESPONSE_LENGTH_CHOICES,
+        default='default',
+        help_text='Preferred length/verbosity for AI-generated prose'
+    )
+    response_structure = models.CharField(
+        max_length=20,
+        choices=RESPONSE_STRUCTURE_CHOICES,
+        default='default',
+        help_text='Preferred structure (bullets vs narrative paragraphs) for AI-generated prose'
+    )
+    custom_ai_instructions = models.TextField(
+        blank=True,
+        default='',
+        max_length=600,
+        help_text='Free-text catch-all: anything the AI should always remember about your preferred format'
+    )
+
     # Welcome modal tracking
     has_seen_welcome = models.BooleanField(
         default=False,
@@ -175,9 +228,36 @@ class UserProfile(models.Model):
     )
     is_viewing_demo = models.BooleanField(
         default=False,
-        help_text="Whether user is currently viewing the demo workspace"
+        help_text="Whether user is currently viewing their personal demo sandbox"
     )
-    
+    # Active workspace — determines which workspace's data the user sees.
+    # Kept in sync with is_viewing_demo: when active_workspace.is_demo=True,
+    # is_viewing_demo=True and vice versa.
+    active_workspace = models.ForeignKey(
+        'kanban.Workspace',
+        on_delete=models.SET_NULL,
+        related_name='active_users',
+        null=True,
+        blank=True,
+        help_text="The workspace the user is currently viewing. Null = no workspace selected yet."
+    )
+    is_demo_account = models.BooleanField(
+        default=False,
+        help_text="Permanent flag for demo login accounts (Alex, Sam, Jordan). Read-only, zero AI access."
+    )
+
+    # --- Presence / Last Seen ---
+    last_seen = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time a WebSocket heartbeat or connect/disconnect event was recorded."
+    )
+    show_last_seen = models.BooleanField(
+        default=True,
+        help_text="Whether other users can see this user's last-seen timestamp. "
+                  "When False the timestamp is hidden for others but the user can still see others'."
+    )
+
     def __str__(self):
         return f"{self.user.username}'s Profile"
     
@@ -202,3 +282,115 @@ class UserProfile(models.Model):
     def expert_skills(self):
         """Get list of expert-level skills"""
         return [skill.get('name', '') for skill in self.skills if skill.get('level') == 'Expert']
+
+
+class OrganizationInvitation(models.Model):
+    """Email-based invitation to join an organization/workspace."""
+
+    STATUS_PENDING = 'pending'
+    STATUS_ACCEPTED = 'accepted'
+    STATUS_EXPIRED = 'expired'
+    STATUS_REVOKED = 'revoked'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_ACCEPTED, 'Accepted'),
+        (STATUS_EXPIRED, 'Expired'),
+        (STATUS_REVOKED, 'Revoked'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='invitations')
+    invited_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_org_invitations')
+    email = models.EmailField()
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    accepted_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='accepted_org_invitations',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(hours=48)
+        super().save(*args, **kwargs)
+
+    def is_valid(self):
+        """Return True if invitation is still usable."""
+        if self.status != self.STATUS_PENDING:
+            return False
+        if timezone.now() > self.expires_at:
+            self.status = self.STATUS_EXPIRED
+            self.save(update_fields=['status'])
+            return False
+        return True
+
+    def mark_accepted(self, user):
+        self.status = self.STATUS_ACCEPTED
+        self.accepted_at = timezone.now()
+        self.accepted_by = user
+        self.save(update_fields=['status', 'accepted_at', 'accepted_by'])
+
+    def __str__(self):
+        return f"OrgInvite: {self.email} → {self.organization.name} ({self.status})"
+
+
+class GoogleCalendarToken(models.Model):
+    """
+    Stores OAuth 2.0 credentials for a user's Google Calendar connection.
+
+    One token per user (OneToOneField). The `sync_enabled` flag is the
+    master on/off toggle — when False, no Calendar events will be created or
+    updated even if the token is valid.
+
+    Token refresh is handled transparently in accounts/tasks.py using
+    google.oauth2.credentials.Credentials.
+    """
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="google_calendar_token",
+    )
+    access_token = models.TextField(help_text="Google OAuth 2.0 access token.")
+    refresh_token = models.TextField(help_text="Google OAuth 2.0 refresh token (long-lived).")
+    token_expiry = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the current access token expires.",
+    )
+    calendar_id = models.CharField(
+        max_length=255,
+        default="primary",
+        help_text='Google Calendar ID to sync tasks to. "primary" uses the user\'s main calendar.',
+    )
+    sync_enabled = models.BooleanField(
+        default=True,
+        help_text="Master toggle. When False, no sync happens even if the token is valid.",
+    )
+    last_synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of the most recent successful calendar sync.",
+    )
+    last_sync_error = models.TextField(
+        blank=True,
+        default="",
+        help_text="Error message from the most recent failed sync attempt, if any.",
+    )
+    connected_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Google Calendar Token"
+        verbose_name_plural = "Google Calendar Tokens"
+
+    def __str__(self):
+        status = "active" if self.sync_enabled else "paused"
+        return f"GoogleCalendar({self.user.username}, {status})"
+

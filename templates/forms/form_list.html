@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block title %}Forms{% endblock %}
+{% block page_title %}Forms{% endblock %}
+
+{% block extra_css %}
+<style>
+.forms-card {
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    background: var(--card-bg, #fff);
+    margin-bottom: 0.75rem;
+}
+.forms-card h6 { font-weight: 700; margin-bottom: 0.15rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <nav aria-label="breadcrumb" style="font-size:0.82rem;">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item active">Forms</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <p class="text-muted mb-0" style="font-size:0.875rem;">
+            Structured intake forms that feed straight into PrizmDiscovery (auto-scored by Spectra) or a Kanban board.
+        </p>
+        {% if not is_viewer %}
+        <a href="{% url 'form_create' %}" class="btn btn-primary btn-sm">
+            <i class="fas fa-plus me-1"></i>New Form
+        </a>
+        {% endif %}
+    </div>
+
+    {% if forms %}
+        {% for f in forms %}
+        <div class="forms-card d-flex justify-content-between align-items-center">
+            <div>
+                <h6>
+                    <a href="{% url 'form_detail' form_id=f.pk %}">{{ f.title }}</a>
+                    {% if not f.is_active %}<span class="badge bg-secondary ms-1">Inactive</span>{% endif %}
+                </h6>
+                <div class="text-muted" style="font-size:0.8rem;">
+                    {% if f.target_destination == 'DISCOVERY' %}
+                        <i class="fas fa-lightbulb text-warning"></i> PrizmDiscovery Idea
+                    {% else %}
+                        <i class="fas fa-columns"></i> Kanban Task &rarr; {{ f.target_board.name|default:'—' }}
+                    {% endif %}
+                    &middot; {{ f.submissions.count }} submission{{ f.submissions.count|pluralize }}
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'form_fill' form_id=f.pk %}" class="btn btn-outline-primary btn-sm">Fill Out</a>
+                {% if not is_viewer %}
+                <a href="{% url 'form_edit' form_id=f.pk %}" class="btn btn-outline-secondary btn-sm">Edit</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="text-center text-muted py-5">
+            <i class="fas fa-file-alt fa-2x mb-2"></i>
+            <p>No forms yet. Create one to start collecting structured, AI-scored intake.</p>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

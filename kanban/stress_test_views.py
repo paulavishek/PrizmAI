@@ -11,7 +11,6 @@ import re
 import time
 import logging
 
-import google.generativeai as genai
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
@@ -28,6 +27,10 @@ from kanban.stress_test_prompt import (
 )
 from kanban.stress_test_data import build_board_stress_test_data
 from kanban.audit_utils import log_audit
+from kanban.decorators import demo_write_guard, demo_ai_guard
+from kanban.simple_access import (
+    check_access_or_403, check_modify_or_403, can_manage_board,
+)
 from api.ai_usage_utils import track_ai_request, require_ai_quota, check_ai_quota
 
 logger = logging.getLogger(__name__)
@@ -150,6 +153,7 @@ def _repair_truncated_json(text: str) -> str:
 def stress_test_dashboard(request, board_id):
     """Main Stress Test page — shows latest session or empty state."""
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
 
     sessions = StressTestSession.objects.filter(board=board).select_related(
         'immunity_score'
@@ -165,13 +169,18 @@ def stress_test_dashboard(request, board_id):
     )
 
     # Stats
-    total_scenarios = 0
-    scenarios_addressed = 0
     vaccines_applied_session = 0
     if latest_session:
-        total_scenarios = latest_session.scenarios.count()
-        scenarios_addressed = latest_session.scenarios.filter(is_addressed=True).count()
         vaccines_applied_session = latest_session.vaccines.filter(is_applied=True).count()
+
+    # Cumulative across all sessions on this board — mirrors vaccines_applied_total
+    # below. A scenario marked "addressed" stays counted here permanently, even
+    # after a re-run generates a fresh scenario shelf, since the acknowledgment
+    # reflects awareness the user has genuinely built up over time.
+    total_scenarios = StressTestScenario.objects.filter(session__board=board).count()
+    scenarios_addressed = StressTestScenario.objects.filter(
+        session__board=board, is_addressed=True
+    ).count()
 
     vaccines_applied_total = Vaccine.objects.filter(board=board, is_applied=True).count()
     vaccines_total = Vaccine.objects.filter(board=board).count()
@@ -187,6 +196,20 @@ def stress_test_dashboard(request, board_id):
     except Exception:
         pass
 
+    # Compute score deltas for the history table (chronological: oldest first)
+    sessions_list = list(sessions.order_by('created_at'))
+    sessions_with_delta = []
+    for i, s in enumerate(sessions_list):
+        if i == 0:
+            delta = None  # baseline — no previous session to compare
+        else:
+            prev = sessions_list[i - 1]
+            if s.immunity_score and prev.immunity_score:
+                delta = s.immunity_score.overall - prev.immunity_score.overall
+            else:
+                delta = None
+        sessions_with_delta.append((s, delta))
+
     # AI quota availability for the "Run" button
     has_quota = True
     if request.user.is_authenticated:
@@ -196,6 +219,7 @@ def stress_test_dashboard(request, board_id):
         'board': board,
         'session': latest_session,
         'all_sessions': sessions,
+        'sessions_with_delta': sessions_with_delta,
         'immunity_history': json.dumps(immunity_history),
         'total_scenarios': total_scenarios,
         'scenarios_addressed': scenarios_addressed,
@@ -212,31 +236,47 @@ def stress_test_dashboard(request, board_id):
 @login_required
 @require_POST
 @require_ai_quota('stress_test')
+@demo_ai_guard
 def run_stress_test(request, board_id):
     """Run a new Red Team AI stress test session."""
+    from ai_assistant.utils.ai_router import AIRouter
+
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     board_data = build_board_stress_test_data(board, request.user)
 
     start_time = time.time()
+    user_prompt = build_stress_test_user_prompt(board_data)
 
     try:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel(
-            'gemini-2.5-flash',
-            system_instruction=STRESS_TEST_SYSTEM_PROMPT,
-        )
-        response = model.generate_content(
-            build_stress_test_user_prompt(board_data),
-            generation_config=genai.GenerationConfig(
-                temperature=0.4,
-                max_output_tokens=16384,
-                response_mime_type="application/json",
-            ),
-        )
+        router = AIRouter()
+        # Stress tests must always be fresh — bypass the cache so every explicit
+        # "Run Stress Test" click calls the AI directly.
+        raw = router.complete(
+            prompt=user_prompt,
+            user=request.user,
+            system_prompt=STRESS_TEST_SYSTEM_PROMPT,
+            complexity='complex',
+        )['text']
+        if not raw:
+            raise RuntimeError('AI stress test returned no response')
 
-        raw = response.text.strip()
         logger.info("Stress Test raw response length: %d chars", len(raw))
         result = _parse_gemini_json(raw)
+
+        scenario_count = len(result.get('chaos_scenarios', []))
+        vaccine_count = len(result.get('vaccines', []))
+        if scenario_count < 5:
+            logger.warning(
+                "Stress Test board %s: AI returned only %d/5 scenarios — prompt may need tuning",
+                board_id, scenario_count,
+            )
+        if vaccine_count == 0:
+            logger.warning(
+                "Stress Test board %s: AI returned 0 vaccines — likely confused historical "
+                "context with output vaccines[]",
+                board_id,
+            )
 
     except Exception as e:
         logger.error("Stress Test Gemini call failed for board %s: %s", board_id, e)
@@ -256,19 +296,41 @@ def run_stress_test(request, board_id):
         }, status=500)
 
     # --- Save session ---
+    # Snapshot board-wide applied-vaccine count at the moment the run kicks off
+    # so Session History can show cumulative progress across runs (Image 7
+    # report: showed "0/5" for a re-run after 2 vaccines had been applied).
+    vaccines_applied_now = Vaccine.objects.filter(
+        board=board, is_applied=True
+    ).count()
     session = StressTestSession.objects.create(
         board=board,
         run_by=request.user,
         assumptions_made=result.get('assumptions_made', []),
         score_rationale=result.get('score_rationale', ''),
+        vaccines_applied_at_run=vaccines_applied_now,
     )
 
     # Save immunity score — coerce None → safe defaults
     dim_scores = result.get('dimension_scores') or {}
     dim_rationale = result.get('dimension_rationale') or {}
+    # Defense-in-depth floor: even though the prompt instructs Gemini to respect
+    # the minimum score, occasionally it returns a lower value.  Clamp server-side
+    # so vaccines always produce visible improvement on re-run.
+    last_score = board_data.get('last_immunity_score') or 0
+    total_vaccine_credit = board_data.get('total_vaccine_improvement') or 0
+    score_floor = min(max(1, last_score + int(total_vaccine_credit * 0.6)), 100)
+    raw_overall = result.get('overall_immunity_score') or 50
+    overall_score = min(max(raw_overall, score_floor), 100)
+    if overall_score != raw_overall:
+        logger.info(
+            "Stress Test board %s: clamped AI score %s → %s (floor=%s, last=%s, "
+            "vaccine_credit=%s)",
+            board_id, raw_overall, overall_score, score_floor, last_score,
+            total_vaccine_credit,
+        )
     ImmunityScore.objects.create(
         session=session,
-        overall=result.get('overall_immunity_score') or 50,
+        overall=overall_score,
         schedule=dim_scores.get('schedule') or 50,
         budget=dim_scores.get('budget') or 50,
         team=dim_scores.get('team') or 50,
@@ -382,8 +444,11 @@ def run_stress_test(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def apply_vaccine(request, board_id, vaccine_id):
     """Toggle a vaccine's is_applied state."""
+    board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     vaccine = get_object_or_404(Vaccine, pk=vaccine_id, board_id=board_id)
 
     vaccine.is_applied = not vaccine.is_applied
@@ -410,8 +475,45 @@ def apply_vaccine(request, board_id, vaccine_id):
 
 @login_required
 @require_POST
+@demo_write_guard
+def reset_stress_test_history(request, board_id):
+    """Delete all stress test sessions (and cascaded data) for this board.
+    Only the board creator may do this.
+    """
+    board = get_object_or_404(Board, id=board_id)
+
+    if not can_manage_board(request.user, board):
+        return JsonResponse(
+            {'success': False, 'error': 'Only the board owner can reset stress test history.'},
+            status=403,
+        )
+
+    deleted_count, _ = StressTestSession.objects.filter(board=board).delete()
+
+    try:
+        log_audit(
+            'stress_test.history_reset',
+            user=request.user,
+            request=request,
+            object_type='board',
+            object_id=board.id,
+            object_repr=str(board),
+            board_id=board.id,
+            changes={'sessions_deleted': {'old': deleted_count, 'new': 0}},
+        )
+    except Exception:
+        logger.warning("Audit log for stress_test.history_reset failed", exc_info=True)
+
+    return JsonResponse({'success': True, 'deleted': deleted_count})
+
+
+@login_required
+@require_POST
+@demo_write_guard
 def mark_scenario_addressed(request, board_id, scenario_id):
     """Toggle a scenario's is_addressed state."""
+    board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     scenario = get_object_or_404(
         StressTestScenario, pk=scenario_id, session__board_id=board_id
     )

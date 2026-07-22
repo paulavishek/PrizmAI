@@ -12,6 +12,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from kanban.models import Board, Column, Task, TaskLabel, Comment
+from kanban.utils.demo_protection import get_user_boards
 from accounts.models import Organization
 from api.models import APIToken
 from api.v1.serializers import (
@@ -22,6 +23,7 @@ from api.v1.serializers import (
     OrganizationSerializer, APITokenSerializer
 )
 from api.v1.authentication import APITokenAuthentication, ScopePermission
+from kanban.simple_access import can_modify_board_content, can_manage_board
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -29,6 +31,26 @@ class StandardResultsSetPagination(PageNumberPagination):
     page_size = 50
     page_size_query_param = 'page_size'
     max_page_size = 100
+
+
+class BoardWritePermission(permissions.BasePermission):
+    """Object-level: read for anyone the queryset already scoped in; writes
+    require content-modify rights (PUT/PATCH) or management (DELETE). Blocks a
+    board *viewer* from mutating via a write-scoped token."""
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if request.method == 'DELETE':
+            return can_manage_board(request.user, obj)
+        return can_modify_board_content(request.user, obj)
+
+
+class TaskWritePermission(permissions.BasePermission):
+    """Object-level write gate for tasks — viewers are read-only."""
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return can_modify_board_content(request.user, obj.column.board)
 
 
 class BoardViewSet(viewsets.ModelViewSet):
@@ -42,15 +64,13 @@ class BoardViewSet(viewsets.ModelViewSet):
     serializer_class = BoardSerializer
     pagination_class = StandardResultsSetPagination
     authentication_classes = [APITokenAuthentication]
-    permission_classes = [permissions.IsAuthenticated, ScopePermission]
-    
+    permission_classes = [permissions.IsAuthenticated, ScopePermission, BoardWritePermission]
+
     def get_queryset(self):
         """Return boards accessible to the authenticated user"""
         user = self.request.user
-        # Return boards where user is member or creator
-        return Board.objects.filter(
-            Q(members=user) | Q(created_by=user)
-        ).distinct().select_related('organization', 'created_by').prefetch_related('columns')
+        # Demo-aware, workspace-scoped board access (creator + membership).
+        return get_user_boards(user).select_related('organization', 'created_by').prefetch_related('columns')
     
     def get_serializer_class(self):
         """Use lightweight serializer for list view"""
@@ -96,15 +116,25 @@ class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
     pagination_class = StandardResultsSetPagination
     authentication_classes = [APITokenAuthentication]
-    permission_classes = [permissions.IsAuthenticated, ScopePermission]
-    
+    permission_classes = [permissions.IsAuthenticated, ScopePermission, TaskWritePermission]
+
+    def perform_create(self, serializer):
+        """Block task creation on boards where the user can't modify content."""
+        from rest_framework.exceptions import PermissionDenied
+        column = serializer.validated_data.get('column')
+        board = getattr(column, 'board', None) if column else None
+        if board is not None and not can_modify_board_content(self.request.user, board):
+            raise PermissionDenied("You do not have permission to create tasks on this board.")
+        serializer.save()
+
     def get_queryset(self):
         """Return tasks accessible to the authenticated user"""
         user = self.request.user
-        # Return tasks from boards where user is member or creator
+        # Demo-aware, workspace-scoped board access (creator + membership).
+        accessible_boards = get_user_boards(user)
         queryset = Task.objects.filter(
-            Q(column__board__members=user) | Q(column__board__created_by=user)
-        ).distinct().select_related(
+            column__board__in=accessible_boards
+        ).select_related(
             'column', 'column__board', 'assigned_to', 'created_by'
         ).prefetch_related('labels')
         
@@ -161,11 +191,10 @@ class TaskViewSet(viewsets.ModelViewSet):
             column = Column.objects.get(id=column_id, board=task.column.board)
             task.column = column
             
-            # Auto-update progress to 100% when moved to a "Done" or "Complete" column
-            column_name_lower = column.name.lower()
-            if 'done' in column_name_lower or 'complete' in column_name_lower:
+            # Auto-update progress to 100% when moved to a Done-type column
+            if column.is_done():
                 task.progress = 100
-            
+
             task.save()
             
             serializer = self.get_serializer(task)
@@ -189,7 +218,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             )
         
         # Verify user has access to board
-        if not task.column.board.members.filter(id=user_id).exists():
+        if not task.column.board.memberships.filter(user_id=user_id).exists():
             return Response(
                 {'error': 'User is not a member of this board'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -217,9 +246,10 @@ class CommentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Return comments for tasks accessible to the authenticated user"""
         user = self.request.user
+        accessible_boards = get_user_boards(user)
         queryset = Comment.objects.filter(
-            Q(task__column__board__members=user) | Q(task__column__board__created_by=user)
-        ).distinct().select_related('task', 'user')
+            task__column__board__in=accessible_boards
+        ).select_related('task', 'user')
         
         # Filter by task_id if provided
         task_id = self.request.query_params.get('task_id')
@@ -344,6 +374,69 @@ def api_status(request):
         'user': request.user.username,
         'token_info': token_info
     })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def global_search(request):
+    """
+    Workspace-wide search across all boards the requesting user has access to.
+
+    GET /api/v1/search/global/?q=<query>
+
+    Returns up to 20 task results and 5 board results, grouped by type.
+    RBAC-safe: results are scoped through get_user_boards().
+    """
+    query = request.GET.get('q', '').strip()
+    if not query or len(query) < 2:
+        return Response({'tasks': [], 'boards': []})
+
+    accessible_boards = get_user_boards(request.user)
+
+    # Board matches (max 5)
+    matching_boards = accessible_boards.filter(
+        name__icontains=query
+    ).values('id', 'name')[:5]
+
+    # Task matches across all accessible boards (max 20)
+    matching_tasks = Task.objects.filter(
+        column__board__in=accessible_boards,
+        item_type='task',
+    ).filter(
+        Q(title__icontains=query) | Q(description__icontains=query)
+    ).select_related(
+        'column', 'column__board', 'assigned_to'
+    ).order_by('-updated_at')[:20]
+
+    from django.urls import reverse
+
+    task_results = []
+    for task in matching_tasks:
+        try:
+            url = reverse('task_detail', args=[task.id])
+        except Exception:
+            url = '#'
+        task_results.append({
+            'id': task.id,
+            'title': task.title,
+            'board_id': task.column.board_id,
+            'board_name': task.column.board.name,
+            'column': task.column.name,
+            'priority': task.priority,
+            'assignee': task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else None,
+            'url': url,
+        })
+
+    board_results = [
+        {
+            'id': b['id'],
+            'name': b['name'],
+            'url': '/boards/{}/'.format(b['id']),
+        }
+        for b in matching_boards
+    ]
+
+    return Response({'tasks': task_results, 'boards': board_results})
 
 
 from django.shortcuts import render

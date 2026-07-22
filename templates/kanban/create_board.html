@@ -21,7 +21,7 @@
                             <a href="{% url 'register' %}" class="btn btn-primary btn-sm" onclick="trackDemoConversion('project_limit')">
                                 <i class="fas fa-user-plus me-1"></i> Create Free Account
                             </a>
-                            <a href="{% url 'demo_dashboard' %}" class="btn btn-outline-secondary btn-sm">
+                            <a href="{% url 'demo_dashboard' %}" class="btn-prizm-back btn-sm">
                                 <i class="fas fa-arrow-left me-1"></i> Back to Demo
                             </a>
                         </div>
@@ -41,9 +41,9 @@
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                     <h6 class="m-0 font-weight-bold text-primary">Create New Board</h6>
                     <div>
-                        <button onclick="goBack()" class="btn btn-sm btn-outline-secondary me-2">
+                        <a href="{% url 'board_list' %}" class="btn-prizm-back btn-sm me-2">
                             <i class="fas fa-arrow-left me-1"></i> Back
-                        </button>
+                        </a>
                         <a href="{% url 'board_list' %}" class="btn btn-sm btn-outline-primary">
                             <i class="fas fa-list me-1"></i> All Boards
                         </a>
@@ -51,8 +51,24 @@
                 </div>
                 <div class="card-body">
                     {% if not demo_limit_reached %}
-                    <form method="post">
+                    <form method="post" id="create-board-form">
                         {% csrf_token %}
+
+                        {% if duplicate_warning_name %}
+                        <!-- Soft duplicate-title confirm -->
+                        <div class="alert alert-warning border-warning shadow-sm mb-4" role="alert">
+                            <h6 class="alert-heading mb-1">
+                                <i class="fas fa-triangle-exclamation me-2"></i>You already have a board named "{{ duplicate_warning_name }}"
+                            </h6>
+                            <p class="mb-0 small">
+                                Creating another board with the same name in this workspace can be
+                                confusing and may cause cross-board features (like Déjà Vu and
+                                analytics) to double-count. Click <strong>Create anyway</strong> to
+                                proceed, or change the name above.
+                            </p>
+                        </div>
+                        <input type="hidden" name="confirm_duplicate" value="1">
+                        {% endif %}
 
                         {% if selected_strategy %}
                         <!-- Strategy context banner (board will be auto-linked) -->
@@ -69,12 +85,14 @@
                             <h6 class="border-bottom pb-2 mb-3">
                                 <i class="fas fa-clipboard-list text-primary me-2"></i>Board Details
                             </h6>
+                            <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
                             <div class="mb-3">
-                                <label for="{{ form.name.id_for_label }}" class="form-label">Board Name <span class="text-danger">*</span></label>
+                                <label for="{{ form.name.id_for_label }}" class="form-label">Board Name <span class="required-asterisk">*</span></label>
                                 {{ form.name }}
                                 {% if form.name.errors %}
                                     <div class="invalid-feedback d-block">{{ form.name.errors }}</div>
                                 {% endif %}
+                                <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Board name is required.</div>
                             </div>
                             
                             <!-- AI Smart Setup Assistant -->
@@ -92,12 +110,7 @@
                                     </div>
                                     
                                     <!-- AI Generation Spinner -->
-                                    <div id="board-setup-ai-spinner" class="d-none text-center mt-2">
-                                        <div class="spinner-border spinner-border-sm text-info" role="status">
-                                            <span class="visually-hidden">Loading...</span>
-                                        </div>
-                                        <span class="ms-2 text-muted small">Analyzing your project and generating recommendations...</span>
-                                    </div>
+                                    <div id="board-setup-ai-spinner" class="d-none" data-prizm-variant="spectra" data-prizm-messages="boardSetup"></div>
                                 </div>
                             </div>
                             
@@ -144,12 +157,7 @@
                                     <i class="fas fa-magic me-1"></i> Get AI Recommendations
                                 </button>
                             </div>
-                            <div id="columns-ai-spinner" class="d-none text-center mb-3">
-                                <div class="spinner-border spinner-border-sm text-info" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <span class="ms-2 text-muted small">Analyzing optimal column structure...</span>
-                            </div>
+                            <div id="columns-ai-spinner" class="d-none" data-prizm-variant="spectra" data-prizm-messages="columnStructure"></div>
                             <div id="column-recommendations-result" class="d-none"></div>
                         </div>
                         
@@ -175,8 +183,27 @@
                             </div>
                         </div>
                         
+                        {% if all_strategies %}
+                        <!-- Strategic Alignment Section (only shown when not pre-linked) -->
+                        <div class="mb-4">
+                            <h6 class="border-bottom pb-2 mb-3">
+                                <i class="fas fa-sitemap text-success me-2"></i>Strategic Alignment <span class="text-muted small fw-normal">(optional)</span>
+                            </h6>
+                            <label for="strategy_id" class="form-label">Link to Strategy</label>
+                            <select class="form-select" id="strategy_id" name="strategy_id">
+                                <option value="">— No strategy (standalone board) —</option>
+                                {% for s in all_strategies %}
+                                <option value="{{ s.id }}">{{ s.mission__name }} › {{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="form-text text-muted">Attach this board to a strategy so it contributes to the Mission → Strategy hierarchy.</small>
+                        </div>
+                        {% endif %}
+
                         <div class="mt-4">
-                            <button type="submit" class="btn btn-primary">Create Board</button>
+                            <button type="submit" class="btn btn-primary">
+                                {% if duplicate_warning_name %}Create anyway{% else %}Create Board{% endif %}
+                            </button>
                             <a href="{% url 'board_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
                         </div>
                     </form>
@@ -204,16 +231,6 @@
 {% load static %}
 <script src="{% static 'js/ai_features.js' %}?v={{ STATIC_VERSION|default:'2' }}"></script>
 <script>
-// Handle back navigation to previous page
-function goBack() {
-    // Check if there's a previous page in history
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        // Fallback to board list if no history
-        window.location.href = '{% url "board_list" %}';
-    }
-}
 
 // Track demo conversion attempts
 function trackDemoConversion(source) {

@@ -39,16 +39,16 @@
                     <h2><i class="fas fa-chart-line me-2"></i>Budget Analytics</h2>
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb">
-                            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}">Dashboard</a></li>
-                            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}">{{ board.name }}</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
                             <li class="breadcrumb-item"><a href="{% url 'budget_dashboard' board.id %}">Budget</a></li>
                             <li class="breadcrumb-item active">Analytics</li>
                         </ol>
                     </nav>
                 </div>
                 <div>
-                    <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-secondary me-2">
-                        <i class="fas fa-arrow-left"></i> Back
+                    <a href="{% url 'budget_dashboard' board.id %}" class="btn-prizm-back me-2">
+                        <i class="fas fa-arrow-left"></i> Back to Budget
                     </a>
                     <a href="{% url 'roi_dashboard' board.id %}" class="btn btn-success">
                         <i class="fas fa-chart-bar"></i> ROI
@@ -149,7 +149,7 @@
                                     <td>{{ task.assignee|default:"-" }}</td>
                                     <td>{{ budget.currency }} {{ task.estimated_cost|floatformat:2 }}</td>
                                     <td>
-                                        <strong>{{ budget.currency }} {{ task.actual_cost|floatformat:2 }}</strong>
+                                        <strong>{{ budget.currency }} {{ task.total_actual_cost|floatformat:2 }}</strong>
                                     </td>
                                     <td>{{ task.time_logged|floatformat:1 }}h</td>
                                     <td>
@@ -162,15 +162,10 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        <div class="progress" style="height: 20px; width: 100px;">
-                                            <div class="progress-bar 
-                                                {% if task.variance_percent > 20 %}bg-danger
-                                                {% elif task.variance_percent > 10 %}bg-warning
-                                                {% else %}bg-success{% endif %}" 
-                                                style="width: {{ task.percent_of_budget }}%">
-                                                {{ task.percent_of_budget|floatformat:1 }}%
-                                            </div>
-                                        </div>
+                                        <span class="badge bg-secondary">{{ task.status }}</span>
+                                        {% if task.is_over_budget %}
+                                            <span class="badge bg-danger ms-1">Over Budget</span>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -241,8 +236,8 @@
 
     <!-- Cost Distribution Charts -->
     <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card">
+        <div class="col-md-6 d-flex">
+            <div class="card w-100">
                 <div class="card-header">
                     <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Cost Distribution</h5>
                 </div>
@@ -252,13 +247,13 @@
             </div>
         </div>
 
-        <div class="col-md-6">
-            <div class="card">
+        <div class="col-md-6 d-flex">
+            <div class="card w-100">
                 <div class="card-header">
                     <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Top 10 Expensive Tasks</h5>
                 </div>
-                <div class="card-body">
-                    <canvas id="expensiveTasksChart" height="200"></canvas>
+                <div class="card-body d-flex align-items-center" style="min-height: 0;">
+                    <canvas id="expensiveTasksChart"></canvas>
                 </div>
             </div>
         </div>
@@ -321,14 +316,16 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'js/chart.umd.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
+    const chartTheme = window.getChartTheme ? window.getChartTheme() : { textColor: '#444', gridColor: 'rgba(0,0,0,0.05)' };
+
     // Cost Trend Chart
     {% if trend_data %}
     const trendDates = [{% for item in trend_data %}'{{ item.date|date:"M d" }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
     const trendCosts = [{% for item in trend_data %}{{ item.cumulative_cost }}{% if not forloop.last %}, {% endif %}{% endfor %}];
     
-    new Chart(document.getElementById('costTrendChart'), {
+    const costTrendChart = new Chart(document.getElementById('costTrendChart'), {
         type: 'line',
         data: {
             labels: trendDates,
@@ -360,6 +357,7 @@
             scales: {
                 x: {
                     ticks: {
+                        color: chartTheme.textColor,
                         maxRotation: 45,
                         minRotation: 0,
                         autoSkip: true,
@@ -371,28 +369,34 @@
                     },
                     grid: {
                         display: true,
-                        drawOnChartArea: true
+                        drawOnChartArea: true,
+                        color: chartTheme.gridColor
                     }
                 },
                 y: {
                     beginAtZero: true,
                     ticks: {
+                        color: chartTheme.textColor,
                         callback: function(value) {
                             return '{{ budget.currency }} ' + value.toLocaleString();
                         }
+                    },
+                    grid: {
+                        color: chartTheme.gridColor
                     }
                 }
             }
         }
     });
+    if (window.PrizmCharts) window.PrizmCharts.register(costTrendChart);
     {% endif %}
 
     // Cost Distribution Chart
     {% if cost_breakdown %}
     const taskLabels = [{% for task in cost_breakdown|slice:":10" %}'{{ task.task_title|truncatechars:20 }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
-    const taskCosts = [{% for task in cost_breakdown|slice:":10" %}{{ task.actual_cost }}{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const taskCosts = [{% for task in cost_breakdown|slice:":10" %}{{ task.total_actual_cost }}{% if not forloop.last %}, {% endif %}{% endfor %}];
     
-    new Chart(document.getElementById('costDistributionChart'), {
+    const costDistributionChart = new Chart(document.getElementById('costDistributionChart'), {
         type: 'doughnut',
         data: {
             labels: taskLabels,
@@ -408,20 +412,19 @@
             responsive: true,
             maintainAspectRatio: true,
             plugins: {
-                legend: { position: 'bottom' }
+                legend: { position: 'bottom', labels: { color: chartTheme.textColor } }
             }
         }
     });
+    if (window.PrizmCharts) window.PrizmCharts.register(costDistributionChart);
 
     // Top 10 Expensive Tasks Chart - with full task names for tooltips
     const fullTaskNames = [{% for task in cost_breakdown|slice:":10" %}'{{ task.task_title|escapejs }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
-    const sortedTasks = [...taskCosts].sort((a, b) => b - a).slice(0, 10);
-    const sortedLabels = taskLabels.slice(0, 10);
     
-    new Chart(document.getElementById('expensiveTasksChart'), {
+    const expensiveTasksChart = new Chart(document.getElementById('expensiveTasksChart'), {
         type: 'bar',
         data: {
-            labels: sortedLabels,
+            labels: taskLabels,
             datasets: [{
                 label: 'Cost',
                 data: taskCosts,
@@ -431,7 +434,7 @@
         },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             indexAxis: 'y',
             plugins: {
                 legend: { display: false },
@@ -452,23 +455,32 @@
                 x: {
                     beginAtZero: true,
                     ticks: {
+                        color: chartTheme.textColor,
                         callback: function(value) {
                             return '{{ budget.currency }} ' + value.toLocaleString();
                         }
+                    },
+                    grid: {
+                        color: chartTheme.gridColor
                     }
                 },
                 y: {
                     ticks: {
+                        color: chartTheme.textColor,
                         callback: function(value, index) {
                             // Keep truncated labels but ensure readability
                             const label = this.getLabelForValue(value);
                             return label.length > 18 ? label.substring(0, 15) + '...' : label;
                         }
+                    },
+                    grid: {
+                        color: chartTheme.gridColor
                     }
                 }
             }
         }
     });
+    if (window.PrizmCharts) window.PrizmCharts.register(expensiveTasksChart);
     {% endif %}
 </script>
 {% endblock %}

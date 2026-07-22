@@ -17,7 +17,7 @@
     }
     
     .usage-section {
-        background: white;
+        background: var(--card-bg);
         border: 1px solid #d0d7de;
         border-radius: 6px;
         padding: 24px;
@@ -90,7 +90,7 @@
     }
     
     .token-card {
-        background: white;
+        background: var(--card-bg);
         border: 1px solid #d0d7de;
         border-radius: 6px;
         padding: 16px;
@@ -154,7 +154,7 @@
     }
     
     .stat-card {
-        background: white;
+        background: var(--card-bg);
         border: 1px solid #d0d7de;
         border-radius: 6px;
         padding: 16px;
@@ -173,7 +173,7 @@
     }
     
     .chart-container {
-        background: white;
+        background: var(--card-bg);
         border: 1px solid #d0d7de;
         border-radius: 6px;
         padding: 16px;
@@ -190,7 +190,7 @@
     .stat-card {
         border-radius: 12px;
         padding: 1.5rem;
-        background: white;
+        background: var(--card-bg);
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         transition: transform 0.2s;
     }
@@ -434,7 +434,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{% static 'js/chart.umd.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
 let charts = {};
 

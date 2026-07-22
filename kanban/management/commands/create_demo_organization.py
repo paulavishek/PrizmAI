@@ -3,18 +3,23 @@ Management command to create demo organization with board and personas.
 
 Structure:
 - 1 Organization: "Demo - Acme Corporation"
-- 1 Board: Software Development (4 columns: To Do, In Progress, In Review, Done)
-- 3 Personas: Alex Chen (Admin/PM), Sam Rivera (Member/Lead Dev), Jordan Taylor (Member/Architect-QA)
+- 1 Board: Software Development (5 columns: Backlog, To Do, In Progress, In Review, Done)
+- 3 Personas: Priya Sharma (Owner/Backend), Marcus Chen (Member/Frontend), Elena Vasquez (Member/DevOps-QA)
 
 Usage:
     python manage.py create_demo_organization
 """
 
+from datetime import timedelta
+
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from accounts.models import Organization, UserProfile
-from kanban.models import Board, Column
-from kanban.permission_models import Role, BoardMembership
+from accounts.demo_personas import (
+    DEMO_PERSONAS, DEMO_EMAILS, DEMO_USERNAMES, DEMO_PASSWORD,
+    LEGACY_DEMO_USERNAMES, LEGACY_DEMO_EMAILS,
+)
+from kanban.models import Board, Column, BoardMembership
 from django.utils import timezone
 from django.db import transaction
 
@@ -55,21 +60,19 @@ class Command(BaseCommand):
                 # Success summary
                 self.stdout.write('')
                 self.stdout.write(self.style.SUCCESS('='*80))
-                self.stdout.write(self.style.SUCCESS('✓ DEMO ORGANIZATION SETUP COMPLETE'))
+                self.stdout.write(self.style.SUCCESS('[OK] DEMO ORGANIZATION SETUP COMPLETE'))
                 self.stdout.write(self.style.SUCCESS('='*80))
                 self.stdout.write(f'  Organization: {demo_org.name}')
                 self.stdout.write(f'  Boards: {len(boards)}')
                 self.stdout.write(f'  Personas: {len(personas)}')
                 self.stdout.write('')
                 self.stdout.write('Next steps:')
-                self.stdout.write('  1. Run: python manage.py populate_demo_data')
-                self.stdout.write('  2. Run: python manage.py populate_wiki_demo_data')
-                self.stdout.write('  3. Run: python manage.py populate_ai_assistant_demo_data')
-                self.stdout.write('  4. Test demo mode: Visit /demo/ in your browser')
+                self.stdout.write('  1. Run: python manage.py populate_all_demo_data --reset')
+                self.stdout.write('  2. Visit /demo/ in your browser to see the seeded board')
                 self.stdout.write('')
                 
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f'✗ Error: {str(e)}'))
+            self.stdout.write(self.style.ERROR(f'[FAIL] Error: {str(e)}'))
             import traceback
             traceback.print_exc()
             raise
@@ -84,14 +87,12 @@ class Command(BaseCommand):
         if demo_org:
             self.stdout.write(f'  Deleting demo organization: {demo_org.name}')
             
-            # Delete demo users entirely (including their profiles)
-            # This must be done first as Users may have references
-            demo_emails = [
-                'alex.chen@demo.prizmai.local',
-                'sam.rivera@demo.prizmai.local',
-                'jordan.taylor@demo.prizmai.local'
-            ]
-            
+            # Delete demo users entirely (including their profiles).
+            # This must be done first as Users may have references.
+            # Includes legacy usernames so a half-migrated DB is cleaned up.
+            demo_emails = list(DEMO_EMAILS) + list(LEGACY_DEMO_EMAILS)
+            legacy_usernames = list(LEGACY_DEMO_USERNAMES)
+
             for email in demo_emails:
                 try:
                     user = User.objects.get(email=email)
@@ -99,12 +100,17 @@ class Command(BaseCommand):
                     user.delete()
                 except User.DoesNotExist:
                     pass
+
+            for uname in legacy_usernames:
+                for user in User.objects.filter(username=uname):
+                    self.stdout.write(f'  Deleting legacy user: {user.username}')
+                    user.delete()
             
             # Now delete organization (will cascade to boards, tasks, etc.)
             self.stdout.write(f'  Deleting organization and all related data...')
             demo_org.delete()
             
-            self.stdout.write(self.style.SUCCESS('  ✓ Demo data reset complete'))
+            self.stdout.write(self.style.SUCCESS('  [OK] Demo data reset complete'))
         else:
             self.stdout.write('  No demo organization found (clean slate)')
 
@@ -116,7 +122,7 @@ class Command(BaseCommand):
         # If not, use first superuser
         creator = User.objects.filter(is_superuser=True).first()
         if not creator:
-            self.stdout.write(self.style.ERROR('  ✗ No superuser found!'))
+            self.stdout.write(self.style.ERROR('  [FAIL] No superuser found!'))
             self.stdout.write('  Please create a superuser first: python manage.py createsuperuser')
             raise Exception('No superuser available')
         
@@ -131,65 +137,28 @@ class Command(BaseCommand):
         )
         
         if created:
-            self.stdout.write(self.style.SUCCESS(f'  ✓ Created: {demo_org.name}'))
+            self.stdout.write(self.style.SUCCESS(f'  [OK] Created: {demo_org.name}'))
         else:
             self.stdout.write(self.style.WARNING(f'  ! Already exists: {demo_org.name}'))
             # Update is_demo flag if it wasn't set
             if not demo_org.is_demo:
                 demo_org.is_demo = True
                 demo_org.save()
-                self.stdout.write(self.style.SUCCESS('  ✓ Updated is_demo flag'))
+                self.stdout.write(self.style.SUCCESS('  [OK] Updated is_demo flag'))
         
         return demo_org
 
     def create_demo_personas(self, demo_org):
-        """Create 3 demo personas as members of demo org"""
+        """Create 3 demo personas as members of demo org.
+
+        Persona definitions come from ``accounts.demo_personas.DEMO_PERSONAS``
+        — that module is the single source of truth for persona identifiers
+        when swapping demo personas in the future.
+        """
         self.stdout.write('\n2. Creating demo personas...')
-        
-        personas_data = [
-            {
-                'username': 'alex_chen_demo',
-                'email': 'alex.chen@demo.prizmai.local',
-                'first_name': 'Alex',
-                'last_name': 'Chen',
-                'org_role': 'admin',
-                'skills': [
-                    {'name': 'Project Management', 'level': 'Expert'},
-                    {'name': 'Agile/Scrum', 'level': 'Expert'},
-                    {'name': 'Leadership', 'level': 'Advanced'},
-                ],
-                'weekly_capacity': 40,
-            },
-            {
-                'username': 'sam_rivera_demo',
-                'email': 'sam.rivera@demo.prizmai.local',
-                'first_name': 'Sam',
-                'last_name': 'Rivera',
-                'org_role': 'member',
-                'skills': [
-                    {'name': 'Python', 'level': 'Expert'},
-                    {'name': 'JavaScript', 'level': 'Advanced'},
-                    {'name': 'Django', 'level': 'Expert'},
-                    {'name': 'React', 'level': 'Intermediate'},
-                ],
-                'weekly_capacity': 40,
-            },
-            {
-                'username': 'jordan_taylor_demo',
-                'email': 'jordan.taylor@demo.prizmai.local',
-                'first_name': 'Jordan',
-                'last_name': 'Taylor',
-                'org_role': 'member',
-                'skills': [
-                    {'name': 'System Architecture', 'level': 'Advanced'},
-                    {'name': 'Business Analysis', 'level': 'Expert'},
-                    {'name': 'Quality Assurance', 'level': 'Advanced'},
-                    {'name': 'Technical Writing', 'level': 'Expert'},
-                ],
-                'weekly_capacity': 40,
-            }
-        ]
-        
+
+        personas_data = list(DEMO_PERSONAS.values())
+
         personas = []
         
         for persona_data in personas_data:
@@ -205,33 +174,38 @@ class Command(BaseCommand):
             )
             
             if created:
-                # Set simple demo password for easy testing
-                user.set_password('demo123')
+                user.set_password(DEMO_PASSWORD)
                 user.save()
-                self.stdout.write(self.style.SUCCESS(f'  ✓ Created: {user.get_full_name()} ({user.email}) - password: demo123'))
+                self.stdout.write(self.style.SUCCESS(f'  [OK] Created: {user.get_full_name()} ({user.email})'))
             else:
-                # Update existing user password
-                user.set_password('demo123')
+                # Re-sync first/last name so legacy demo accounts that pre-date
+                # the persona-definition cleanup always have populated display
+                # names — Quantum Standup "Completed By" surfaces these and
+                # blank first_name used to render as "Unknown".
+                user.first_name = persona_data['first_name']
+                user.last_name = persona_data['last_name']
+                user.set_password(DEMO_PASSWORD)
                 user.save()
-                self.stdout.write(self.style.WARNING(f'  ! Already exists: {user.get_full_name()} - password updated to: demo123'))
-            
+                self.stdout.write(self.style.WARNING(f'  ! Already exists: {user.get_full_name()} - password reset'))
+
             # Create or update user profile
             profile, profile_created = UserProfile.objects.get_or_create(
                 user=user,
                 defaults={
                     'organization': demo_org,
                     'is_admin': (persona_data['org_role'] == 'admin'),
+                    'is_demo_account': True,
                     'skills': persona_data['skills'],
                     'weekly_capacity_hours': persona_data['weekly_capacity'],
                     'completed_wizard': True,  # Skip wizard for demo users
                     'wizard_completed_at': timezone.now(),
                 }
             )
-            
+
             if not profile_created:
-                # Update existing profile
                 profile.organization = demo_org
                 profile.is_admin = (persona_data['org_role'] == 'admin')
+                profile.is_demo_account = True
                 profile.skills = persona_data['skills']
                 profile.weekly_capacity_hours = persona_data['weekly_capacity']
                 profile.completed_wizard = True
@@ -239,21 +213,23 @@ class Command(BaseCommand):
             
             personas.append(user)
         
-        self.stdout.write(self.style.SUCCESS(f'  ✓ Created {len(personas)} personas'))
+        self.stdout.write(self.style.SUCCESS(f'  [OK] Created {len(personas)} personas'))
         return personas
 
     def create_demo_boards(self, demo_org, personas):
-        """Create 1 demo board in the demo org"""
+        """Create demo boards in the demo org"""
         self.stdout.write('\n3. Creating demo boards...')
-        
-        # Get Alex Chen as the board creator (admin)
-        creator = personas[0]  # Alex Chen
-        
+
+        # The 'lead' persona (currently Priya Sharma) is the Owner of the
+        # Software Development board. ``personas[0]`` matches DEMO_PERSONAS.values()
+        # iteration order, which starts with 'lead'.
+        creator = personas[0]
+
         boards_data = [
             {
                 'name': 'Software Development',
-                'description': 'Track features, sprints, and releases for our product. Showcase AI-powered task management and burndown forecasting.',
-                'columns': ['To Do', 'In Progress', 'In Review', 'Done'],
+                'description': 'Track features, sprints, and releases for our core product platform.',
+                'columns': ['Backlog', 'To Do', 'In Progress', 'In Review', 'Done'],
             },
         ]
         
@@ -267,32 +243,50 @@ class Command(BaseCommand):
                 defaults={
                     'description': board_data['description'],
                     'is_official_demo_board': True,
-                    'is_seed_demo_data': True,  # Mark as seed data for cleanup protection
+                    'is_seed_demo_data': True,
                     'created_by': creator,
+                    'owner': creator,
+                    'num_phases': 4,
+                    'project_type': 'product_tech',
+                    'project_type_confirmed': True,
                     'created_at': timezone.now(),
+                    'project_deadline': (timezone.now() + timedelta(days=56)).date(),
                 }
             )
-            
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'  ✓ Created board: {board.name}'))
-                
-                # Create columns for this board
-                for position, column_name in enumerate(board_data['columns']):
-                    Column.objects.create(
-                        board=board,
-                        name=column_name,
-                        position=position
-                    )
+
+            # Always ensure the flags & owner stay correct on re-runs
+            board.is_official_demo_board = True
+            board.is_seed_demo_data = True
+            board.owner = creator
+            board.num_phases = 4
+            board.project_type = 'product_tech'
+            board.project_type_confirmed = True
+            board.project_deadline = (timezone.now() + timedelta(days=56)).date()
+            board.save()
+
+            # Ensure columns exist with WIP limits per spec.
+            # Idempotent: keeps existing columns, fixes WIP limits and positions.
+            wip_for = {'Backlog': None, 'To Do': 8, 'In Progress': 6, 'In Review': 3, 'Done': None}
+            for position, column_name in enumerate(board_data['columns']):
+                col, col_created = Column.objects.get_or_create(
+                    board=board,
+                    name=column_name,
+                    defaults={'position': position, 'wip_limit': wip_for.get(column_name)},
+                )
+                # Force position + wip_limit on each run
+                col.position = position
+                col.wip_limit = wip_for.get(column_name)
+                col.save()
+                if col_created:
                     self.stdout.write(f'    - Added column: {column_name}')
+
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'  [OK] Created board: {board.name}'))
             else:
-                self.stdout.write(self.style.WARNING(f'  ! Already exists: {board.name}'))
-                # Ensure is_official_demo_board flag is set
-                if not board.is_official_demo_board:
-                    board.is_official_demo_board = True
-                    board.save()
-            
+                self.stdout.write(self.style.WARNING(f'  ! Already exists: {board.name} (refreshed)'))
+
             boards.append(board)
-        
+
         return boards
 
     def assign_board_memberships(self, boards, personas):
@@ -300,45 +294,45 @@ class Command(BaseCommand):
         Preserves existing real user memberships (non-demo users)."""
         self.stdout.write('\n4. Assigning board memberships...')
         
-        # Role mapping based on persona
+        # Role mapping derived from DEMO_PERSONAS: org_role 'admin' is the
+        # board Owner; everyone else maps to 'member'.
         role_map = {
-            'alex_chen_demo': 'Admin',      # Alex Chen - Project Manager
-            'sam_rivera_demo': 'Editor',    # Sam Rivera - Lead Developer
-            'jordan_taylor_demo': 'Editor', # Jordan Taylor - Architect/QA
+            p['username']: ('owner' if p['org_role'] == 'admin' else 'member')
+            for p in DEMO_PERSONAS.values()
         }
-        
+
+        # Usernames that identify any demo persona (legacy or new) - preserved when
+        # we scan existing membership for real users to keep around.
+        demo_usernames = set(role_map.keys()) | set(LEGACY_DEMO_USERNAMES)
+
         total_assigned = 0
-        
+
         for board in boards:
-            # Get existing members (real users - not demo users)
-            existing_real_users = board.members.exclude(username__icontains='demo')
+            # Get existing members (real users - not any demo persona, old or new)
+            existing_real_user_ids = BoardMembership.objects.filter(
+                board=board
+            ).exclude(user__username__in=demo_usernames).values_list('user_id', flat=True)
             
             for persona in personas:
-                # Add persona to board members
-                if persona not in board.members.all():
-                    board.members.add(persona)
+                # Create BoardMembership for persona
+                role_name = role_map.get(persona.username, 'member')
+                _, created = BoardMembership.objects.get_or_create(
+                    board=board,
+                    user=persona,
+                    defaults={'role': role_name}
+                )
+                if created:
                     total_assigned += 1
-                
-                # Get or create role for this persona
-                role_name = role_map.get(persona.username, 'Editor')
-                role = Role.objects.filter(
-                    organization=board.organization,
-                    name=role_name
-                ).first()
-                
-                if role:
-                    # Create BoardMembership with role
-                    BoardMembership.objects.get_or_create(
-                        board=board,
-                        user=persona,
-                        defaults={'role': role}
-                    )
             
             # Ensure all existing real users remain members
-            for real_user in existing_real_users:
-                if real_user not in board.members.all():
-                    board.members.add(real_user)
-                    self.stdout.write(f'    ✓ Preserved real user: {real_user.username} on {board.name}')
+            from django.contrib.auth.models import User
+            for real_user_id in existing_real_user_ids:
+                real_user = User.objects.get(id=real_user_id)
+                BoardMembership.objects.get_or_create(
+                    board=board,
+                    user=real_user,
+                    defaults={'role': 'member'}
+                )
         
-        self.stdout.write(self.style.SUCCESS(f'  ✓ Assigned {len(personas)} demo personas to {len(boards)} boards'))
+        self.stdout.write(self.style.SUCCESS(f'  [OK] Assigned {len(personas)} demo personas to {len(boards)} boards'))
         self.stdout.write(f'    Total board memberships: {total_assigned}')

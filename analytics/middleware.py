@@ -2,6 +2,8 @@
 Session tracking middleware for analytics.
 Tracks user behavior throughout their session automatically.
 """
+from datetime import timedelta
+
 from django.utils.deprecation import MiddlewareMixin
 from django.utils import timezone
 from .models import UserSession, AnalyticsEvent
@@ -27,16 +29,25 @@ class SessionTrackingMiddleware(MiddlewareMixin):
         '/favicon.ico',
     ]
     
-    # AI feature paths to track
-    AI_PATHS = [
-        'ai-recommend',
-        'ai-forecast', 
-        'gemini',
-        'ai-coach',
-        'ai-detect',
-        'ai-suggest',
-        'ai_assistant',
-    ]
+    # AI feature paths → named feature key (used for FeatureAdoptionEvent + deduplication)
+    AI_PATH_FEATURES = {
+        '/assistant/':        ('spectra_query',    'ai'),
+        '/coach/':            ('ai_coach',         'ai'),
+        '/forecast/':         ('burndown_chart',   'core'),
+        '/what-if/':          ('what_if',          'enterprise_ai'),
+        '/retro':             ('ai_retrospective', 'ai'),
+        '/skill-gap':         ('skill_gap',        'ai'),
+        '/recommendations/':  ('ai_bubble_up',     'ai'),
+        '/ai-analyze':        ('requirements_ai',  'ai'),
+        '/ai-create-tasks':   ('requirements_ai',  'ai'),
+        '/spectra':           ('spectra_query',    'ai'),
+        '/gap-analysis':      ('skill_gap',        'ai'),
+    }
+
+    # Keep a flat path list for quick "any match" checks (backwards compat)
+    @property
+    def AI_PATHS(self):
+        return list(self.AI_PATH_FEATURES.keys())
     
     def process_request(self, request):
         """Initialize or retrieve user session"""
@@ -53,6 +64,15 @@ class SessionTrackingMiddleware(MiddlewareMixin):
         # Get or create UserSession
         try:
             if request.user.is_authenticated:
+                # Close any stale open sessions (inactive for > 4 hours) to prevent
+                # inflated duration_minutes on the logout page
+                stale_cutoff = timezone.now() - timedelta(hours=4)
+                UserSession.objects.filter(
+                    user=request.user,
+                    session_end__isnull=True,
+                    last_activity__lt=stale_cutoff,
+                ).update(session_end=stale_cutoff, exit_reason='stale')
+
                 # For authenticated users, get or create active session
                 user_session, created = UserSession.objects.get_or_create(
                     user=request.user,
@@ -64,6 +84,7 @@ class SessionTrackingMiddleware(MiddlewareMixin):
                         'user_agent': request.META.get('HTTP_USER_AGENT', '')[:500],
                         'referrer': request.META.get('HTTP_REFERER', '')[:500],
                         'device_type': self.detect_device_type(request),
+                        **self._workspace_context(request.user),
                     }
                 )
             else:
@@ -117,10 +138,17 @@ class SessionTrackingMiddleware(MiddlewareMixin):
                 session.pages_visited += 1
             
             # Track board views (GET requests to board detail pages)
-            if 'board' in path and method == 'GET':
-                # Check if it's a detail view (has ID in path)
-                if re.search(r'/board[s]?/\d+', path):
-                    session.boards_viewed += 1
+            # Deduplicate: only count each unique board ID once per session
+            if method == 'GET':
+                board_match = re.search(r'/boards?/(\d+)(?:/|$)', path)
+                if board_match:
+                    board_id = board_match.group(1)
+                    visited_boards = request.session.get('_visited_board_ids', [])
+                    if board_id not in visited_boards:
+                        session.boards_viewed += 1
+                        visited_boards.append(board_id)
+                        request.session['_visited_board_ids'] = visited_boards
+                        request.session.modified = True
             
             # Track board creation (POST to board create endpoint)
             if 'board' in path and method == 'POST' and ('create' in path or path.endswith('/boards/')):
@@ -132,8 +160,15 @@ class SessionTrackingMiddleware(MiddlewareMixin):
                     'timestamp': timezone.now()
                 })
             
-            # Track task creation
-            if 'task' in path and method == 'POST':
+            # Track task creation — only match explicit create-task endpoints,
+            # not every POST that happens to contain 'task' in the URL
+            _TASK_CREATE_PATTERNS = [
+                r'/create-task/',
+                r'/boards/\d+/tasks/$',
+                r'/api/wizard/create-task/',
+                r'/calendar/create-task/',
+            ]
+            if method == 'POST' and any(re.search(p, path) for p in _TASK_CREATE_PATTERNS):
                 session.tasks_created += 1
                 request._pending_events.append({
                     'user_session': session,
@@ -155,18 +190,35 @@ class SessionTrackingMiddleware(MiddlewareMixin):
                         'timestamp': timezone.now()
                     })
             
-            # Track AI feature usage
-            if any(ai_path in path for ai_path in self.AI_PATHS):
-                session.ai_features_used += 1
-                # Extract which AI feature
-                feature_name = next((ai for ai in self.AI_PATHS if ai in path), 'unknown')
-                request._pending_events.append({
-                    'user_session': session,
-                    'event_name': 'ai_feature_used',
-                    'event_category': 'ai_features',
-                    'event_label': feature_name,
-                    'timestamp': timezone.now()
-                })
+            # Track AI feature usage — only count GET requests to AI feature pages
+            # (not every sub-API call within the same feature)
+            if method == 'GET' and any(ai_path in path for ai_path in self.AI_PATH_FEATURES):
+                # Determine feature name and category
+                matched_path = next((p for p in self.AI_PATH_FEATURES if p in path), None)
+                feature_name, feature_cat = self.AI_PATH_FEATURES.get(matched_path, ('unknown', 'ai'))
+                used_ai = request.session.get('_used_ai_features', [])
+                if matched_path not in used_ai:
+                    session.ai_features_used += 1
+                    used_ai.append(matched_path)
+                    request.session['_used_ai_features'] = used_ai
+                    request.session.modified = True
+                    request._pending_events.append({
+                        'user_session': session,
+                        'event_name': 'ai_feature_used',
+                        'event_category': 'ai_features',
+                        'event_label': feature_name,
+                        'timestamp': timezone.now()
+                    })
+                    # Record FeatureAdoptionEvent for authenticated users
+                    if request.user.is_authenticated and feature_name != 'unknown':
+                        try:
+                            from analytics.signals import _record_feature
+                            _record_feature(
+                                request.user, feature_name, feature_cat,
+                                session=session
+                            )
+                        except Exception:
+                            pass
             
             # Save updates (batch save for performance)
             session.save(update_fields=[
@@ -232,6 +284,33 @@ class SessionTrackingMiddleware(MiddlewareMixin):
             return 'desktop'
         else:
             return 'unknown'
+
+    @staticmethod
+    def _workspace_context(user):
+        """
+        Return a dict with workspace_preset, byok_active, ai_provider_used
+        for the given authenticated user.  Never raises — returns empty defaults.
+        """
+        ctx = {'workspace_preset': '', 'byok_active': False, 'ai_provider_used': ''}
+        try:
+            # Workspace preset from the user's active workspace (the tenant boundary)
+            ws = getattr(getattr(user, 'profile', None), 'active_workspace', None)
+            preset_obj = getattr(ws, 'workspace_preset', None) if ws else None
+            if preset_obj:
+                ctx['workspace_preset'] = preset_obj.global_preset
+        except Exception:
+            pass
+        try:
+            from ai_assistant.models import UserAISettings
+            settings_obj = UserAISettings.objects.filter(user=user).first()
+            if settings_obj and settings_obj.encrypted_api_key:
+                ctx['byok_active'] = True
+                ctx['ai_provider_used'] = getattr(settings_obj, 'byok_provider', '') or ''
+            elif settings_obj:
+                ctx['ai_provider_used'] = getattr(settings_obj, 'provider_override', '') or ''
+        except Exception:
+            pass
+        return ctx
 
 
 class SessionTimeoutMiddleware(MiddlewareMixin):

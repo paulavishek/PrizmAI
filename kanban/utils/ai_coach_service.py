@@ -19,19 +19,18 @@ class AICoachService:
     Provides contextual advice and explanations
     """
     
-    def __init__(self):
-        """Initialize AI coach service"""
-        self.gemini_available = hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY
-        
-        if self.gemini_available:
-            try:
-                import google.generativeai as genai
-                genai.configure(api_key=settings.GEMINI_API_KEY)
-                self.genai = genai
-                logger.info("AI Coach Service initialized with Gemini")
-            except Exception as e:
-                logger.error(f"Failed to initialize Gemini: {e}")
-                self.gemini_available = False
+    def __init__(self, user=None):
+        """Initialize AI coach service
+
+        Args:
+            user: (optional) the requesting user, used to apply their persisted
+                AI response-style profile to coaching prose. Left None for
+                non-interactive/batch generation (no directive applied).
+        """
+        from ai_assistant.utils.ai_router import AIRouter
+        self.router = AIRouter()
+        self.user = user
+        self.gemini_available = True  # AIRouter handles availability internally
         
         # Initialize AI cache manager
         try:
@@ -54,6 +53,14 @@ class AICoachService:
         Returns:
             AI response text or None
         """
+        # Apply the requesting user's response-style profile (persisted custom
+        # instructions). Empty unless they set non-default prefs. Prepended to
+        # the prompt so the cache key naturally varies per style.
+        from accounts.style_profile import directive_for_user
+        style_directive = directive_for_user(self.user)
+        if style_directive:
+            prompt = style_directive + "\n\n" + prompt
+
         # Try cache first
         if self.ai_cache:
             cached = self.ai_cache.get(prompt, operation, context_id)
@@ -66,34 +73,19 @@ class AICoachService:
             return None
             
         try:
-            model = self.genai.GenerativeModel('gemini-2.5-flash')
-            
-            # Token limits for coaching operations - generous to prevent JSON truncation
-            coaching_token_limits = {
-                'coaching_suggestion': 3072,  # Suggestion enhancement with actions + explainability
-                'coaching_advice': 4096,      # Detailed coaching response with full reasoning
-                'coaching_question': 3072,    # PM question response with context
-            }
-            
-            max_tokens = coaching_token_limits.get(operation, 3072)
-            
-            # Generation config for coaching - balanced for helpful advice
-            generation_config = {
-                'temperature': 0.5,  # Balanced for actionable but engaging advice
-                'top_p': 0.8,
-                'top_k': 40,
-                'max_output_tokens': max_tokens,
-            }
-            
-            response = model.generate_content(prompt, generation_config=generation_config)
-            
-            if response and response.text:
-                result = response.text.strip()
+            result = self.router.complete(
+                prompt=prompt,
+                user=None,
+                complexity='complex',
+            )
+            response_text = result.get('text', '').strip()
+
+            if response_text:
                 # Cache the result
-                if self.ai_cache and result:
-                    self.ai_cache.set(prompt, result, operation, context_id)
+                if self.ai_cache and response_text:
+                    self.ai_cache.set(prompt, response_text, operation, context_id)
                     logger.debug(f"AI Coach response cached for operation: {operation}")
-                return result
+                return response_text
             return None
         except Exception as e:
             logger.error(f"AI generation failed: {e}")
@@ -193,8 +185,97 @@ class AICoachService:
                 suggestion_data['expected_impact'] = "Addressing this issue can help improve project outcomes."
             return suggestion_data
     
+    def _build_team_roster_block(self, context: Dict) -> str:
+        """
+        Render a per-member workload/skill roster so the enhancement prompt's
+        suggested reassignments (e.g. "give this to X") are grounded in the
+        same UserPerformanceProfile data AI Resource Optimization uses —
+        instead of the LLM inventing plausible-sounding teammates/actions
+        from suggestion text alone, which can contradict the Resource
+        Optimization panel (e.g. recommending work go TO someone who is
+        already the most overloaded person on the board).
+        """
+        board_id = context.get('board_id')
+        if not board_id:
+            return ''
+
+        try:
+            from kanban.models import Board, BoardMembership
+            from kanban.resource_leveling import ResourceLevelingService
+
+            board = Board.objects.filter(id=board_id).first()
+            if not board:
+                return ''
+
+            members = list(
+                BoardMembership.objects.filter(board=board).select_related('user')[:25]
+            )
+            if not members:
+                return ''
+
+            service = ResourceLevelingService(workspace=getattr(board, 'workspace', None))
+
+            lines = []
+            for m in members:
+                user = m.user
+                try:
+                    profile = service.get_or_create_profile(user, board=board)
+                except Exception:
+                    continue
+
+                display = user.get_full_name() or user.username
+                top_skills = sorted(
+                    (profile.skill_keywords or {}).items(),
+                    key=lambda kv: -kv[1]
+                )[:5]
+                skills_text = ', '.join(k for k, _ in top_skills) if top_skills else 'none recorded'
+
+                lines.append(
+                    f"  - {display} ({user.username}): {profile.current_active_tasks} active tasks, "
+                    f"{profile.utilization_percentage:.0f}% capacity utilized, "
+                    f"skills: {skills_text}"
+                )
+
+            if not lines:
+                return ''
+
+            return (
+                "\n## Team Workload & Skills (live data — use this, not assumptions):\n"
+                + "\n".join(lines)
+                + "\nWhen recommending a specific person to take on work, only name someone "
+                "from this list, and prefer people with LOWER capacity utilization and "
+                "relevant skills. Do NOT recommend giving work to someone already at or "
+                "above 90% capacity utilization unless no one else is qualified.\n"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to build team roster block for AI coach prompt: {e}")
+            return ''
+
     def _build_enhancement_prompt(self, suggestion: Dict, context: Dict) -> str:
         """Build prompt for AI enhancement with full explainability"""
+        # Render a compact "Custom Fields" section when the workspace has any.
+        # See summarize_custom_fields_for_board() — exclude_from_ai fields are
+        # already filtered out.
+        custom_fields_block = ''
+        cf_summary = context.get('custom_fields') or []
+        if cf_summary:
+            lines = []
+            for entry in cf_summary:
+                desc = f"- {entry['name']} ({entry['type']}, set on {entry['tasks_set']} tasks"
+                top = entry.get('top_values') or []
+                if top:
+                    desc += f"; common: {', '.join(top)}"
+                desc += ")"
+                lines.append(desc)
+            custom_fields_block = (
+                "\n## Workspace Custom Fields (PM-defined task metadata):\n"
+                + "\n".join(lines)
+                + "\nReference these by name in your advice when relevant; the "
+                + "user has chosen them as meaningful signals.\n"
+            )
+
+        team_roster_block = self._build_team_roster_block(context)
+
         return f"""You are an experienced project management coach helping a PM improve their project.
 Your advice must be transparent, actionable, and concise.
 
@@ -210,6 +291,8 @@ Your advice must be transparent, actionable, and concise.
 - Active Tasks: {context.get('active_tasks', 'N/A')}
 - Project Phase: {context.get('project_phase', 'N/A')}
 - Current Velocity: {context.get('velocity', 'N/A')} tasks/week
+{custom_fields_block}
+{team_roster_block}
 
 ## Metrics:
 {json.dumps(suggestion.get('metrics_snapshot', {}), indent=2)}
@@ -224,6 +307,11 @@ Provide comprehensive coaching advice in JSON format.
    - "rationale": Why it helps (1 sentence)
    - "expected_outcome": Measurable result (1 sentence)
    - "implementation_hint": Practical how-to (1 sentence, 30-60 minutes timeframe when applicable)
+   - If an action names a specific team member to take on, receive, or review work,
+     that person MUST come from the "Team Workload & Skills" list above (if present)
+     and must NOT already be at/above 90% capacity utilization — pick the least-loaded,
+     most skill-relevant person instead. If no roster is provided, keep actions
+     role-based ("a teammate with capacity") rather than inventing a name.
 3. "impact": 1-2 sentences with quantifiable improvements if possible
 4. "confidence": Number between 0.70 and 0.95 based on data quality
 
@@ -278,103 +366,247 @@ Generate a response following this exact structure. Be specific, actionable, and
             logger.error(f"Failed to parse AI enhancement: {e}")
             return {}
     
+    def _build_board_snapshot(self, board) -> Dict:
+        """
+        Build a rich, Spectra-quality snapshot of a board's live state for the
+        coaching prompt. Returns a dict with both a formatted text block (for
+        the LLM) and structured counts (for explainability fallback).
+        """
+        from kanban.burndown_models import TeamVelocitySnapshot
+        from kanban.utils.burndown_predictor import BurndownPredictor
+        from ai_assistant.utils.spectra_data_fetchers import (
+            fetch_board_tasks,
+            fetch_column_distribution,
+            fetch_milestones,
+        )
+        from kanban.models import BoardMembership
+
+        # All real tasks (excludes milestones/epics)
+        tasks = fetch_board_tasks(board, filters={'item_type': 'task'})
+        incomplete = [t for t in tasks if not t.get('is_complete')]
+        overdue = [t for t in incomplete if t.get('is_overdue')]
+        unassigned = [t for t in incomplete if not t.get('assigned_to_username')]
+
+        col_dist = fetch_column_distribution(board)
+        milestones = fetch_milestones(board)
+
+        # Velocity — use the latest *fully-elapsed* period only. The current
+        # period is still in progress (a sprint week that started today has 0
+        # completed on day one), so counting it makes velocity read as a ~100%
+        # collapse and misleads the LLM. Mirrors
+        # CoachingRuleEngine._check_velocity_drop (period_end < today).
+        from django.utils import timezone
+        velocity_text = 'N/A'
+        try:
+            today = timezone.now().date()
+            BurndownPredictor()._ensure_velocity_snapshots(board)
+            snap = (TeamVelocitySnapshot.objects
+                    .filter(board=board, period_end__lt=today)
+                    .order_by('-period_end').first())
+            if snap:
+                velocity_text = f"{snap.tasks_completed} tasks/week"
+        except Exception as vel_err:
+            logger.warning(f"Velocity calc failed for board {board.id}: {vel_err}")
+
+        # Workload per assignee (active incomplete)
+        workload: Dict[str, Dict[str, int]] = {}
+        for t in incomplete:
+            name = t.get('assigned_to_display') or t.get('assigned_to_username') or 'Unassigned'
+            row = workload.setdefault(name, {'active': 0, 'overdue': 0})
+            row['active'] += 1
+            if t.get('is_overdue'):
+                row['overdue'] += 1
+
+        # Blocked tasks: incomplete tasks that depend on something not yet complete
+        title_to_complete = {t['title']: t.get('is_complete') for t in tasks}
+        blocked: List[Dict] = []
+        for t in incomplete:
+            deps = t.get('dependency_titles') or []
+            open_deps = [d for d in deps if title_to_complete.get(d) is False]
+            if open_deps:
+                blocked.append({
+                    'title': t['title'],
+                    'assignee': t.get('assigned_to_display') or 'Unassigned',
+                    'open_deps': open_deps[:4],
+                })
+
+        team = list(BoardMembership.objects.filter(board=board).select_related('user')[:25])
+
+        # ── Format text block ─────────────────────────────────────────────
+        lines: List[str] = []
+        lines.append(f"Board: {board.name}")
+        if board.description:
+            lines.append(f"Description: {board.description[:200]}")
+        lines.append(f"Team Size: {len(team)} members")
+        lines.append(f"Active Tasks (incomplete): {len(incomplete)}")
+        lines.append(f"Current Velocity: {velocity_text}")
+        lines.append(f"Overdue: {len(overdue)} | Unassigned: {len(unassigned)} | Blocked: {len(blocked)}")
+
+        if col_dist:
+            lines.append("")
+            lines.append("Column distribution:")
+            for name, count in col_dist:
+                lines.append(f"  - {name}: {count}")
+
+        if team:
+            lines.append("")
+            lines.append("Team members:")
+            for m in team:
+                disp = m.user.get_full_name() or m.user.username
+                lines.append(f"  - {disp} ({m.role})")
+
+        if workload:
+            lines.append("")
+            lines.append("Workload per assignee (active / overdue):")
+            for name, row in sorted(workload.items(), key=lambda kv: (-kv[1]['overdue'], -kv[1]['active'])):
+                lines.append(f"  - {name}: {row['active']} active, {row['overdue']} overdue")
+
+        if overdue:
+            lines.append("")
+            lines.append(f"Overdue tasks ({len(overdue)}):")
+            for t in sorted(overdue, key=lambda x: -(x.get('overdue_days') or 0))[:15]:
+                lines.append(
+                    f"  - [{t['column_name']}] {t['title']} "
+                    f"— {t.get('assigned_to_display') or 'Unassigned'} "
+                    f"— {t.get('overdue_days', '?')} days overdue "
+                    f"(priority: {t.get('priority_label') or 'N/A'})"
+                )
+
+        # Tasks due in next 7 days
+        from datetime import date, timedelta
+        today = date.today()
+        next_week = today + timedelta(days=7)
+        due_soon = [
+            t for t in incomplete
+            if t.get('due_date_date') and today <= t['due_date_date'] <= next_week
+        ]
+        if due_soon:
+            lines.append("")
+            lines.append(f"Due in next 7 days ({len(due_soon)}):")
+            for t in sorted(due_soon, key=lambda x: x['due_date_date']):
+                lines.append(
+                    f"  - {t['title']} — due {t['due_date_date']} "
+                    f"— {t.get('assigned_to_display') or 'Unassigned'}"
+                )
+
+        if blocked:
+            lines.append("")
+            lines.append(f"Blocked tasks ({len(blocked)}):")
+            for b in blocked[:10]:
+                lines.append(f"  - {b['title']} ({b['assignee']}) waiting on: {', '.join(b['open_deps'])}")
+
+        if milestones:
+            lines.append("")
+            lines.append(f"Milestones ({len(milestones)}):")
+            for m in milestones[:10]:
+                status = '✅ Done' if m.get('is_complete') else m.get('column_name', 'In progress')
+                due = ''
+                if m.get('due_date_date'):
+                    due = f" — due {m['due_date_date']}"
+                    if m.get('is_overdue'):
+                        due += ' ⚠️ OVERDUE'
+                lines.append(f"  - {m['title']} [{status}]{due}")
+
+        # Compact full task list (titles only) so the LLM can name any task
+        # the user asks about, even if not in the highlighted subsets above.
+        if incomplete:
+            lines.append("")
+            lines.append(f"All open task titles ({len(incomplete)}):")
+            for t in incomplete[:80]:
+                flag = ' ⚠️' if t.get('is_overdue') else ''
+                lines.append(
+                    f"  - [{t['column_name']}] {t['title']} "
+                    f"→ {t.get('assigned_to_display') or 'Unassigned'}{flag}"
+                )
+
+        return {
+            'text': '\n'.join(lines),
+            'counts': {
+                'team_size': len(team),
+                'active_tasks': len(incomplete),
+                'overdue': len(overdue),
+                'unassigned': len(unassigned),
+                'blocked': len(blocked),
+                'velocity': velocity_text,
+            },
+        }
+
     def generate_coaching_advice(self, board, pm_user, question: str) -> Optional[Dict]:
         """
         Generate coaching advice for a specific PM question (with caching)
-        
+
         Args:
             board: Board object for context
             pm_user: User asking for advice
             question: PM's question
-            
+
         Returns:
             Dict with 'advice' text and 'explainability' metadata, or plain str on fallback
         """
         if not self.gemini_available:
             return "AI coaching is not available. Please configure GEMINI_API_KEY."
-        
+
         try:
-            # Gather context
-            from kanban.models import Task
-            from kanban.burndown_models import TeamVelocitySnapshot
-            from kanban.utils.burndown_predictor import BurndownPredictor
+            snapshot = self._build_board_snapshot(board)
+            counts = snapshot['counts']
+            logger.info(
+                f"[AICoach] Board '{board.name}' (id={board.id}) snapshot: "
+                f"active={counts['active_tasks']} overdue={counts['overdue']} "
+                f"blocked={counts['blocked']} velocity={counts['velocity']}"
+            )
 
-            active_tasks = Task.objects.filter(
-                column__board=board,
-                progress__lt=100
-            ).count()
-
-            # Use the same velocity calculation as the Burndown Prediction page.
-            # The burndown dashboard prominently shows `current_velocity` (most
-            # recent period), not `average_velocity`, so we must use that value
-            # here to stay consistent. average_velocity can appear low (e.g. 1.0)
-            # when many older periods had zero completions.
-            velocity_text = 'N/A'
-            try:
-                predictor = BurndownPredictor()
-                predictor._ensure_velocity_snapshots(board)
-                velocity_history = predictor._get_velocity_history(board)
-                if velocity_history:
-                    velocity_stats = predictor._calculate_velocity_statistics(velocity_history)
-                    current_vel = float(velocity_stats['current_velocity'])
-                    velocity_text = f"{current_vel:.1f} tasks/week"
-            except Exception as vel_err:
-                logger.warning(f"Velocity calculation failed for board {board.id}, falling back to snapshot: {vel_err}")
-                latest_snapshot = TeamVelocitySnapshot.objects.filter(
-                    board=board
-                ).order_by('-period_end').first()
-                if latest_snapshot:
-                    velocity_text = f"{latest_snapshot.tasks_completed} tasks/week"
-
-            logger.info(f"[AICoach] Board '{board.name}' (id={board.id}) velocity injected into prompt: {velocity_text}")
-
-            team_size = board.members.count()
-            
-            # Build context prompt
             prompt = f"""You are an experienced project management coach helping a PM with their project.
+You have direct, live access to this board's data — use it. Cite specific task
+names, assignees, and counts from the snapshot below in your answer. Do NOT
+give generic advice or tell the PM to "check their board" — you are looking
+at the board for them right now.
 
 ## PM's Question:
 {question}
 
-## Project Context:
-- Board: {board.name}
-- Description: {board.description or 'N/A'}
-- Team Size: {team_size} members
-- Active Tasks: {active_tasks}
-- Current Velocity: {velocity_text}
+## Live Board Snapshot:
+{snapshot['text']}
 
 ## Your Role:
-Provide practical, actionable coaching advice to help this PM address their question.
-Draw on project management best practices, agile methodologies, and leadership principles.
+Use the snapshot to give a concrete, board-specific answer. When relevant:
+- Name the actual people who are overloaded or have overdue work
+- Name the actual tasks that are blocked, overdue, or due soon
+- Quantify with the real numbers above (do NOT invent figures)
+- Suggest specific reassignments or interventions tied to who/what is in the data
+
+If the question genuinely cannot be answered from the snapshot, say so and
+explain what additional information would unlock a better answer.
 
 ## Response Format:
 Return your response as a JSON object with this structure:
 {{
-  "advice": "Your full coaching response in markdown format (3-4 paragraphs, practical, empathetic, evidence-based)",
+  "advice": "Your full coaching response in markdown format (3-4 paragraphs, practical, empathetic, evidence-based). MUST reference specific task names, people, or numbers from the snapshot.",
   "explainability": {{
     "confidence": 0.85,
-    "data_sources_used": ["List of project data points you drew upon for this advice"],
+    "data_sources_used": ["List the specific snapshot fields you drew upon — e.g. 'Overdue tasks', 'Workload per assignee', 'Milestones'"],
     "assumptions": ["Key assumptions underlying this advice"],
     "applicable_frameworks": ["PM frameworks / methodologies this advice draws from"]
   }}
 }}
 
 Keep the advice:
-- **Practical**: Give concrete steps they can take
+- **Specific**: Reference real names/tasks/numbers from the snapshot
+- **Practical**: Give concrete steps they can take today
 - **Empathetic**: Acknowledge the challenge
-- **Evidence-based**: Reference best practices when relevant
 - **Concise**: 3-4 paragraphs maximum
 
 Return ONLY the JSON object.
 """
-            
-            # Use cached response or generate new
+
+            # Cache key varies with question + board id; the prompt itself contains
+            # the live snapshot so a hash-of-prompt cache naturally invalidates
+            # when data changes.
             context_id = f"board_{board.id}:user_{pm_user.id}"
             result = self._get_cached_or_generate(prompt, 'coaching_advice', context_id)
-            
+
             if not result:
                 return None
-            
+
             # Try to parse as JSON
             import json
             try:
@@ -383,22 +615,26 @@ Return ONLY the JSON object.
                     text = text.split('```json')[1].split('```')[0].strip()
                 elif text.startswith('```'):
                     text = text.split('```')[1].split('```')[0].strip()
-                
+
                 parsed = json.loads(text)
                 if isinstance(parsed, dict) and 'advice' in parsed:
                     return parsed
             except (json.JSONDecodeError, IndexError):
                 pass
-            
+
             # Fallback: return as plain advice with generated explainability
             data_sources = [f"Board: {board.name}"]
-            if active_tasks > 0:
-                data_sources.append(f"{active_tasks} active tasks")
-            if velocity_text != 'N/A':
-                data_sources.append(f"Velocity: {velocity_text}")
-            if team_size > 0:
-                data_sources.append(f"Team size: {team_size}")
-            
+            if counts['active_tasks']:
+                data_sources.append(f"{counts['active_tasks']} active tasks")
+            if counts['overdue']:
+                data_sources.append(f"{counts['overdue']} overdue")
+            if counts['blocked']:
+                data_sources.append(f"{counts['blocked']} blocked")
+            if counts['velocity'] != 'N/A':
+                data_sources.append(f"Velocity: {counts['velocity']}")
+            if counts['team_size']:
+                data_sources.append(f"Team size: {counts['team_size']}")
+
             return {
                 'advice': result,
                 'explainability': {
@@ -408,7 +644,7 @@ Return ONLY the JSON object.
                     'applicable_frameworks': [],
                 },
             }
-            
+
         except Exception as e:
             logger.error(f"Failed to generate coaching advice: {e}")
             return f"Error generating advice: {str(e)}"
@@ -475,7 +711,7 @@ Provide fully explainable insights so the PM understands your assessment methodo
 
 ### Project Context:
 - Board: {board.name}
-- Team Size: {board.members.count()}
+- Team Size: {board.memberships.count()}
 
 ## Task:
 Provide a comprehensive coaching analysis WITH FULL EXPLAINABILITY:

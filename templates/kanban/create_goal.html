@@ -1,35 +1,43 @@
 {% extends 'base.html' %}
 
-{% block title %}Create Organization Goal - PrizmAI{% endblock %}
+{% block title %}Create Workspace Goal - PrizmAI{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb small">
         <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
-        <li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Organization Goals</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Workspace Goals</a></li>
         <li class="breadcrumb-item active">Create Goal</li>
     </ol>
 </nav>
+
+<div class="mb-3">
+    <a href="{% url 'goal_list' %}" class="btn-prizm-back">
+        <i class="fas fa-arrow-left"></i> Back to Goals
+    </a>
+</div>
 
 <div class="row justify-content-center">
     <div class="col-md-7">
         <div class="card shadow-sm">
             <div class="card-header bg-warning text-dark">
-                <h5 class="mb-0"><i class="fas fa-trophy me-2"></i>Create New Organization Goal</h5>
+                <h5 class="mb-0"><i class="fas fa-trophy me-2"></i>Create New Workspace Goal</h5>
             </div>
             <div class="card-body">
                 <p class="text-muted small mb-4">
-                    An <strong>Organization Goal</strong> is your highest-level strategic ambition — the North Star that Missions, Strategies and Boards should collectively drive towards.
+                    An <strong>Workspace Goal</strong> is your highest-level strategic ambition — the North Star that Missions, Strategies and Boards should collectively drive towards.
                     <br><small>Example: <em>"Increase Market Share in Asia by 15%"</em> or <em>"Achieve $10M ARR by Q4 2026"</em></small>
                 </p>
                 <form method="post">
                     {% csrf_token %}
+                    <p class="required-fields-hint">* indicates a required field</p>
 
                     <div class="mb-3">
-                        <label for="name" class="form-label fw-semibold">Goal Name <span class="text-danger">*</span></label>
+                        <label for="name" class="form-label fw-semibold">Goal Name <span class="required-asterisk">*</span></label>
                         <input type="text" class="form-control" id="name" name="name"
                                placeholder="e.g., Increase Market Share in Asia by 15%"
                                value="{{ post.name|default:'' }}" required>
+                        <div class="field-validation-msg">Goal name is required.</div>
                         <div class="form-text">Use a clear, outcome-oriented statement.</div>
                     </div>
 
@@ -62,20 +70,6 @@
                             </select>
                         </div>
                     </div>
-
-                    {% if organizations %}
-                    <div class="mb-4">
-                        <label for="organization" class="form-label fw-semibold">Organization <span class="text-muted small">(optional)</span></label>
-                        <select class="form-select" id="organization" name="organization">
-                            <option value="">— No organization —</option>
-                            {% for org in organizations %}
-                            <option value="{{ org.id }}" {% if post.organization == org.id|stringformat:"s" %}selected{% endif %}>
-                                {{ org.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    {% endif %}
 
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-warning text-dark">

@@ -6,7 +6,7 @@ from . import burndown_views
 from . import retrospective_views
 from . import conflict_views
 from . import demo_views
-from . import permission_views
+# permission_views deleted in RBAC Phase 1 — legacy permission UI removed.
 from . import invitation_views
 from . import triple_constraint_views
 from . import automation_views
@@ -18,8 +18,13 @@ from . import prizmbrief_views
 from . import onboarding_views
 from . import whatif_views
 from . import shadow_views
+from . import workspace_member_views
 from . import commitment_views
 from . import favorite_views
+from . import sandbox_views
+from . import access_request_views
+from . import discovery_views
+from . import custom_field_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -32,12 +37,16 @@ urlpatterns = [
     path('api/wizard/create-board/', views.wizard_create_board, name='wizard_create_board'),
     path('api/wizard/create-task/', views.wizard_create_task, name='wizard_create_task'),
     
-    # Demo Mode (New System)
+    # Demo Mode — legacy routes kept as redirects, new single-tier sandbox
     path('demo/', demo_views.demo_dashboard, name='demo_dashboard'),
     path('demo/start/', demo_views.demo_mode_selection, name='demo_mode_selection'),
     path('demo/switch-role/', demo_views.switch_demo_role, name='demo_switch_role'),
     path('demo/exit/', demo_views.exit_demo, name='exit_demo'),
     path('demo/fingerprint/', demo_views.receive_client_fingerprint, name='receive_client_fingerprint'),
+
+    # Single-tier personal sandbox
+    path('demo/reset-mine/', sandbox_views.reset_my_demo, name='reset_my_demo'),
+    path('sandbox/status/', sandbox_views.sandbox_status, name='sandbox_status'),
     path('demo/track-event/', demo_views.track_demo_event, name='track_demo_event'),
     path('demo/check-nudge/', demo_views.check_nudge, name='check_nudge'),
     path('demo/track-nudge/', demo_views.track_nudge, name='track_nudge'),
@@ -49,6 +58,22 @@ urlpatterns = [
     
     path('boards/', views.board_list, name='board_list'),
     path('boards/create/', views.create_board, name='create_board'),
+
+    # -----------------------------------------------------------------------
+    # PrizmDiscovery — ideas inbox, AI scoring, 2×2 matrix, promotions
+    # Gated to Professional+ tier in the views themselves.
+    # -----------------------------------------------------------------------
+    path('discovery/', discovery_views.discovery_dashboard, name='discovery_dashboard'),
+    path('discovery/matrix/', discovery_views.discovery_matrix, name='discovery_matrix'),
+    path('discovery/create/', discovery_views.idea_create, name='idea_create'),
+    path('discovery/<int:idea_id>/', discovery_views.idea_detail, name='idea_detail'),
+    path('discovery/<int:idea_id>/edit/', discovery_views.idea_edit, name='idea_edit'),
+    path('discovery/<int:idea_id>/stage/', discovery_views.idea_update_stage, name='idea_update_stage'),
+    path('discovery/<int:idea_id>/score/', discovery_views.idea_ai_score, name='idea_ai_score'),
+    path('discovery/<int:idea_id>/promote/', discovery_views.idea_promote, name='idea_promote'),
+    path('discovery/<int:idea_id>/comment/', discovery_views.add_idea_comment, name='add_idea_comment'),
+    path('api/boards/<int:board_id>/discovery-link/', discovery_views.board_discovery_link, name='board_discovery_link'),
+    # -----------------------------------------------------------------------
 
     # -----------------------------------------------------------------------
     # Organization Goal hierarchy  (Goal → Mission → Strategy → Board → Task)
@@ -70,6 +95,7 @@ urlpatterns = [
     path('missions/<int:mission_id>/', mission_views.mission_detail, name='mission_detail'),
     path('missions/<int:mission_id>/edit/', mission_views.edit_mission, name='edit_mission'),
     path('missions/<int:mission_id>/delete/', mission_views.delete_mission, name='delete_mission'),
+    path('missions/<int:mission_id>/set-goal/', mission_views.set_mission_goal, name='set_mission_goal'),
     # Top-level strategy shortcut (spec §8.2)
     path('strategies/<int:strategy_id>/', mission_views.strategy_detail_shortcut, name='strategy_detail_shortcut'),
     path('missions/<int:mission_id>/strategies/create/', mission_views.create_strategy, name='create_strategy'),
@@ -82,6 +108,9 @@ urlpatterns = [
     path('api/strategic/<str:level>/<int:pk>/update/', mission_views.post_strategic_update, name='post_strategic_update'),
     path('api/strategic/<str:level>/<int:pk>/follow/', mission_views.toggle_follow, name='toggle_follow'),
     path('api/strategic/<str:level>/<int:pk>/regenerate/', mission_views.regenerate_summary, name='regenerate_summary'),
+    path('api/strategic/<str:level>/<int:pk>/members/', mission_views.list_strategic_members, name='list_strategic_members'),
+    path('api/strategic/<str:level>/<int:pk>/members/invite/', mission_views.invite_strategic_member, name='invite_strategic_member'),
+    path('api/strategic/<str:level>/<int:pk>/members/<int:user_id>/remove/', mission_views.remove_strategic_member, name='remove_strategic_member'),
     # -----------------------------------------------------------------------
     path('boards/<int:board_id>/', views.board_detail, name='board_detail'),
     path('boards/<int:board_id>/analytics/', views.board_analytics, name='board_analytics'),
@@ -89,20 +118,32 @@ urlpatterns = [
     path('boards/<int:board_id>/skill-gaps/', views.skill_gap_dashboard, name='skill_gap_dashboard'),
     path('boards/<int:board_id>/gantt/', views.gantt_chart, name='gantt_chart'),
     path('boards/<int:board_id>/calendar/', views.board_calendar, name='board_calendar'),
+    path('boards/<int:board_id>/list/', views.board_list_view, name='board_list_view'),
+    path('boards/<int:board_id>/epics/', views.board_epics, name='board_epics'),
+    path('boards/<int:board_id>/epics/create/', views.create_epic, name='create_epic'),
 
     # -----------------------------------------------------------------------
     # Unified Cross-Board Calendar
     # -----------------------------------------------------------------------
     path('calendar/', calendar_views.unified_calendar, name='unified_calendar'),
     path('calendar/events/', calendar_views.unified_calendar_events_api, name='unified_calendar_events_api'),
+    path('calendar/time-health/', calendar_views.calendar_time_health_api, name='calendar_time_health_api'),
     path('calendar/create-task/', calendar_views.calendar_create_task, name='calendar_create_task'),
     path('calendar/create-event/', calendar_views.calendar_create_event, name='calendar_create_event'),
     path('calendar/boards/<int:board_id>/columns/', calendar_views.calendar_get_board_columns, name='calendar_get_board_columns'),
     path('calendar/events/<int:event_id>/', calendar_views.calendar_event_detail, name='calendar_event_detail'),
+    path('calendar/events/<int:event_id>/reschedule/', calendar_views.calendar_event_reschedule, name='calendar_event_reschedule'),
+    path('calendar/events/<int:event_id>/edit/', calendar_views.calendar_event_edit, name='calendar_event_edit'),
     path('calendar/events/<int:event_id>/delete/', calendar_views.calendar_event_delete, name='calendar_event_delete'),
+    path('calendar/events/<int:event_id>/rsvp/', calendar_views.calendar_event_rsvp, name='calendar_event_rsvp'),
     # -----------------------------------------------------------------------
     path('boards/<int:board_id>/status-report/', views.board_status_report, name='board_status_report'),
+    path('boards/<int:board_id>/status-report/<int:report_id>/delete/', views.delete_status_report, name='delete_status_report'),
     path('boards/<int:board_id>/prizmbrief/', prizmbrief_views.prizmbrief_setup, name='prizmbrief_setup'),
+    path('boards/<int:board_id>/prizmbrief/save/', prizmbrief_views.save_brief, name='prizmbrief_save'),
+    path('boards/<int:board_id>/prizmbrief/saved/<int:brief_id>/', prizmbrief_views.saved_brief_detail, name='prizmbrief_saved_detail'),
+    path('boards/<int:board_id>/prizmbrief/saved/<int:brief_id>/rename/', prizmbrief_views.rename_brief, name='prizmbrief_rename'),
+    path('boards/<int:board_id>/prizmbrief/saved/<int:brief_id>/delete/', prizmbrief_views.delete_brief, name='prizmbrief_delete'),
     path('boards/<int:board_id>/gantt/add-milestone/', views.add_gantt_milestone, name='add_gantt_milestone'),
     path('boards/<int:board_id>/gantt/milestones/<int:task_id>/delete/', views.delete_gantt_milestone, name='delete_gantt_milestone'),
     path('boards/<int:board_id>/edit/', views.edit_board, name='edit_board'),
@@ -111,12 +152,28 @@ urlpatterns = [
     path('boards/<int:board_id>/columns/<int:column_id>/create-task/', views.create_task, name='create_task_in_column'),
     path('boards/<int:board_id>/create-column/', views.create_column, name='create_column'),
     path('boards/<int:board_id>/create-label/', views.create_label, name='create_label'),
+    path('boards/<int:board_id>/quick-create-label/', views.quick_create_label, name='quick_create_label'),
+    path('boards/<int:board_id>/load-preset-labels/', views.load_preset_labels, name='load_preset_labels'),
+    path('tasks/<int:task_id>/toggle-label/', views.toggle_task_label, name='toggle_task_label'),
     path('boards/<int:board_id>/add-member/', views.add_board_member, name='add_board_member'),
     path('boards/<int:board_id>/members/<int:user_id>/remove/', views.remove_board_member, name='remove_board_member'),
+    path('boards/<int:board_id>/members/<int:user_id>/role/', invitation_views.update_member_role, name='update_member_role'),
     # Board invitations
+    path('boards/<int:board_id>/members/', invitation_views.manage_board_members, name='manage_board_members'),
     path('boards/<int:board_id>/invite/', invitation_views.invite_to_board, name='invite_to_board'),
     path('invite/<uuid:token>/', invitation_views.accept_invitation, name='accept_board_invitation'),
     path('invitations/<int:invitation_id>/revoke/', invitation_views.revoke_invitation, name='revoke_board_invitation'),
+
+    # -----------------------------------------------------------------------
+    # Workspace-level member management
+    # -----------------------------------------------------------------------
+    path('workspace/members/', workspace_member_views.manage_workspace_members, name='manage_workspace_members'),
+    path('workspace/members/add/', workspace_member_views.add_workspace_member_view, name='add_workspace_member'),
+    path('workspace/members/<int:user_id>/remove/', workspace_member_views.remove_workspace_member_view, name='remove_workspace_member'),
+    path('workspace/members/<int:user_id>/role/', workspace_member_views.update_workspace_member_role_view, name='update_workspace_member_role'),
+    path('workspace/invite/<uuid:token>/', workspace_member_views.accept_workspace_invitation, name='accept_workspace_invitation'),
+    path('workspace/invitations/<int:invitation_id>/revoke/', workspace_member_views.revoke_workspace_invitation_view, name='revoke_workspace_invitation'),
+
     path('boards/<int:board_id>/delete/', views.delete_board, name='delete_board'),
     path('boards/<int:board_id>/join/', views.join_board, name='join_board'),
     path('boards/<int:board_id>/export/', views.export_board, name='export_board'),
@@ -137,6 +194,8 @@ urlpatterns = [
     path('columns/reorder-multiple/', views.reorder_multiple_columns, name='reorder_multiple_columns'),
     path('columns/<int:column_id>/update/', views.update_column, name='update_column'),
     path('columns/<int:column_id>/update-wip/', views.column_update_wip, name='column_update_wip'),
+    path('columns/<int:column_id>/update-color/', views.column_update_color, name='column_update_color'),
+    path('columns/<int:column_id>/update-aging/', views.column_update_aging, name='column_update_aging'),
     path('columns/<int:column_id>/delete/', views.delete_column, name='delete_column'),    path('boards/<int:board_id>/add-lean-labels/', views.add_lean_labels, name='add_lean_labels'),
     
     # Test page for AI features
@@ -148,6 +207,9 @@ urlpatterns = [
     path('api/summarize-board-analytics/<int:board_id>/', api_views.summarize_board_analytics_api, name='summarize_board_analytics_api'),
     path('api/download-analytics-pdf/<int:board_id>/', api_views.download_analytics_summary_pdf, name='download_analytics_summary_pdf'),
     path('api/summarize-task-details/<int:task_id>/', api_views.summarize_task_details_api, name='summarize_task_details_api'),
+
+    # Epic-level AI: collective health of an Epic's child tasks
+    path('api/epic/<int:epic_id>/analyze-health/', api_views.analyze_epic_health_api, name='analyze_epic_health_api'),
 
     # Bubble-up AI Summary endpoints (persist summaries at each hierarchy level)
     path('api/generate-task-summary/<int:task_id>/', api_views.generate_task_summary_api, name='generate_task_summary_api'),
@@ -165,6 +227,16 @@ urlpatterns = [
     path('api/generate-board-setup/', api_views.generate_board_setup_api, name='generate_board_setup_api'),
     path('api/suggest-task-breakdown/', api_views.suggest_task_breakdown_api, name='suggest_task_breakdown_api'),
     path('api/analyze-workflow-optimization/', api_views.analyze_workflow_optimization_api, name='analyze_workflow_optimization_api'),    path('api/create-subtasks/', api_views.create_subtasks_api, name='create_subtasks_api'),
+
+    # Checklist API Endpoints
+    path('api/create-checklist-items/', api_views.create_checklist_from_breakdown, name='create_checklist_from_breakdown'),
+    path('api/checklist-item/<int:item_id>/toggle/', api_views.toggle_checklist_item, name='toggle_checklist_item'),
+    path('api/checklist-item/<int:item_id>/delete/', api_views.delete_checklist_item, name='delete_checklist_item'),
+    path('api/checklist-items/reorder/', api_views.reorder_checklist_items, name='reorder_checklist_items'),
+    path('api/checklist-items/add/', api_views.add_checklist_item, name='add_checklist_item'),
+
+    # Epic API Endpoints
+    path('api/create-epic-children/', api_views.create_epic_with_children, name='create_epic_with_children'),
     
     # AI Semantic Search
     path('api/search-tasks-semantic/', api_views.search_tasks_semantic_api, name='search_tasks_semantic_api'),
@@ -196,17 +268,23 @@ urlpatterns = [
     path('board/<int:board_id>/burndown/history/', burndown_views.prediction_history, name='prediction_history'),
     path('board/<int:board_id>/burndown/suggestions/', burndown_views.actionable_suggestions_api, name='actionable_suggestions_api'),
 
-    # Triple Constraint Dashboard (Scope + Cost + Time)
+    # Triple Constraint Dashboard (Scope + Cost + Time + Project Confidence)
     path('boards/<int:board_id>/triple-constraint/', triple_constraint_views.triple_constraint_dashboard, name='triple_constraint_dashboard'),
     path('boards/<int:board_id>/triple-constraint/set-deadline/', triple_constraint_views.set_project_deadline, name='set_project_deadline'),
+    path('boards/<int:board_id>/triple-constraint/recalculate-confidence/', triple_constraint_views.recalculate_confidence, name='recalculate_confidence'),
+    path('boards/<int:board_id>/triple-constraint/record-signal/', triple_constraint_views.record_manual_signal, name='record_manual_signal'),
+    path('boards/<int:board_id>/triple-constraint/ai-analyze/', triple_constraint_views.triple_constraint_ai_analyze, name='triple_constraint_ai_analyze'),
 
     # Board Automations (new engine)
+    path('automations/', automation_views.workspace_automations, name='workspace_automations'),
     path('boards/<int:board_id>/automations/', automation_views.automations_page, name='automations_list'),
     path('boards/<int:board_id>/automations/rules/create/', automation_views.rule_create, name='automation_rule_create'),
     path('boards/<int:board_id>/automations/rules/<int:rule_id>/', automation_views.rule_detail, name='automation_rule_detail'),
     path('boards/<int:board_id>/automations/rules/<int:rule_id>/update/', automation_views.rule_update, name='automation_rule_update'),
     path('boards/<int:board_id>/automations/rules/<int:rule_id>/delete/', automation_views.rule_delete, name='automation_rule_delete'),
     path('boards/<int:board_id>/automations/rules/<int:rule_id>/toggle/', automation_views.rule_toggle, name='automation_rule_toggle'),
+    path('boards/<int:board_id>/automations/rules/<int:rule_id>/duplicate/', automation_views.rule_duplicate, name='automation_rule_duplicate'),
+    path('boards/<int:board_id>/automations/builder-data/', automation_views.rule_builder_data, name='automation_builder_data'),
     path('boards/<int:board_id>/automations/templates/<int:template_id>/use/', automation_views.template_use, name='automation_template_use'),
     # Legacy form-based endpoints (backward compat)
     path('boards/<int:board_id>/automations/create-form/', automation_views.rule_create_form, name='automation_create_form'),
@@ -230,6 +308,7 @@ urlpatterns = [
     # Gantt Chart API Endpoints
     path('api/tasks/update-dates/', api_views.update_task_dates_api, name='update_task_dates_api'),
     path('api/tasks/<int:task_id>/reschedule/', api_views.reschedule_task_api, name='reschedule_task_api'),
+    path('api/tasks/<int:task_id>/cascade-reschedule/', api_views.cascade_reschedule_task_api, name='cascade_reschedule_task_api'),
     path('api/tasks/<int:task_id>/update-fields/', api_views.update_task_fields_api, name='update_task_fields_api'),
 
     # Phase Management API Endpoints
@@ -302,8 +381,14 @@ urlpatterns = [
     path('api/boards/<int:board_id>/shadow/conflicts/', shadow_views.merge_conflict_check, name='merge_conflict_check'),
     path('api/boards/<int:board_id>/shadow/branch/<int:branch_id>/snapshots/', shadow_views.get_branch_snapshots, name='get_branch_snapshots'),
     path('api/boards/<int:board_id>/shadow/branches/<int:branch_a_id>/<int:branch_b_id>/', shadow_views.get_branches_comparison, name='get_branches_comparison'),
+    path('api/boards/<int:board_id>/shadow/branches-compare/', shadow_views.get_branches_comparison_multi, name='get_branches_comparison_multi'),
+    path('api/boards/<int:board_id>/shadow/refresh/', shadow_views.refresh_branch_scores, name='refresh_branch_scores'),
+    path('api/boards/<int:board_id>/shadow/scores/', shadow_views.branch_scores_json, name='branch_scores_json'),
     path('api/boards/<int:board_id>/shadow/<int:branch_id>/toggle-star/', shadow_views.toggle_star_branch, name='toggle_star_branch'),
     path('api/boards/<int:board_id>/shadow/<int:branch_id>/delete/', shadow_views.delete_branch, name='delete_shadow_branch'),
+    path('api/boards/<int:board_id>/shadow/<int:branch_id>/restore/', shadow_views.restore_branch, name='restore_shadow_branch'),
+    path('api/boards/<int:board_id>/shadow/restore-all/', shadow_views.restore_all_archived_branches, name='restore_all_archived_branches'),
+    path('api/boards/<int:board_id>/shadow/<int:branch_id>/link-scenario/', shadow_views.link_scenario_to_branch, name='link_scenario_to_branch'),
     path('boards/<int:board_id>/shadow/promote-scenario/', shadow_views.promote_scenario_to_branch, name='promote_scenario'),
     
     # Resource Leveling URLs
@@ -320,17 +405,8 @@ urlpatterns = [
     path('conflicts/notifications/<int:notification_id>/acknowledge/', conflict_views.acknowledge_notification, name='acknowledge_notification'),
     path('conflicts/analytics/', conflict_views.conflict_analytics, name='conflict_analytics'),
     
-    # Permission Management URLs - NEW ADVANCED FEATURES
-    path('permissions/roles/', permission_views.manage_roles, name='manage_roles'),
-    path('permissions/roles/create/', permission_views.create_role, name='create_role'),
-    path('permissions/roles/<int:role_id>/edit/', permission_views.edit_role, name='edit_role'),
-    path('permissions/roles/<int:role_id>/delete/', permission_views.delete_role, name='delete_role'),
-    path('board/<int:board_id>/members/manage/', permission_views.manage_board_members, name='manage_board_members'),
-    path('board/membership/<int:membership_id>/change-role/', permission_views.change_member_role, name='change_member_role'),
-    path('board/<int:board_id>/members/add/', permission_views.add_board_member_with_role, name='add_board_member_with_role'),
-    path('board/membership/<int:membership_id>/remove/', permission_views.remove_board_member_role, name='remove_board_member_role'),
-    path('permissions/audit/', permission_views.view_permission_audit, name='view_permission_audit_org'),
-    path('board/<int:board_id>/permissions/audit/', permission_views.view_permission_audit, name='view_permission_audit'),
+    # Legacy Permission Management URLs removed in RBAC Phase 1.
+    # New RBAC uses django-rules predicates defined in kanban/permissions.py.
 
     # Onboarding v2 — AI-powered workspace setup
     path('onboarding/', onboarding_views.onboarding_welcome, name='onboarding_welcome'),
@@ -341,25 +417,47 @@ urlpatterns = [
     path('onboarding/commit/', onboarding_views.onboarding_commit, name='onboarding_commit'),
     path('onboarding/start-over/', onboarding_views.onboarding_start_over, name='onboarding_start_over'),
     path('onboarding/skip/', onboarding_views.onboarding_skip, name='onboarding_skip'),
+    path('onboarding/invite/', onboarding_views.onboarding_invite, name='onboarding_invite'),
     path('onboarding/demo/', onboarding_views.onboarding_explore_demo, name='onboarding_explore_demo'),
+    path('onboarding/validate/', onboarding_views.onboarding_validate, name='onboarding_validate'),
+    path('onboarding/regenerate-children/', onboarding_views.onboarding_regenerate_children, name='onboarding_regenerate_children'),
 
     # Demo mode toggle (v2)
     path('toggle-demo-mode/', views.toggle_demo_mode, name='toggle_demo_mode'),
 
+    # Workspace context switcher
+    path('switch-workspace/', views.switch_workspace, name='switch_workspace'),
+    path('rename-workspace/', views.rename_workspace, name='rename_workspace'),
+    path('delete-workspace/', views.delete_workspace, name='delete_workspace'),
+    path('workspace-selection/', views.workspace_selection, name='workspace_selection'),
+
+    # Workspace preset settings (Org Admin)
+    path('settings/workspace/', views.workspace_preset_settings, name='workspace_preset_settings'),
+    # Board-level preset override (Board Owner / Org Admin) — AJAX endpoint
+    path('boards/<int:board_id>/preset/', views.board_preset_update, name='board_preset_update'),
+
     # -----------------------------------------------------------------------
-    # Living Commitment Protocols (Anti-Roadmap)
+    # Living Commitment Protocols — DEPRECATED
+    # Feature decomposed: confidence score now lives in Triple Constraint,
+    # signal log is unified ProjectSignal, renegotiation is in AI Coach.
+    # Existing URLs redirect to Triple Constraint Dashboard for backwards
+    # compatibility.
     # -----------------------------------------------------------------------
-    path('boards/<int:board_id>/commitments/', commitment_views.commitment_dashboard, name='commitment_dashboard'),
-    path('boards/<int:board_id>/commitments/new/', commitment_views.commitment_create, name='commitment_create'),
-    path('boards/<int:board_id>/commitments/<int:commitment_id>/', commitment_views.commitment_detail, name='commitment_detail'),
-    path('boards/<int:board_id>/commitments/<int:commitment_id>/bet/', commitment_views.commitment_place_bet, name='commitment_place_bet'),
-    path('boards/<int:board_id>/commitments/<int:commitment_id>/signal/', commitment_views.commitment_signal_manual, name='commitment_signal_manual'),
-    path('boards/<int:board_id>/negotiations/<int:negotiation_id>/', commitment_views.negotiation_session_detail, name='negotiation_session_detail'),
-    path('boards/<int:board_id>/negotiations/<int:negotiation_id>/resolve/', commitment_views.negotiation_resolve, name='negotiation_resolve'),
-    # Commitment API endpoints (JSON, used by JS auto-refresh and Chart.js)
-    path('api/boards/<int:board_id>/commitments/', commitment_views.commitments_list_api, name='commitments_list_api'),
-    path('api/boards/<int:board_id>/commitments/<int:commitment_id>/curve/', commitment_views.commitment_curve_api, name='commitment_curve_api'),
-    path('api/boards/<int:board_id>/commitments/<int:commitment_id>/market/', commitment_views.commitment_market_api, name='commitment_market_api'),
+    path('boards/<int:board_id>/commitments/', commitment_views.commitment_redirect, name='commitment_dashboard'),
+    path('boards/<int:board_id>/commitments/new/', commitment_views.commitment_redirect, name='commitment_create'),
+    path('boards/<int:board_id>/commitments/<int:commitment_id>/', commitment_views.commitment_redirect, name='commitment_detail'),
+
+    # -----------------------------------------------------------------------
+    # Spectra Smart Access Request System
+    # -----------------------------------------------------------------------
+    path('access-requests/submit/', access_request_views.submit_access_request, name='submit_access_request'),
+    path('access-requests/mine/', access_request_views.my_access_requests, name='my_access_requests'),
+    path('access-requests/<int:request_id>/review/', access_request_views.review_access_request, name='review_access_request'),
+    path('access-requests/<int:request_id>/cancel/', access_request_views.cancel_access_request, name='cancel_access_request'),
+    path('access-requests/pending/', access_request_views.pending_access_requests, name='pending_access_requests'),
+    path('api/access-requests/<int:request_id>/approve/', access_request_views.api_approve_access_request, name='api_approve_access_request'),
+    path('api/access-requests/<int:request_id>/deny/', access_request_views.api_deny_access_request, name='api_deny_access_request'),
+    path('api/access-requests/pending-count/', access_request_views.get_pending_access_request_count, name='get_pending_access_request_count'),
 
     # -----------------------------------------------------------------------
     # My Favorites
@@ -367,4 +465,31 @@ urlpatterns = [
     path('api/favorites/toggle/', favorite_views.toggle_favorite, name='toggle_favorite'),
     path('api/favorites/reorder/', favorite_views.reorder_favorites, name='reorder_favorites'),
     path('api/favorites/list/', favorite_views.favorites_list_api, name='favorites_list_api'),
+
+    # -----------------------------------------------------------------------
+    # Goal-Aware Analytics API Endpoints
+    # -----------------------------------------------------------------------
+    path('api/boards/<int:board_id>/classify/', api_views.classify_board_api, name='classify_board_api'),
+    path('api/boards/<int:board_id>/confirm-type/', api_views.confirm_board_type_api, name='confirm_board_type_api'),
+    path('api/boards/<int:board_id>/generate-narrative/', api_views.generate_board_narrative_api, name='generate_board_narrative_api'),
+    path('api/strategic/<str:record_type>/<int:record_id>/portfolio-analytics/', api_views.portfolio_analytics_api, name='portfolio_analytics_api'),
+    path('api/strategic/<str:record_type>/<int:record_id>/generate-portfolio-narrative/', api_views.generate_portfolio_narrative_api, name='generate_portfolio_narrative_api'),
+    path('api/goals/<int:goal_id>/generate-proxy-metrics/', api_views.generate_proxy_metrics_api, name='generate_proxy_metrics_api'),
+    path('api/goals/<int:goal_id>/proxy-metrics/<int:metric_id>/update-value/', api_views.update_proxy_metric_value_api, name='update_proxy_metric_value_api'),
+
+    # -----------------------------------------------------------------------
+    # Custom Fields — workspace-scoped, admin-managed (v1: tasks only)
+    # -----------------------------------------------------------------------
+    path('workspace/<int:workspace_id>/custom-fields/',
+         custom_field_views.custom_field_list,
+         name='custom_field_list'),
+    path('workspace/<int:workspace_id>/custom-fields/new/',
+         custom_field_views.custom_field_create,
+         name='custom_field_create'),
+    path('workspace/<int:workspace_id>/custom-fields/<int:field_id>/',
+         custom_field_views.custom_field_edit,
+         name='custom_field_edit'),
+    path('workspace/<int:workspace_id>/custom-fields/<int:field_id>/delete/',
+         custom_field_views.custom_field_delete,
+         name='custom_field_delete'),
 ]

@@ -17,7 +17,7 @@
                     <small class="text-muted">Board: {{ board.name }}</small>
                 </div>
                 <div>
-                    <a href="{% url 'task_detail' task.id %}" class="btn btn-outline-secondary">
+                    <a href="{% url 'task_detail' task.id %}" class="btn-prizm-back">
                         <i class="fas fa-arrow-left me-1"></i> Back to Task
                     </a>
                     <a href="{% url 'stakeholder:stakeholder_list' board.id %}" class="btn btn-outline-primary">

@@ -43,7 +43,7 @@
 
 {% block content %}
 <div class="autopsy-page">
-  <a href="{% url 'exit_protocol:cemetery' %}" class="back-link">← Back to Cemetery</a>
+  <a href="{% url 'exit_protocol:cemetery' %}" class="btn-prizm-back"><i class="fas fa-arrow-left"></i> Back to Cemetery</a>
 
   <div class="autopsy-header">
     <h1>{{ entry.project_name }}</h1>
@@ -111,6 +111,7 @@
   <div class="autopsy-section" id="lessonsSection">
     <h2>📚 Lessons Learned
       <button class="lesson-edit-btn" onclick="toggleLessonEdit()" id="editLessonsBtn">✏️ Edit</button>
+      <button class="lesson-edit-btn ms-2" onclick="cancelLessonEdit()" id="cancelLessonsBtn" style="display:none;">✕ Cancel</button>
     </h2>
 
     <h3 style="font-size: 1rem; color: #7ec47e; margin-top: 1rem;">Lessons to Repeat</h3>
@@ -155,6 +156,44 @@
       {% endif %}
     </div>
   </div>
+
+  <!-- Knowledge Preserved -->
+  {% if memory_nodes %}
+  <div class="autopsy-section">
+    <h2>🧠 Knowledge Preserved</h2>
+    <p style="color: #777; font-size: 0.85rem; margin-bottom: 1rem;">
+      These records were captured while this project was active and remain searchable through
+      <a href="{% url 'organizational_memory' %}" style="color: #7e9ec4; text-decoration: underline;">Organizational Memory →</a>
+    </p>
+    {% regroup memory_nodes by node_type as node_groups %}
+    {% for group in node_groups %}
+    <div style="margin-bottom: 1.25rem;">
+      <h3 style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: #666; margin-bottom: 0.5rem;">
+        {% if group.grouper == 'decision' %}⚖️ Decisions Made
+        {% elif group.grouper == 'lesson' %}💡 Lessons Learned
+        {% elif group.grouper == 'risk_event' %}⚠️ Risk Events
+        {% elif group.grouper == 'outcome' %}🏁 Outcomes
+        {% elif group.grouper == 'conflict_resolution' %}🤝 Conflict Resolutions
+        {% elif group.grouper == 'scope_change' %}📐 Scope Changes
+        {% elif group.grouper == 'milestone' %}🏆 Milestones
+        {% elif group.grouper == 'ai_recommendation' %}🤖 AI Recommendations
+        {% elif group.grouper == 'manual_log' %}📝 Manual Logs
+        {% else %}{{ group.grouper|title }}{% endif %}
+      </h3>
+      <ul style="list-style: none; padding: 0; margin: 0;">
+        {% for node in group.list %}
+        <li style="background: #1a1a1a; border-radius: 6px; padding: 0.65rem 0.875rem; margin-bottom: 0.5rem;">
+          <div style="color: #c9c9c9; font-size: 0.875rem; font-weight: 500;">{{ node.title }}</div>
+          {% if node.content %}
+          <div style="color: #888; font-size: 0.8rem; margin-top: 0.2rem; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ node.content|truncatechars:160 }}</div>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   <!-- Organ Transplant Record -->
   {% if transplants %}
@@ -225,7 +264,7 @@
 
 {% block extra_js %}
 {% if entry.decline_timeline %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="{% static 'js/chart.umd.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
 (function() {
   const timeline = {{ entry.decline_timeline|safe }};
@@ -262,7 +301,7 @@
         }
       },
       scales: {
-        y: { min: 0, max: 5, ticks: { color: '#666' }, grid: { color: '#222' } },
+        y: { min: 0, max: 100, ticks: { color: '#666' }, grid: { color: '#222' } },
         x: { ticks: { color: '#666', maxRotation: 45 }, grid: { color: '#222' } }
       }
     }
@@ -271,9 +310,77 @@
 </script>
 {% endif %}
 <script>
-function toggleLessonEdit() {
-  // Simple inline editing toggle — production version would use a modal
-  alert('Inline lesson editing — use the API endpoint POST {% url "exit_protocol:update_lessons" entry.id %} to update lessons via AJAX.');
-}
+(function () {
+  var editMode = false;
+  var saveUrl = '{% url "exit_protocol:update_lessons" entry.id %}';
+
+  function enterEditMode() {
+    document.querySelectorAll('.lesson-text').forEach(function (p) {
+      var ta = document.createElement('textarea');
+      ta.className = 'form-control lesson-textarea mb-2';
+      ta.style.cssText = 'background:#1a1a2e;color:#e0e0e0;border-color:#444;font-size:0.875rem;resize:vertical;';
+      ta.rows = 2;
+      var text = p.textContent.trim();
+      ta.value = text;
+      ta.dataset.original = text;
+      p.replaceWith(ta);
+    });
+    document.getElementById('editLessonsBtn').textContent = '💾 Save';
+    document.getElementById('cancelLessonsBtn').style.display = '';
+    editMode = true;
+  }
+
+  function exitEditMode(useCurrentValues) {
+    document.querySelectorAll('.lesson-textarea').forEach(function (ta) {
+      var p = document.createElement('p');
+      p.className = 'lesson-text';
+      p.textContent = useCurrentValues ? ta.value.trim() : ta.dataset.original;
+      ta.replaceWith(p);
+    });
+    document.getElementById('editLessonsBtn').textContent = '✏️ Edit';
+    document.getElementById('cancelLessonsBtn').style.display = 'none';
+    editMode = false;
+  }
+
+  function getTexts(containerId) {
+    return Array.from(document.querySelectorAll('#' + containerId + ' textarea'))
+      .map(function (ta) { return ta.value.trim(); })
+      .filter(Boolean);
+  }
+
+  window.toggleLessonEdit = function () {
+    if (!editMode) { enterEditMode(); return; }
+
+    var payload = {
+      lessons_to_repeat: getTexts('lessonsRepeat'),
+      lessons_to_avoid: getTexts('lessonsAvoid'),
+      open_questions: getTexts('openQuestions'),
+    };
+
+    fetch(saveUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}',
+      },
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success) {
+          exitEditMode(true);
+        } else {
+          exitEditMode(false);
+        }
+      })
+      .catch(function () {
+        exitEditMode(false);
+      });
+  };
+
+  window.cancelLessonEdit = function () {
+    exitEditMode(false);
+  };
+}());
 </script>
 {% endblock %}

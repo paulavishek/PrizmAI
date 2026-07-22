@@ -4,6 +4,7 @@ Uses Gemini to analyze budgets, predict overruns, and generate recommendations
 """
 import json
 import logging
+import re
 from decimal import Decimal
 from typing import Dict, List, Optional
 from django.utils import timezone
@@ -85,7 +86,7 @@ class BudgetAIOptimizer:
         prompt = self._build_recommendation_prompt(metrics, overruns, burn_rate, cost_breakdown, context)
         
         # Get AI recommendations
-        ai_response = self._call_gemini_api(prompt, task_type='complex')
+        ai_response = self._call_gemini_api(prompt, task_type='complex', cache_operation='budget_recommendations')
         
         if not ai_response:
             return []
@@ -378,46 +379,28 @@ You are a project management AI consultant. Generate actionable budget optimizat
 
 {f"## Additional Context: {context}" if context else ""}
 
-Generate 3-7 specific, actionable recommendations. For each recommendation:
+Generate 3-5 specific, actionable recommendations. For each recommendation:
 1. Choose appropriate type: reallocation, scope_cut, timeline_change, resource_optimization, risk_mitigation, or efficiency_improvement
 2. Provide clear title and detailed description
-3. Estimate potential cost savings
+3. Estimate potential cost savings (a number, or null if not quantifiable)
 4. Rate confidence (0-100)
 5. Set priority (low/medium/high/urgent)
-6. Explain AI reasoning with full transparency
+6. Explain the AI reasoning behind the recommendation
 
-Format as JSON array with objects containing FULL EXPLAINABILITY:
+Return ONLY a JSON array. Each object must contain exactly these keys:
 [
     {{
-        "type": "recommendation_type",
-        "title": "Clear recommendation title",
-        "description": "Detailed description of the recommendation",
+        "type": "reallocation|scope_cut|timeline_change|resource_optimization|risk_mitigation|efficiency_improvement",
+        "title": "Clear, concise recommendation title",
+        "description": "Detailed description of the recommendation and what to do",
         "estimated_savings": 1000.00,
         "confidence": 85,
-        "confidence_factors": [
-            {{
-                "factor": "What influences confidence",
-                "direction": "increases|decreases",
-                "explanation": "How this affects confidence"
-            }}
-        ],
         "priority": "low|medium|high|urgent",
-        "priority_reasoning": "Why this priority level",
-        "reasoning": "Detailed explanation of why this is recommended based on data",
-        "implementation_steps": ["Step 1", "Step 2", "Step 3"],
-        "risks_of_implementation": ["Risk 1"],
-        "success_metrics": ["How to measure if this worked"],
+        "reasoning": "Why this is recommended, grounded in the data above",
         "patterns": {{
             "data_patterns_used": ["What patterns informed this recommendation"],
             "historical_support": "Any historical data supporting this"
-        }},
-        "alternative_approaches": [
-            {{
-                "alternative": "Alternative approach",
-                "tradeoff": "What you gain/lose"
-            }}
-        ],
-        "assumptions": ["Key assumption for this recommendation"]
+        }}
     }}
 ]
 """
@@ -596,43 +579,19 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
                 return cached
         
         try:
-            import google.generativeai as genai
+            from ai_assistant.utils.ai_router import AIRouter
             from django.conf import settings
-            
-            if not hasattr(settings, 'GEMINI_API_KEY') or not settings.GEMINI_API_KEY:
-                logger.error("GEMINI_API_KEY not configured")
-                return None
-            
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            
-            # Use Gemini 2.5 Flash for complex financial analysis
-            model_name = 'gemini-2.5-flash'
-            model = genai.GenerativeModel(model_name)
-            logger.debug(f"Using {model_name} for budget AI analysis")
-            
-            # Token limits for budget operations - generous to ensure complete responses with explainability
-            budget_token_limits = {
-                'budget_analysis': 6144,      # Comprehensive health analysis with recommendations + explainability
-                'budget_recommendations': 6144,  # Multiple detailed recommendations with reasoning
-                'budget_prediction': 4096,    # Prediction with scenarios + confidence explanation
-                'budget_patterns': 4096,      # Pattern analysis with evidence
-                'budget_optimization': 4096,  # Resource optimization suggestions with reasoning
-            }
-            
-            max_tokens = budget_token_limits.get(cache_operation, 4096)
-            
-            # Generation config optimized for financial analysis
-            generation_config = {
-                'temperature': 0.4,  # Lower for consistent financial analysis
-                'top_p': 0.8,
-                'top_k': 40,
-                'max_output_tokens': max_tokens,
-            }
-            
-            response = model.generate_content(prompt, generation_config=generation_config)
-            
-            if response and response.text:
-                result = response.text
+
+            router = AIRouter()
+            logger.debug(f"Using AIRouter for budget AI analysis (complexity=complex)")
+
+            result = router.complete(
+                prompt=prompt,
+                user=None,
+                complexity='complex',
+            )['text']
+
+            if result:
                 # Cache the result
                 if use_cache and ai_cache and result:
                     ai_cache.set(prompt, result, cache_operation, context_id)
@@ -640,19 +599,123 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
                 return result
             return None
         except Exception as e:
-            logger.error(f"Error calling Gemini API: {str(e)}")
+            logger.error(f"Error calling AI router: {str(e)}")
             return None
+    
+    def _extract_json_text(self, text: str) -> str:
+        """Extract JSON from AI response, handling markdown fences, prose, and truncation."""
+        if not text:
+            raise ValueError('Empty response')
+        # Step 1: Try to extract content from between code fences using regex.
+        # This handles leading prose, trailing text after the closing fence,
+        # and both ```json and ``` variants.
+        fence_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
+        if fence_match:
+            candidate = fence_match.group(1).strip()
+            try:
+                json.loads(candidate)
+                return candidate
+            except json.JSONDecodeError:
+                pass
+            # Fence content exists but isn't valid JSON yet — use it as cleaned
+            cleaned = candidate
+        else:
+            # Step 2: Fallback startswith/endswith strip for unclosed fences
+            cleaned = text.strip()
+            if cleaned.startswith('```json'):
+                cleaned = cleaned[7:]
+            elif cleaned.startswith('```'):
+                cleaned = cleaned[3:]
+            if cleaned.endswith('```'):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+        # Try direct parse first
+        try:
+            json.loads(cleaned)
+            return cleaned
+        except json.JSONDecodeError:
+            pass
+        # Try to find a JSON array
+        arr_match = re.search(r'(\[.*\])', cleaned, re.DOTALL)
+        if arr_match:
+            try:
+                json.loads(arr_match.group(1))
+                return arr_match.group(1)
+            except json.JSONDecodeError:
+                pass
+        # Try to find a JSON object
+        obj_match = re.search(r'(\{.*\})', cleaned, re.DOTALL)
+        if obj_match:
+            try:
+                json.loads(obj_match.group(1))
+                return obj_match.group(1)
+            except json.JSONDecodeError:
+                pass
+        # Handle truncated JSON — find start of array/object and try to repair
+        arr_start = cleaned.find('[')
+        obj_start = cleaned.find('{')
+        if arr_start != -1 or obj_start != -1:
+            # Pick whichever comes first
+            start = arr_start if (arr_start != -1 and (obj_start == -1 or arr_start <= obj_start)) else obj_start
+            fragment = cleaned[start:]
+            repaired = self._repair_truncated_json(fragment)
+            try:
+                json.loads(repaired)
+                return repaired
+            except json.JSONDecodeError:
+                pass
+        raise ValueError('No valid JSON found in response')
+
+    @staticmethod
+    def _repair_truncated_json(text: str) -> str:
+        """Close unclosed strings, arrays, and objects in truncated JSON."""
+        result = text
+        # Close unclosed string literal
+        in_string = False
+        i = 0
+        while i < len(result):
+            c = result[i]
+            if c == '\\' and in_string:
+                i += 2
+                continue
+            if c == '"':
+                in_string = not in_string
+            i += 1
+        if in_string:
+            result += '"'
+        # Remove trailing commas and incomplete key-value fragments
+        result = re.sub(r',\s*$', '', result)
+        # Remove a trailing incomplete key (e.g. "key": ) with no value
+        result = re.sub(r',\s*"[^"]*"\s*:\s*$', '', result)
+        # Track the ORDER of opening brackets/braces so we close them in LIFO order
+        # (e.g. [{... must close as ...}] not ...]{)
+        stack = []
+        in_str = False
+        i = 0
+        while i < len(result):
+            c = result[i]
+            if c == '\\' and in_str:
+                i += 2
+                continue
+            if c == '"':
+                in_str = not in_str
+            if not in_str:
+                if c in ('{', '['):
+                    stack.append(c)
+                elif c == '}' and stack and stack[-1] == '{':
+                    stack.pop()
+                elif c == ']' and stack and stack[-1] == '[':
+                    stack.pop()
+            i += 1
+        # Close in reverse order (LIFO)
+        for opener in reversed(stack):
+            result += '}' if opener == '{' else ']'
+        return result
     
     def _parse_ai_response(self, response: str, metrics: Dict) -> Dict:
         """Parse AI analysis response"""
         try:
-            # Try to extract JSON from response
-            response_clean = response.strip()
-            if response_clean.startswith('```json'):
-                response_clean = response_clean[7:]
-            if response_clean.endswith('```'):
-                response_clean = response_clean[:-3]
-            response_clean = response_clean.strip()
+            response_clean = self._extract_json_text(response)
             
             parsed = json.loads(response_clean)
             
@@ -666,8 +729,8 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
                 'trends': parsed.get('trends', []),
                 'metrics_summary': metrics,
             }
-        except json.JSONDecodeError:
-            logger.error("Failed to parse AI response as JSON")
+        except (json.JSONDecodeError, ValueError):
+            logger.error("Failed to parse AI response as JSON: %s", response[:500] if response else 'empty')
             return {
                 'analysis_date': timezone.now().isoformat(),
                 'health_rating': 'Unknown',
@@ -678,66 +741,50 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
     def _parse_recommendations(self, response: str) -> List[Dict]:
         """Parse AI recommendations response"""
         try:
-            response_clean = response.strip()
-            if response_clean.startswith('```json'):
-                response_clean = response_clean[7:]
-            if response_clean.endswith('```'):
-                response_clean = response_clean[:-3]
-            response_clean = response_clean.strip()
+            response_clean = self._extract_json_text(response)
             
             recommendations = json.loads(response_clean)
             if isinstance(recommendations, dict) and 'recommendations' in recommendations:
                 recommendations = recommendations['recommendations']
             
             return recommendations if isinstance(recommendations, list) else []
-        except json.JSONDecodeError:
-            logger.error("Failed to parse recommendations")
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(
+                "Failed to parse recommendations (err=%s) starts_with=%r ends_with=%r full_len=%d full=%s",
+                e,
+                response[:30] if response else '',
+                response[-30:] if response else '',
+                len(response) if response else 0,
+                response if response else 'empty',
+            )
             return []
     
     def _parse_prediction(self, response: str) -> Dict:
         """Parse AI prediction response"""
         try:
-            response_clean = response.strip()
-            if response_clean.startswith('```json'):
-                response_clean = response_clean[7:]
-            if response_clean.endswith('```'):
-                response_clean = response_clean[:-3]
-            response_clean = response_clean.strip()
-            
+            response_clean = self._extract_json_text(response)
             return json.loads(response_clean)
-        except json.JSONDecodeError:
-            logger.error("Failed to parse prediction")
+        except (json.JSONDecodeError, ValueError):
+            logger.error("Failed to parse prediction: %s", response[:500] if response else 'empty')
             return {'error': 'Failed to parse prediction'}
     
     def _parse_patterns(self, response: str) -> List[Dict]:
         """Parse pattern learning response"""
         try:
-            response_clean = response.strip()
-            if response_clean.startswith('```json'):
-                response_clean = response_clean[7:]
-            if response_clean.endswith('```'):
-                response_clean = response_clean[:-3]
-            response_clean = response_clean.strip()
-            
+            response_clean = self._extract_json_text(response)
             patterns = json.loads(response_clean)
             return patterns if isinstance(patterns, list) else []
-        except json.JSONDecodeError:
-            logger.error("Failed to parse patterns")
+        except (json.JSONDecodeError, ValueError):
+            logger.error("Failed to parse patterns: %s", response[:500] if response else 'empty')
             return []
     
     def _parse_optimization(self, response: str) -> Dict:
         """Parse optimization response"""
         try:
-            response_clean = response.strip()
-            if response_clean.startswith('```json'):
-                response_clean = response_clean[7:]
-            if response_clean.endswith('```'):
-                response_clean = response_clean[:-3]
-            response_clean = response_clean.strip()
-            
+            response_clean = self._extract_json_text(response)
             return json.loads(response_clean)
-        except json.JSONDecodeError:
-            logger.error("Failed to parse optimization")
+        except (json.JSONDecodeError, ValueError):
+            logger.error("Failed to parse optimization: %s", response[:500] if response else 'empty')
             return {'error': 'Failed to parse optimization'}
     
     def _analyze_time_patterns(self) -> Dict:

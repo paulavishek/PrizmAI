@@ -40,6 +40,11 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+# The local-memory / database cache backends don't support pattern deletion.
+# Warn about it ONCE per process instead of on every invalidate_operation call
+# (a demo reset invalidates hundreds of operations and was flooding the log).
+_pattern_delete_unsupported_warned = False
+
 
 # =============================================================================
 # TTL CONFIGURATION BY OPERATION TYPE
@@ -54,6 +59,11 @@ AI_CACHE_TTLS = {
     'pm_performance': 7200,           # 2 hours - Performance analysis
     'learning_content': 21600,        # 6 hours - Educational content is stable
     'scope_analysis': 3600,           # 1 hour
+    'whatif_analysis': 3600,          # 1 hour - scenario params rarely re-run identically
+    'triple_constraint': 1800,        # 30 minutes - depends on live board metrics
+    'premortem': 3600,                # 1 hour - board snapshot stable short term
+    'stress_test': 3600,              # 1 hour - expensive analysis, board data stable
+    'scope_autopsy': 7200,            # 2 hours - historical forensic, very stable
     
     # Medium caches (15-60 minutes) - Results that need periodic refresh
     'risk_assessment': 1800,          # 30 minutes
@@ -66,6 +76,7 @@ AI_CACHE_TTLS = {
     'task_enhancement': 900,          # 15 minutes
     'coaching_suggestion': 1800,      # 30 minutes
     'coaching_advice': 1800,          # 30 minutes
+    'stakeholder_suggestion': 1800,   # 30 minutes
     
     # Short caches (5-15 minutes) - More dynamic results
     'task_description': 900,          # 15 minutes
@@ -313,7 +324,16 @@ class AICacheManager:
                 logger.info(f"Invalidated {count} cache entries for operation: {operation}")
                 return count
             else:
-                logger.warning("Pattern deletion not supported by cache backend")
+                global _pattern_delete_unsupported_warned
+                if not _pattern_delete_unsupported_warned:
+                    _pattern_delete_unsupported_warned = True
+                    logger.warning(
+                        "Pattern deletion not supported by cache backend — "
+                        "AI cache entries expire by TTL instead. "
+                        "(Logged once; suppressing further occurrences.)"
+                    )
+                else:
+                    logger.debug("Pattern deletion not supported by cache backend")
                 return 0
         except Exception as e:
             logger.warning(f"AI cache pattern invalidation error: {e}")

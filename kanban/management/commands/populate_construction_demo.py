@@ -49,25 +49,25 @@ class Command(BaseCommand):
 
         if not board:
             self.stdout.write(self.style.ERROR(
-                '❌ Board not found. Create "New Office Construction Project" board first or use --board-id'
+                '[FAIL] Board not found. Create "New Office Construction Project" board first or use --board-id'
             ))
             return
 
-        self.stdout.write(f'📋 Found board: {board.name} (ID: {board.id})')
+        self.stdout.write(f' Found board: {board.name} (ID: {board.id})')
 
         # Ensure board has 3 phases configured
         board.num_phases = 3
         board.save()
-        self.stdout.write('   ✅ Board configured for 3 phases')
+        self.stdout.write('   [OK] Board configured for 3 phases')
 
         # Get or create columns
         columns = self.ensure_columns(board)
-        self.stdout.write('   ✅ Columns verified')
+        self.stdout.write('   [OK] Columns verified')
 
         # Get a user to assign tasks (use board creator or first admin)
         user = board.created_by or User.objects.filter(is_staff=True).first() or User.objects.first()
         if not user:
-            self.stdout.write(self.style.ERROR('❌ No user found to create tasks'))
+            self.stdout.write(self.style.ERROR('[FAIL] No user found to create tasks'))
             return
 
         # Check if board has an organization - needed for UserPerformanceProfile
@@ -78,17 +78,17 @@ class Command(BaseCommand):
             if demo_org:
                 board.organization = demo_org
                 board.save()
-                self.stdout.write('   ✅ Board associated with demo organization')
+                self.stdout.write('   [OK] Board associated with demo organization')
             else:
                 self.stdout.write(self.style.WARNING(
-                    '   ⚠️  No organization - tasks will be created without assignees'
+                    '   [WARN]  No organization - tasks will be created without assignees'
                 ))
 
         # Get demo users if available (only use if board has organization)
         if board.organization:
-            alex = User.objects.filter(email='alex.chen@demo.prizmai.local').first() or user
-            sam = User.objects.filter(email='sam.rivera@demo.prizmai.local').first() or user
-            jordan = User.objects.filter(email='jordan.taylor@demo.prizmai.local').first() or user
+            alex = User.objects.filter(email='priya.sharma@demo.prizmai.local').first() or user
+            sam = User.objects.filter(email='marcus.chen@demo.prizmai.local').first() or user
+            jordan = User.objects.filter(email='elena.vasquez@demo.prizmai.local').first() or user
         else:
             # No org, so don't assign users (would fail due to UserPerformanceProfile constraint)
             alex = sam = jordan = None
@@ -96,47 +96,47 @@ class Command(BaseCommand):
         # Reset if requested
         if options['reset']:
             deleted = Task.objects.filter(column__board=board).delete()[0]
-            self.stdout.write(self.style.WARNING(f'   🔄 Deleted {deleted} existing tasks'))
+            self.stdout.write(self.style.WARNING(f'    Deleted {deleted} existing tasks'))
 
         # Check for existing tasks
         existing = Task.objects.filter(column__board=board).count()
         if existing > 0 and not options['reset']:
             self.stdout.write(self.style.WARNING(
-                f'⚠️  Board already has {existing} tasks. Use --reset to recreate.'
+                f'[WARN]  Board already has {existing} tasks. Use --reset to recreate.'
             ))
             return
 
         # Create tasks for each phase
-        self.stdout.write('\n📝 Creating construction project tasks...\n')
+        self.stdout.write('\n Creating construction project tasks...\n')
 
         phase1_tasks = self.create_phase1_preconstruction(board, columns, user, alex, sam, jordan)
-        self.stdout.write(f'   ✅ Phase 1 (Pre-Construction): {len(phase1_tasks)} tasks')
+        self.stdout.write(f'   [OK] Phase 1 (Pre-Construction): {len(phase1_tasks)} tasks')
 
         phase2_tasks = self.create_phase2_structural(board, columns, user, alex, sam, jordan)
-        self.stdout.write(f'   ✅ Phase 2 (Structural Work): {len(phase2_tasks)} tasks')
+        self.stdout.write(f'   [OK] Phase 2 (Structural Work): {len(phase2_tasks)} tasks')
 
         phase3_tasks = self.create_phase3_finishing(board, columns, user, alex, sam, jordan)
-        self.stdout.write(f'   ✅ Phase 3 (Finishing & Closeout): {len(phase3_tasks)} tasks')
+        self.stdout.write(f'   [OK] Phase 3 (Finishing & Closeout): {len(phase3_tasks)} tasks')
 
         # Create dependencies with realistic critical path
-        self.stdout.write('\n🔗 Creating realistic critical path dependencies...\n')
+        self.stdout.write('\n Creating realistic critical path dependencies...\n')
 
         self.create_phase1_dependencies(phase1_tasks)
-        self.stdout.write('   ✅ Phase 1 dependencies created')
+        self.stdout.write('   [OK] Phase 1 dependencies created')
 
         self.create_phase2_dependencies(phase2_tasks)
-        self.stdout.write('   ✅ Phase 2 dependencies created')
+        self.stdout.write('   [OK] Phase 2 dependencies created')
 
         self.create_phase3_dependencies(phase3_tasks)
-        self.stdout.write('   ✅ Phase 3 dependencies created')
+        self.stdout.write('   [OK] Phase 3 dependencies created')
 
         total = len(phase1_tasks) + len(phase2_tasks) + len(phase3_tasks)
-        self.stdout.write(self.style.SUCCESS(f'\n   📊 Total tasks created: {total}'))
+        self.stdout.write(self.style.SUCCESS(f'\n    Total tasks created: {total}'))
         self.stdout.write(self.style.SUCCESS('\n' + '='*70))
-        self.stdout.write(self.style.SUCCESS('✅ CONSTRUCTION DEMO DATA COMPLETE'))
+        self.stdout.write(self.style.SUCCESS('[OK] CONSTRUCTION DEMO DATA COMPLETE'))
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))
         self.stdout.write(self.style.SUCCESS(
-            '💡 View the Gantt chart at: /boards/{}/gantt/'.format(board.id)
+            ' View the Gantt chart at: /boards/{}/gantt/'.format(board.id)
         ))
         self.stdout.write(self.style.SUCCESS(
             '   Enable "Show Critical Path" to see the longest dependency chain!\n'
@@ -176,7 +176,7 @@ class Command(BaseCommand):
                                                            [9] Foundation Pouring ◄─────────────┘
                                                              (depends on [7] AND [8])
         
-        Critical Path: 0 → 4 → 7 → 9 (or through permits if permits take longer)
+        Critical Path: 0 -> 4 -> 7 -> 9 (or through permits if permits take longer)
         Non-critical: Tasks 1, 2, 3, 6 can float (run in parallel without affecting end date)
         """
         todo = columns['To Do']

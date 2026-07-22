@@ -10,6 +10,8 @@ Handles all HTTP requests for Shadow Board functionality:
 """
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+import json
+import types
 from django.views.generic import ListView, CreateView, DetailView
 from django.views.decorators.http import require_POST, require_http_methods
 from django.http import JsonResponse
@@ -20,12 +22,14 @@ from django.db import models
 from datetime import timedelta
 import logging
 
-from kanban.models import Board, Task
+from kanban.models import Board, Task, TaskActivity
 from kanban.whatif_models import WhatIfScenario
 from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
 from kanban.audit_models import SystemAuditLog
+from kanban.decorators import demo_write_guard
 
 logger = logging.getLogger(__name__)
+
 
 # Define predefined color palette for branches
 BRANCH_COLOR_PALETTE = [
@@ -62,16 +66,18 @@ class ShadowBoardListView(ListView):
         board_id = self.kwargs.get('board_id')
         board = get_object_or_404(Board, id=board_id)
         
-        # Check user is board member
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
-            self.permission_denied()
+        # RBAC: check board access
+        if not self.request.user.has_perm('prizmai.view_board', board):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied
         
-        # Return active + archived from last 7 days
+        # Return active, committed, and recently archived branches (last 7 days)
         cutoff_date = timezone.now() - timedelta(days=7)
         return ShadowBranch.objects.filter(
             board=board,
         ).filter(
             models.Q(status='active') |
+            models.Q(status='committed') |
             models.Q(status='archived', updated_at__gte=cutoff_date)
         ).select_related('created_by', 'source_scenario').prefetch_related('snapshots')
 
@@ -83,46 +89,210 @@ class ShadowBoardListView(ListView):
         context = super().get_context_data(**kwargs)
         context['board'] = board
         context['predefined_colors'] = BRANCH_COLOR_PALETTE
+        context['has_archived_branches'] = any(
+            b.status == 'archived' for b in context['branches']
+        )
+        context['has_active_branches'] = any(
+            b.status == 'active' for b in context['branches']
+        )
 
         # --- Quantum Standup Data ---
-        # Today's real progress
         today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = today_start + timedelta(days=1)
+        # Real Progress Today — driven by TaskActivity, not Task.completed_at.
+        #
+        # Why not completed_at: populate_all_demo_data calls Task.save() with
+        # progress=100, which causes Task.save() to stamp completed_at=now() on
+        # every seeded Done-column task.  After any demo reset all those tasks
+        # carry today's completed_at, making them indistinguishable from tasks
+        # a user genuinely completed today.
+        #
+        # TaskActivity records are only written by user-facing views (move_task
+        # for drag-and-drop, update_task_fields_api for Gantt triage).  The
+        # seeder never creates them, so they reliably represent real user work.
+        #
+        # A column-name guard at the end excludes tasks moved back out of Done
+        # later in the same day (their activity still matches 'done' in the
+        # description but their current column is no longer Done/Complete).
+        move_activities_today = (
+            TaskActivity.objects
+            .filter(
+                task__column__board=board,
+                task__item_type='task',
+                activity_type__in=['moved', 'updated'],
+                created_at__gte=today_start,
+                created_at__lt=today_end,
+            )
+            .filter(
+                models.Q(description__icontains='done') |
+                models.Q(description__icontains='complete')
+            )
+            .select_related('task', 'task__column', 'user')
+            .order_by('task_id', '-created_at')
+        )
 
-        # Tasks completed today
-        completed_today = Task.objects.filter(
-            column__board=board,
-            progress=100,
-            updated_at__gte=today_start,
-            updated_at__lt=today_end,
-        ).select_related('column', 'assigned_to').order_by('-updated_at')[:10]
+        # `order_by('task_id', '-created_at')` above is grouped by task_id so
+        # the loop can dedup to "latest activity per task" with a simple
+        # seen-set; but that means the resulting list comes out sorted by
+        # task_id (an arbitrary PK), not by when each task was actually
+        # completed. Collect everything first, then sort by the activity's
+        # own timestamp (not Task.completed_at — see the module-level note
+        # above on why that field can't be trusted) before capping to 10, so
+        # "Real Progress Today" reads as an actual timeline.
+        seen_task_ids: set = set()
+        completed_today = []
+        for act in move_activities_today:
+            if act.task_id in seen_task_ids:
+                continue
+            seen_task_ids.add(act.task_id)
+            if not act.task.column.is_done():
+                continue  # moved back out of Done later today
+            # Prefer the task's owner (assignee) for "Completed By" — that's
+            # who's actually responsible for the work.  Fall back to whoever
+            # logged the move activity (drag-and-drop user) only when no
+            # assignee is set.  The view used to assign act.user directly,
+            # which surfaced "Unknown" whenever the dragger's first_name
+            # was blank (common on seeded demo users).
+            act.task.completer = act.task.assigned_to or act.user
+            act.task.activity_time = act.created_at
+            completed_today.append(act.task)
+
+        # Most recent completion first (matches Snapshot History's newest-on-top
+        # convention elsewhere in Shadow Board), capped to the latest 10.
+        completed_today.sort(key=lambda t: t.activity_time, reverse=True)
+        completed_today = completed_today[:10]
 
         context['tasks_completed_today'] = completed_today
-        context['tasks_completed_count'] = completed_today.count()
+        context['tasks_completed_count'] = len(completed_today)
 
-        # Branch impacts today: divergences logged in last 24 hours
-        recent_divergences = BranchDivergenceLog.objects.filter(
+        # "How It Affected Your Branches" must reflect *today's real board
+        # events* (tasks completed, deadline/team changes) — NOT baseline
+        # corrections.  A restored or freshly-created branch writes a snapshot
+        # that re-baselines its score against the live board; counting that as
+        # "today's progress" produced phantom swings (e.g. a restored branch
+        # correcting a stale 81% to 40.75% looked like a -40-point drop caused
+        # by today's work, which is false). A branch only appears in this
+        # table when at least one real event happened today (see
+        # is_real_board_event); that guard is unchanged.
+        #
+        # What changed: "before" used to be the score immediately prior to
+        # today's FIRST real-event-labeled snapshot, and "after" was the LAST
+        # real-event-labeled snapshot. That undercounts real progress whenever
+        # a user clicks "Refresh Scores" (a heartbeat, by trigger label) after
+        # completing tasks but before the Celery-queued completion signal has
+        # run — the heartbeat's recalc already reflects the live (already
+        # updated) board, so by the time the real-event snapshot fires there's
+        # nothing left to capture, and the table showed "±0" despite the
+        # branch clearly having moved that day. Heartbeats DO reflect genuine
+        # live board state (just triggered manually rather than by a signal),
+        # so they should count toward today's total; only true baseline
+        # corrections (creation/restore/sandbox-clone) should not, since those
+        # can jump a score by dozens of points from re-syncing stale data
+        # rather than from any real work. So: "before" is anchored to the
+        # score right after the last correction-type snapshot before today's
+        # first real event (or the last snapshot before today, or today's
+        # first snapshot, if no correction occurred today) — and "after" is
+        # simply the latest snapshot of the day, of any trigger.
+        from kanban.tasks.shadow_branch_tasks import is_real_board_event, is_baseline_correction
+
+        today_snapshots_qs = BranchSnapshot.objects.filter(
             branch__board=board,
-            logged_at__gte=today_start,
-            logged_at__lt=today_end,
-        ).select_related('branch').order_by('-logged_at')
+            branch__status='active',
+            captured_at__gte=today_start,
+            captured_at__lt=today_end,
+        ).select_related('branch').order_by('branch_id', 'captured_at')
 
-        context['branch_impacts_today'] = recent_divergences
+        # Group today's snapshots per branch (ascending by captured_at) and
+        # track the absolute latest for card anchoring further below.
+        today_by_branch: dict = {}
+        latest_today: dict = {}
+        for snap in today_snapshots_qs:
+            today_by_branch.setdefault(snap.branch_id, []).append(snap)
+            latest_today[snap.branch_id] = snap
 
-        # Auto-heal: if any active branches have no snapshots, re-trigger recalculation
-        branches_without_snapshots = ShadowBranch.objects.filter(
-            board=board, status='active',
-        ).exclude(
-            id__in=BranchSnapshot.objects.values_list('branch_id', flat=True)
+        branch_impacts = []
+        for branch_id, snaps in today_by_branch.items():
+            real_events = [s for s in snaps if is_real_board_event(s.trigger_event)]
+            if not real_events:
+                # Only heartbeats / baseline corrections today — no real work
+                # affected this branch, so it doesn't belong in the table.
+                continue
+            first_real = real_events[0]
+            after_snap = snaps[-1]  # latest of the day, any trigger
+
+            corrections_before_first_real = [
+                s for s in snaps
+                if s.captured_at < first_real.captured_at and is_baseline_correction(s.trigger_event)
+            ]
+            if corrections_before_first_real:
+                anchor_snap = corrections_before_first_real[-1]
+            else:
+                anchor_snap = (
+                    BranchSnapshot.objects
+                    .filter(branch_id=branch_id, captured_at__lt=today_start)
+                    .order_by('-captured_at')
+                    .first()
+                ) or snaps[0]
+            old_score = anchor_snap.feasibility_score
+            new_score = after_snap.feasibility_score
+            branch_impacts.append(types.SimpleNamespace(
+                branch=after_snap.branch,
+                old_score=old_score,
+                new_score=new_score,
+                score_delta=new_score - old_score,
+            ))
+
+        branch_impacts.sort(key=lambda x: abs(x.score_delta), reverse=True)
+        context['branch_impacts_today'] = branch_impacts
+
+        # Anchor each branch card's "latest snapshot" to the SAME data the
+        # Quantum Standup table just read from.  Without this, the card's
+        # `branch.get_latest_snapshot` does a fresh DB query at template-
+        # render time and can pick up a snapshot Celery wrote *after* the
+        # table query — causing the cards and the table to disagree by one
+        # recalc cycle (cards show post-2nd-task; table shows post-1st-task).
+        # For branches that have no snapshot today, fall back to the most
+        # recent prior snapshot from the prefetched relation.
+        for branch in context['branches']:
+            today_snap = latest_today.get(branch.id)
+            if today_snap is not None:
+                branch.cached_latest_snapshot = today_snap
+                continue
+            # No snapshot today — pick the most recent from the prefetched
+            # relation (avoids another DB hit per card).
+            prefetched = list(branch.snapshots.all())
+            if prefetched:
+                branch.cached_latest_snapshot = max(
+                    prefetched, key=lambda s: s.captured_at
+                )
+            else:
+                branch.cached_latest_snapshot = None
+
+        # Auto-heal: if any active branches have no snapshots, re-trigger
+        # recalculation — but ONLY for the missing ones, not the whole
+        # board.  Recalculating siblings here would overwrite their last
+        # known scores against the live board state, which a user perceives
+        # as "scores randomly changed when I opened the page".
+        branches_without_snapshots = list(
+            ShadowBranch.objects.filter(
+                board=board, status='active',
+            ).exclude(
+                id__in=BranchSnapshot.objects.filter(branch__board=board)
+                .values_list('branch_id', flat=True)
+            ).values_list('id', flat=True)
         )
-        if branches_without_snapshots.exists():
+        if branches_without_snapshots:
             try:
                 from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
-                recalculate_branches_for_board.apply_async(
-                    args=[board.id],
-                    kwargs={'trigger_event': 'Auto-heal: branches missing snapshots'},
-                    countdown=2,
-                )
+                for missing_id in branches_without_snapshots:
+                    recalculate_branches_for_board.apply_async(
+                        args=[board.id],
+                        kwargs={
+                            'trigger_event': 'Periodic branch refresh',
+                            'branch_id': missing_id,
+                        },
+                        countdown=2,
+                    )
             except Exception:
                 pass
 
@@ -154,8 +324,8 @@ class CreateBranchView(CreateView):
         board_id = self.kwargs.get('board_id')
         board = get_object_or_404(Board, id=board_id)
 
-        # Check user is board member
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
+        # RBAC: check board access
+        if not self.request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = form.save(commit=False)
@@ -171,24 +341,31 @@ class CreateBranchView(CreateView):
             except WhatIfScenario.DoesNotExist:
                 scenario = None
 
+        # Snapshot baseline velocity at creation time so live recalculations
+        # can compare actual 7-day velocity against the projection's assumption.
+        from kanban.tasks.shadow_branch_tasks import compute_baseline_velocity
+        branch.baseline_velocity_per_week = compute_baseline_velocity(board)
+
         branch.save()
 
-        # Create initial snapshot from linked scenario's slider values
-        if branch.source_scenario and branch.source_scenario.input_parameters:
-            params = branch.source_scenario.input_parameters
-            BranchSnapshot.objects.create(
-                branch=branch,
-                scope_delta=int(params.get('tasks_added', 0)),
-                team_delta=int(params.get('team_size_delta', 0)),
-                deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                feasibility_score=0,
-            )
-
-        # Trigger initial branch recalculation
+        # Trigger initial branch recalculation — the Celery task produces the
+        # canonical first snapshot (with velocity_health applied).  We used to
+        # write a placeholder BranchSnapshot here too, but the recalc landed
+        # within seconds with a different score, leaving two snapshots at the
+        # same minute on the Feasibility Trend chart.
+        #
+        # Scope the recalc to ONLY the newly-created branch.  Creating a new
+        # branch must not overwrite the snapshots of unrelated branches —
+        # otherwise every existing branch's "latest snapshot" gets a fresh
+        # value computed against the live board, which visibly converges
+        # their displayed scores even when nothing about them changed.
         from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
         recalculate_branches_for_board.apply_async(
             args=[board_id],
-            kwargs={'trigger_event': f'Branch "{branch.name}" created'},
+            kwargs={
+                'trigger_event': f'Branch "{branch.name}" created',
+                'branch_id': branch.id,
+            },
         )
 
         messages.success(self.request, f'Branch "{branch.name}" created and recalculating...')
@@ -210,6 +387,7 @@ class CreateBranchView(CreateView):
                 if not name:
                     return JsonResponse({'error': 'Branch name required'}, status=400)
 
+                from kanban.tasks.shadow_branch_tasks import compute_baseline_velocity
                 branch = ShadowBranch.objects.create(
                     board=board,
                     created_by=request.user,
@@ -217,34 +395,28 @@ class CreateBranchView(CreateView):
                     description=description,
                     branch_color=color,
                     source_scenario_id=scenario_id if scenario_id else None,
+                    baseline_velocity_per_week=compute_baseline_velocity(board),
                 )
 
-                # Create initial snapshot from linked scenario's slider values
-                if scenario_id:
-                    try:
-                        scenario = WhatIfScenario.objects.get(id=scenario_id, board=board)
-                        if scenario.input_parameters:
-                            params = scenario.input_parameters
-                            BranchSnapshot.objects.create(
-                                branch=branch,
-                                scope_delta=int(params.get('tasks_added', 0)),
-                                team_delta=int(params.get('team_size_delta', 0)),
-                                deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                                feasibility_score=0,
-                            )
-                    except WhatIfScenario.DoesNotExist:
-                        pass
+                # No placeholder snapshot here — the Celery recalc below
+                # writes the canonical first snapshot.  Mirrors form_valid().
 
-                # Trigger recalculation
+                # Scope the recalc to the newly-created branch only.  See the
+                # comment in form_valid() for the cross-branch contamination
+                # this prevents.
                 from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
                 recalculate_branches_for_board.apply_async(
                     args=[board_id],
-                    kwargs={'trigger_event': f'Branch "{branch.name}" created'},
+                    kwargs={
+                        'trigger_event': f'Branch "{branch.name}" created',
+                        'branch_id': branch.id,
+                    },
                 )
 
                 return JsonResponse({
                     'success': True,
                     'branch_id': branch.id,
+                    'branch_name': branch.name,
                     'redirect_url': f'/boards/{board_id}/shadow/',
                 })
             except Exception as e:
@@ -276,8 +448,9 @@ class BranchDetailView(DetailView):
         board_id = self.kwargs.get('board_id')
         board = get_object_or_404(Board, id=board_id)
 
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
-            self.permission_denied()
+        if not self.request.user.has_perm('prizmai.view_board', board):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied
 
         return ShadowBranch.objects.filter(board=board).select_related(
             'board', 'created_by', 'source_scenario'
@@ -291,9 +464,52 @@ class BranchDetailView(DetailView):
         # Add board to context so templates can generate back-links
         context['board'] = branch.board
 
-        # Get last 30 snapshots for history
-        snapshots = branch.snapshots.all()[:30]
-        context['snapshots'] = snapshots
+        # Pull a wider window than we display so collapsing runs of identical
+        # snapshots still gives the user ~30 distinct rows to scroll through.
+        raw_snapshots = list(branch.snapshots.all()[:200])
+
+        # Collapse consecutive snapshots whose user-visible fields (score,
+        # scope/team/deadline deltas) are identical into a single row.
+        # Pre-existing snapshot bloat (from before the tighter creation-time
+        # dedup landed) was making history feel broken — every row looked the
+        # same.  Display-side collapsing fixes the perception immediately
+        # without rewriting the DB.  We expose `repeat_count` and
+        # `first_captured_at` so the template can show "Snapshot 12 (×5,
+        # first seen 18:14)" instead of five back-to-back identical rows.
+        collapsed = []
+        # raw_snapshots is newest-first; iterate that order so the row labelled
+        # with the latest captured_at survives, and we accumulate the earliest
+        # captured_at as the "first seen" timestamp.
+        for snap in raw_snapshots:
+            key = (
+                round(float(snap.feasibility_score), 2),
+                snap.scope_delta,
+                snap.team_delta,
+                snap.deadline_delta_weeks,
+            )
+            if collapsed and collapsed[-1]['key'] == key:
+                # Merge into the previous (newer) entry — bump repeat count and
+                # push first_captured_at further back in time.
+                collapsed[-1]['repeat_count'] += 1
+                collapsed[-1]['first_captured_at'] = snap.captured_at
+            else:
+                collapsed.append({
+                    'snapshot': snap,
+                    'key': key,
+                    'repeat_count': 1,
+                    'first_captured_at': snap.captured_at,
+                })
+            if len(collapsed) >= 30:
+                break
+
+        context['snapshots'] = [
+            {
+                'snapshot': entry['snapshot'],
+                'repeat_count': entry['repeat_count'],
+                'first_captured_at': entry['first_captured_at'],
+            }
+            for entry in collapsed
+        ]
 
         # Get divergence logs
         divergence_logs = branch.divergence_logs.all()[:50]
@@ -303,11 +519,30 @@ class BranchDetailView(DetailView):
         latest = branch.get_latest_snapshot()
         context['latest_snapshot'] = latest
 
-        # Build feasibility history for chart
+        # AI pending state: a snapshot that was just written (e.g. by a manual
+        # refresh, branch create, or restore) may not have its AI text yet —
+        # it's backfilled by a background task within seconds.  Flag a recent
+        # empty-AI snapshot so the template can show "Generating AI analysis…"
+        # (with auto-refresh) instead of a permanent "not available" message.
+        context['ai_pending'] = bool(
+            latest is not None
+            and not latest.gemini_recommendation
+            and (timezone.now() - latest.captured_at) <= timedelta(minutes=3)
+        )
+
+        # Build feasibility history for chart.
+        # IMPORTANT: feasibility_score is a DecimalField; rendering it through
+        # the template's |safe filter as Python repr produces `Decimal('40.75')`
+        # which is not valid JS and throws "Decimal is not defined" in the
+        # browser, blanking the Feasibility Trend chart.  Coerce to float and
+        # serialize with json.dumps so the template can embed it via
+        # |json_script (preferred) or |safe (legacy).
         history = branch.get_score_history(limit=30)
-        context['feasibility_history'] = [
-            {'date': dt.isoformat(), 'score': score} for dt, score in history
+        feasibility_history = [
+            {'date': dt.isoformat(), 'score': float(score)} for dt, score in history
         ]
+        context['feasibility_history'] = feasibility_history
+        context['feasibility_history_json'] = json.dumps(feasibility_history)
 
         return context
 
@@ -332,12 +567,16 @@ class CommitBranchView(DetailView):
         board = get_object_or_404(Board, id=board_id)
         branch = self.get_object()
 
-        # Check user is board member or admin
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
+        # RBAC: check board edit permission
+        if not self.request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
-        # Check for confirmation
-        confirm = request.POST.get('confirm', 'false').lower() == 'true'
+        # Check for confirmation (supports both JSON body and form POST)
+        try:
+            body_data = json.loads(request.body)
+            confirm = body_data.get('confirm', False) is True
+        except (json.JSONDecodeError, AttributeError):
+            confirm = request.POST.get('confirm', 'false').lower() == 'true'
         if not confirm:
             return JsonResponse({'error': 'Confirmation required'}, status=400)
 
@@ -390,8 +629,9 @@ class CommitBranchView(DetailView):
         board_id = self.kwargs.get('board_id')
         board = get_object_or_404(Board, id=board_id)
 
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
-            self.permission_denied()
+        if not self.request.user.has_perm('prizmai.view_board', board):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied
 
         return get_object_or_404(
             ShadowBranch,
@@ -425,8 +665,8 @@ def merge_conflict_check(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        # Check user is board member
-        if request.user not in board.members.all() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.view_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch_a_id = request.GET.get('branch_a')
@@ -503,6 +743,7 @@ def merge_conflict_check(request, board_id):
 
 @login_required
 @require_http_methods(['POST'])
+@demo_write_guard
 def promote_scenario_to_branch(request, board_id):
     """
     API endpoint: Promote a What-If scenario to a Shadow Branch.
@@ -517,8 +758,8 @@ def promote_scenario_to_branch(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        # Check user is board member
-        if request.user not in board.members.all() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         # Handle both form-encoded and JSON data
@@ -528,10 +769,12 @@ def promote_scenario_to_branch(request, board_id):
             scenario_id = data_dict.get('scenario_id')
             branch_name = data_dict.get('branch_name', '').strip()
             color = data_dict.get('color', BRANCH_COLOR_PALETTE[0])
+            description = data_dict.get('description', '').strip()
         else:
             scenario_id = request.POST.get('scenario_id')
             branch_name = request.POST.get('branch_name', '').strip()
             color = request.POST.get('color', BRANCH_COLOR_PALETTE[0])
+            description = request.POST.get('description', '').strip()
 
         if not scenario_id:
             return JsonResponse({'error': 'scenario_id required'}, status=400)
@@ -542,32 +785,86 @@ def promote_scenario_to_branch(request, board_id):
             branch_name = f'{scenario.name} (Promoted)'
 
         # Create branch linked to scenario
+        from kanban.tasks.shadow_branch_tasks import compute_baseline_velocity
         branch = ShadowBranch.objects.create(
             board=board,
             created_by=request.user,
             name=branch_name,
-            description=f'Promoted from scenario: {scenario.name}',
+            description=description or f'Promoted from scenario: {scenario.name}',
             source_scenario=scenario,
             branch_color=color,
+            baseline_velocity_per_week=compute_baseline_velocity(board),
         )
 
-        # Create initial snapshot from scenario's slider values
-        if scenario.input_parameters:
-            params = scenario.input_parameters
-            BranchSnapshot.objects.create(
-                branch=branch,
-                scope_delta=int(params.get('tasks_added', 0)),
-                team_delta=int(params.get('team_size_delta', 0)),
-                deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                feasibility_score=0,  # Will be updated by recalculation
+        # Create an initial snapshot synchronously (no AI) so the branch
+        # card shows a score immediately instead of "Calculating first snapshot..."
+        # while Celery picks up the AI backfill.  Without the sync snapshot the
+        # list page renders "Calculating..." and polls until Celery finishes;
+        # with it the user sees a real score the instant the redirect lands.
+        initial_snapshot_id = None
+        try:
+            from kanban.tasks.shadow_branch_tasks import (
+                extract_branch_params, compute_actual_7d_velocity,
+                scale_feasibility, _estimate_completion_date, _parse_date,
             )
+            from kanban.shadow_models import BranchSnapshot
+            from kanban.utils.whatif_engine import WhatIfEngine as _WIEngine
 
-        # Trigger recalculation with scenario's parameters as seed
-        from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
-        recalculate_branches_for_board.apply_async(
-            args=[board_id],
-            kwargs={'trigger_event': f'Scenario "{scenario.name}" promoted to branch "{branch.name}"'},
-        )
+            _params = extract_branch_params(branch)
+            _actual_vel = compute_actual_7d_velocity(board)
+            _baseline = branch.baseline_velocity_per_week or _actual_vel or 0.0
+            _params['velocity_health'] = (_actual_vel / _baseline) if _baseline > 0 else 1.0
+
+            _results = _WIEngine(board).simulate(_params)
+            if _results:
+                _score = scale_feasibility(_results.get('feasibility_score', 0))
+                _proj_date = _parse_date(
+                    _results.get('projected', {}).get('predicted_date')
+                ) or _estimate_completion_date(_results)
+                initial_snapshot = BranchSnapshot.objects.create(
+                    branch=branch,
+                    scope_delta=_params['tasks_added'],
+                    team_delta=_params['team_size_delta'],
+                    deadline_delta_weeks=_params['deadline_shift_days'] // 7,
+                    feasibility_score=_score,
+                    projected_completion_date=_proj_date,
+                    projected_budget_utilization=_results.get('projected', {}).get('budget_utilization_pct'),
+                    conflicts_detected=_results.get('new_conflicts', []),
+                    gemini_recommendation='',
+                )
+                initial_snapshot_id = initial_snapshot.pk
+        except Exception as _snap_err:
+            logger.warning(f'Quick initial snapshot failed for branch {branch.id}: {_snap_err}')
+
+        # Background AI generation: backfill the gemini_recommendation on the
+        # snapshot we just wrote so the branch detail page shows an AI
+        # recommendation within a few seconds instead of "No AI recommendation
+        # available for this snapshot."  The task updates the existing
+        # snapshot in place — no second snapshot is created, so the
+        # Feasibility Trend chart and Snapshot History stay clean.
+        if initial_snapshot_id is not None:
+            try:
+                from kanban.tasks.shadow_branch_tasks import generate_ai_for_branch_snapshot
+                generate_ai_for_branch_snapshot.apply_async(
+                    args=[initial_snapshot_id],
+                )
+            except Exception as _ai_err:
+                logger.warning(
+                    f'Failed to queue AI generation for branch {branch.id} '
+                    f'snapshot {initial_snapshot_id}: {_ai_err}'
+                )
+        else:
+            # Sync snapshot failed — fall back to the full recalc path so the
+            # branch still ends up with a snapshot (scoped to just this branch
+            # so it cannot overwrite siblings).
+            from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+            recalculate_branches_for_board.apply_async(
+                args=[board_id],
+                kwargs={
+                    'trigger_event': f'Branch "{branch.name}" created',
+                    'branch_id': branch.id,
+                },
+            )
 
         return JsonResponse({
             'success': True,
@@ -593,8 +890,8 @@ def get_branch_snapshots(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        # Check user is board member
-        if request.user not in board.members.all() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.view_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -633,8 +930,8 @@ def get_branches_comparison(request, board_id, branch_a_id, branch_b_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        # Check user is board member
-        if request.user not in board.members.all() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.view_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch_a = get_object_or_404(ShadowBranch, id=branch_a_id, board=board)
@@ -691,26 +988,247 @@ def get_branches_comparison(request, board_id, branch_a_id, branch_b_id):
 
 @login_required
 @require_POST
-def delete_branch(request, board_id, branch_id):
+@demo_write_guard
+def refresh_branch_scores(request, board_id):
     """
-    API endpoint: Permanently delete a shadow branch and all its snapshots.
+    API endpoint: synchronously recalculate every active shadow branch on
+    this board against the live state, then return.
+
+    Why this exists separately from the Celery-driven recalcs: signal-driven
+    recalcs (task completion, deadline change, team change) run in a worker
+    and can take a few seconds.  Users who move a task and immediately
+    re-open the Shadow Board see stale scores and have no way to tell
+    whether the recalc has finished.  This endpoint lets the UI offer a
+    "Refresh Scores" button that resolves the question on demand.
+
+    AI recommendation generation is skipped here (skip_ai=True) — a Gemini
+    call per branch would add 5-10 seconds of latency to a click the user
+    expects to be near-instant.  Instead we enqueue a background AI backfill
+    for each freshly-written snapshot so the recommendation appears within
+    seconds rather than waiting for an arbitrary later event-driven recalc.
+
+    The recalc lands each branch on the engine's true deterministic value, so
+    clicking with no board change is idempotent — the snapshot dedup means a
+    second click produces no new snapshot and the score stays put.
     """
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        from kanban.tasks.shadow_branch_tasks import (
+            run_branch_recalc_sync, generate_ai_for_branch_snapshot,
+        )
+        result = run_branch_recalc_sync(
+            board.id,
+            trigger_event='Manual refresh',
+            skip_ai=True,
+        )
+
+        # Backfill AI text for the snapshots we just wrote (skip_ai left them
+        # empty) so the "Generating AI analysis…" pending state resolves
+        # quickly instead of lingering until the next heartbeat.
+        for snapshot_id in result.get('snapshot_ids', []):
+            try:
+                generate_ai_for_branch_snapshot.delay(snapshot_id)
+            except Exception:
+                pass
+
+        return JsonResponse({
+            'success': True,
+            'snapshots_created': result.get('snapshots_created', 0),
+            'divergences_logged': result.get('divergences_logged', 0),
+        })
+    except Exception as e:
+        logger.error(f'refresh_branch_scores failed: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def branch_scores_json(request, board_id):
+    """
+    Lightweight read-only endpoint returning the current feasibility score and
+    capture time for every active branch on the board.
+
+    The Shadow Board page polls this for a few seconds after load / after a
+    manual refresh so card numbers settle in place as background recalcs land,
+    instead of the user having to reload to see the value stop moving.
+    """
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    branches = ShadowBranch.objects.filter(
+        board=board, status='active',
+    ).prefetch_related('snapshots')
+
+    scores = []
+    for branch in branches:
+        latest = branch.get_latest_snapshot()
+        if latest is None:
+            continue
+        scores.append({
+            'branch_id': branch.id,
+            'feasibility_score': float(latest.feasibility_score),
+            'captured_at': latest.captured_at.isoformat(),
+            'has_ai': bool(latest.gemini_recommendation),
+        })
+
+    return JsonResponse({'scores': scores})
+
+
+@login_required
+def get_branches_comparison_multi(request, board_id):
+    """
+    API endpoint: Compare an arbitrary number of branches side-by-side.
+
+    Query params:
+        branch_ids: comma-separated list of branch IDs (e.g. "12,15,18,21")
+
+    Returns JSON: {
+        success: True,
+        branches: [
+            {id, name, color, snapshot: {...}, snapshot_missing: bool}, ...
+        ]
+    }
+
+    Branches with no snapshot yet are still included (with `snapshot_missing:
+    True`) so the frontend can render an explanatory cell instead of dropping
+    the column entirely — important for branches that the user just promoted.
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        raw_ids = request.GET.get('branch_ids', '')
+        try:
+            branch_ids = [int(x) for x in raw_ids.split(',') if x.strip().isdigit()]
+        except ValueError:
+            return JsonResponse({'error': 'Invalid branch_ids parameter'}, status=400)
+
+        if len(branch_ids) < 2:
+            return JsonResponse(
+                {'error': 'Provide at least 2 branch IDs in branch_ids'},
+                status=400,
+            )
+
+        # Cap the comparison at 8 branches.  Beyond that the diff table
+        # becomes unreadable on a typical screen, and there's no project-
+        # management use case for staring at 10+ parallel scenarios at once.
+        if len(branch_ids) > 8:
+            return JsonResponse(
+                {'error': 'Comparing more than 8 branches at once is not supported'},
+                status=400,
+            )
+
+        branches_qs = (
+            ShadowBranch.objects
+            .filter(board=board, id__in=branch_ids)
+            .select_related('source_scenario')
+            .prefetch_related('snapshots')
+        )
+        # Preserve caller-supplied ordering so the columns line up with the
+        # checkbox click order in the UI.
+        branches_by_id = {b.id: b for b in branches_qs}
+        ordered = [branches_by_id[bid] for bid in branch_ids if bid in branches_by_id]
+        if len(ordered) != len(branch_ids):
+            return JsonResponse(
+                {'error': 'One or more branch IDs not found on this board'},
+                status=404,
+            )
+
+        result_branches = []
+        for branch in ordered:
+            snapshot = branch.get_latest_snapshot()
+            entry = {
+                'id': branch.id,
+                'name': branch.name,
+                'color': branch.branch_color,
+                'status': branch.status,
+            }
+            if snapshot is None:
+                entry['snapshot_missing'] = True
+                entry['snapshot'] = None
+            else:
+                entry['snapshot_missing'] = False
+                entry['snapshot'] = {
+                    'scope_delta': snapshot.scope_delta,
+                    'team_delta': snapshot.team_delta,
+                    'deadline_delta_weeks': snapshot.deadline_delta_weeks,
+                    'feasibility_score': float(snapshot.feasibility_score),
+                    'projected_completion_date': (
+                        snapshot.projected_completion_date.isoformat()
+                        if snapshot.projected_completion_date else None
+                    ),
+                    'projected_budget_utilization': snapshot.projected_budget_utilization,
+                    'captured_at': snapshot.captured_at.isoformat(),
+                }
+            result_branches.append(entry)
+
+        return JsonResponse({'success': True, 'branches': result_branches})
+
+    except Exception as e:
+        logger.error(f'Error in get_branches_comparison_multi: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+@demo_write_guard
+def delete_branch(request, board_id, branch_id):
+    """
+    API endpoint: Permanently delete a shadow branch and all its snapshots.
+
+    If the deleted branch was committed, all archived branches on the same
+    board are automatically restored to active (since branches are only ever
+    archived as a side-effect of that branch's commit — see commit_branch).
+    Deleting a merely-active (never committed) branch has no bearing on why
+    other branches are archived, so it must not trigger a restore.
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
         branch_name = branch.name
+        was_committed = branch.status == 'committed'
+
         branch.delete()
 
+        # Only a committed branch's deletion should restore archived siblings
+        # so the board isn't left with nothing to work with.
+        restored_count = 0
+        if was_committed:
+            archived_qs = ShadowBranch.objects.filter(board=board, status='archived')
+            restored_count = archived_qs.count()
+            if restored_count:
+                archived_qs.update(status='active')
+                logger.info(
+                    f'Restored {restored_count} archived branch(es) after deleting '
+                    f'active/committed branch "{branch_name}" (id={branch_id}) '
+                    f'by {request.user.username}'
+                )
+
         logger.info(f'Branch "{branch_name}" (id={branch_id}) deleted by {request.user.username}')
-        return JsonResponse({
+
+        response_data = {
             'success': True,
             'message': f'Branch "{branch_name}" deleted.',
             'redirect_url': f'/boards/{board_id}/shadow/',
-        })
+            'restored_count': restored_count,
+        }
+        if restored_count:
+            response_data['restore_message'] = (
+                f'{restored_count} archived branch{"es were" if restored_count > 1 else " was"} '
+                f'automatically restored to active.'
+            )
+        return JsonResponse(response_data)
     except Exception as e:
         logger.error(f'Error deleting branch {branch_id}: {e}', exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
@@ -718,14 +1236,158 @@ def delete_branch(request, board_id, branch_id):
 
 @login_required
 @require_POST
-def toggle_star_branch(request, board_id, branch_id):
+@demo_write_guard
+def link_scenario_to_branch(request, board_id, branch_id):
     """
-    API endpoint: Toggle the is_starred flag on a branch.
+    API endpoint: Link (or unlink) a saved WhatIfScenario to an existing branch.
+
+    POST body (JSON):
+    - scenario_id: int ID of the scenario to link, or null/empty to unlink
+
+    On link: updates branch.source_scenario and creates a new snapshot from the
+    scenario's input_parameters, then triggers a recalculation.
+    On unlink: clears branch.source_scenario only (existing snapshots are kept).
     """
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if request.user not in board.members.all() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
+
+        try:
+            body = json.loads(request.body)
+            scenario_id = body.get('scenario_id')
+        except (json.JSONDecodeError, AttributeError):
+            scenario_id = request.POST.get('scenario_id')
+
+        if not scenario_id:
+            # Unlink
+            branch.source_scenario = None
+            branch.save(update_fields=['source_scenario'])
+            return JsonResponse({'success': True, 'linked': False, 'message': 'Scenario unlinked from branch.'})
+
+        scenario = get_object_or_404(WhatIfScenario, id=scenario_id, board=board)
+        branch.source_scenario = scenario
+        branch.save(update_fields=['source_scenario'])
+
+        # Trigger recalculation — extract_branch_params now reads directly from
+        # source_scenario.input_parameters, so no zero-score seed snapshot is needed.
+        # Scope the recalc to this branch only: linking a scenario to one
+        # branch must not nudge the scores of unrelated branches on the board.
+        from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+        recalculate_branches_for_board.apply_async(
+            args=[board_id],
+            kwargs={
+                'trigger_event': f'Linked scenario "{scenario.name}" to branch "{branch.name}"',
+                'branch_id': branch.id,
+            },
+        )
+
+        return JsonResponse({
+            'success': True,
+            'linked': True,
+            'scenario_name': scenario.name,
+            'message': f'Scenario "{scenario.name}" linked to branch. Recalculating...',
+        })
+
+    except Exception as e:
+        logger.error(f'Error linking scenario to branch {branch_id}: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+@demo_write_guard
+def restore_all_archived_branches(request, board_id):
+    """
+    API endpoint: Restore all archived branches on a board back to active.
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        archived_qs = ShadowBranch.objects.filter(board=board, status='archived')
+        restored_ids = list(archived_qs.values_list('id', flat=True))
+        count = len(restored_ids)
+        archived_qs.update(status='active')
+
+        # Recalculate each restored branch against the live board (scoped per
+        # branch, AI included) so none of them linger on a stale snapshot.
+        from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+        for restored_id in restored_ids:
+            recalculate_branches_for_board.apply_async(
+                args=[board.id],
+                kwargs={'trigger_event': 'Branch restored', 'branch_id': restored_id},
+                countdown=2,
+            )
+
+        logger.info(f'All {count} archived branch(es) restored by {request.user.username} on board {board_id}')
+        return JsonResponse({
+            'success': True,
+            'restored_count': count,
+            'message': f'{count} archived branch{"es" if count != 1 else ""} restored to active.',
+        })
+    except Exception as e:
+        logger.error(f'Error restoring all archived branches: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+@demo_write_guard
+def restore_branch(request, board_id, branch_id):
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
+
+        if branch.status != 'archived':
+            return JsonResponse({'error': 'Only archived branches can be restored'}, status=400)
+
+        branch.status = 'active'
+        branch.save(update_fields=['status'])
+
+        # Recalculate the restored branch against the live board right away so
+        # it doesn't display a stale snapshot (and a missing AI recommendation)
+        # until some unrelated event happens to sweep it.  Scope to THIS branch
+        # only — recalculating siblings here would re-baseline their scores
+        # against the live board, which users perceive as "scores changed on
+        # their own".  This path leaves skip_ai unset, so AI text is generated.
+        from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+        recalculate_branches_for_board.apply_async(
+            args=[board.id],
+            kwargs={'trigger_event': 'Branch restored', 'branch_id': branch.id},
+            countdown=2,
+        )
+
+        logger.info(f'Branch "{branch.name}" (id={branch_id}) restored by {request.user.username}')
+        return JsonResponse({
+            'success': True,
+            'message': f'Branch "{branch.name}" restored to active.',
+        })
+    except Exception as e:
+        logger.error(f'Error restoring branch {branch_id}: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+@demo_write_guard
+def toggle_star_branch(request, board_id, branch_id):
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)

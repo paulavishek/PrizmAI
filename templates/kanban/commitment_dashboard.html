@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static feature_guide_tags %}
 
 {% block title %}Commitment Protocols — {{ board.name }}{% endblock %}
 
@@ -13,7 +13,7 @@
         box-shadow: 0 4px 12px rgba(0,0,0,.15);
         transform: translateY(-2px);
     }
-    .conf-bar-wrap { background: #e9ecef; border-radius: 4px; height: 8px; }
+    .conf-bar-wrap { background: var(--bg-tertiary); border-radius: 4px; height: 8px; }
     .conf-bar { height: 8px; border-radius: 4px; transition: width .4s ease; }
     .market-badge { font-size: .75rem; }
     .status-active   { --conf-color: #198754; }
@@ -27,19 +27,36 @@
 {% block content %}
 <div class="container-fluid py-4">
 
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+      <li class="breadcrumb-item active">Commitments</li>
+    </ol>
+  </nav>
+
+  <div class="mb-3">
+    <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back">
+      <i class="fas fa-arrow-left"></i> Back to Board
+    </a>
+  </div>
+
   <!-- View Mode Tabs -->
   <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
     <li class="nav-item"><a class="nav-link" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+    {% if features.show_gantt %}
     <li class="nav-item"><a class="nav-link" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
+    {% endif %}
     <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
-    <li class="nav-item"><a class="nav-link active" href="{% url 'commitment_dashboard' board.id %}"><i class="fas fa-shield-halved me-1"></i>Commitments</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'board_list_view' board.id %}"><i class="fas fa-list me-1"></i>List</a></li>
   </ul>
 
   <!-- Header row -->
   <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
       <h2 class="mb-0">
-        <i class="bi bi-shield-check me-2 text-primary"></i>Living Commitment Protocols
+        <i class="bi bi-shield-check me-2 text-primary"></i>Living Commitment Protocols {% feature_help "commitments" %}
       </h2>
       <p class="text-muted mb-0">Anti-roadmap confidence tracking for <strong>{{ board.name }}</strong></p>
     </div>
@@ -116,7 +133,7 @@
             </span>
             {% endif %}
             <span class="badge market-badge bg-light text-dark border">
-              <i class="bi bi-person me-1"></i>{{ c.created_by.get_full_name|default:c.created_by.username }}
+              <i class="bi bi-person me-1"></i>{% if c.created_by %}{{ c.created_by.get_full_name|default:c.created_by.username }}{% else %}Unknown{% endif %}
             </span>
             {% if c.decay_model %}
             <span class="badge market-badge bg-light text-dark border">

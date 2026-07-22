@@ -4,6 +4,7 @@ AI-powered task priority classification with explainability
 """
 import logging
 import pickle
+import re
 from datetime import datetime
 from django.utils import timezone
 from django.db.models import Count, Q
@@ -222,7 +223,7 @@ class PrioritySuggestionService:
             board = task._board
         
         if board:
-            team_size = board.members.count()
+            team_size = board.memberships.count()
             if team_size > 0:
                 total_open_tasks = Task.objects.filter(
                     column__board=board,
@@ -399,37 +400,52 @@ class PrioritySuggestionService:
         score = 0
         max_score = 25  # Updated to reflect extended scoring: due-date tiers, duration, complexity tiers
         factors = []
+        # Parallel to `factors`: the score points each factor actually contributed.
+        # Used to derive honest contribution percentages (not a positional ramp).
+        factor_points = []
+
+        def add_factor(text, pts=0):
+            factors.append(text)
+            factor_points.append(pts)
+
         no_due_date = True  # Track whether a due date was provided
-        
+
         # Semantic keyword analysis (0-4 points) - Check FIRST before due date
         high_impact_keywords = {
+            # Incident / severity vocabulary (highest weight — a live incident is urgent)
+            'oom': 4, 'out of memory': 4, 'crash': 4, 'crashes': 4, 'memory leak': 4,
+            'data bleed': 4, 'bleed': 3, 'leak': 3, 'leakage': 3, 'downtime': 4,
+            'outage': 3, 'deadlock': 3, 'data corruption': 4, 'data loss': 4,
+            'hang': 3, 'timeout': 3, 'error spike': 3, '5xx': 3, '502': 3, '503': 3, '500': 3,
+            # Existing generic ops/agile vocabulary
             'critical': 4, 'urgent': 4, 'emergency': 4, 'security': 4, 'breach': 4,
-            'migration': 3, 'database': 3, 'deployment': 3, 'production': 3, 'outage': 3,
-            'payment': 3, 'compliance': 3, 'audit': 3, 'legal': 3, 'data loss': 4,
+            'migration': 3, 'database': 3, 'deployment': 3, 'production': 3,
+            'payment': 3, 'compliance': 3, 'audit': 3, 'legal': 3,
             'bug': 2, 'performance': 2, 'optimization': 2, 'refactor': 1, 'integration': 2,
             'api': 2, 'authentication': 3, 'authorization': 3, 'backup': 3
         }
-        
+
         text_to_analyze = f"{task.title} {task.description or ''}".lower()
-        
+
         # Also analyze risk indicators, mitigation strategies, and complexity risks if available
         if hasattr(task, '_advanced_context'):
             text_to_analyze += f" {task._advanced_context.get('risk_indicators_text', '')}".lower()
             text_to_analyze += f" {task._advanced_context.get('mitigation_strategies_text', '')}".lower()
             text_to_analyze += f" {task._advanced_context.get('complexity_risks_text', '')}".lower()
-        
+
         keyword_score = 0
         keyword_matches = []
-        
+
         for keyword, weight in high_impact_keywords.items():
-            if keyword in text_to_analyze:
+            # Word-boundary match so "api" doesn't fire inside "capital"/"rapid".
+            if re.search(r'\b' + re.escape(keyword) + r'\b', text_to_analyze):
                 keyword_score = max(keyword_score, weight)  # Take highest match
-                keyword_matches.append(keyword.title())
-        
+                keyword_matches.append(keyword.upper() if len(keyword) <= 3 else keyword.title())
+
         if keyword_score > 0:
             score += keyword_score
             if keyword_matches:
-                factors.append(f"High-impact keywords detected: {', '.join(keyword_matches[:3])}")
+                add_factor(f"High-impact keywords detected: {', '.join(keyword_matches[:3])}", keyword_score)
         
         # Due date urgency (0-5 points, with -1 penalty for far-future dates)
         days_until_due = None
@@ -473,30 +489,31 @@ class PrioritySuggestionService:
 
             if days_until_due < 0:
                 score += 5
-                factors.append("Task is overdue")
+                add_factor("Task is overdue", 5)
             elif days_until_due < 1:
                 score += 4
-                factors.append("Due within 24 hours" if work_window_days is None else _due_label(days_from_today, work_window_days))
+                add_factor("Due within 24 hours" if work_window_days is None else _due_label(days_from_today, work_window_days), 4)
             elif days_until_due < 3:
                 score += 3
-                factors.append("Due within 3 days" if work_window_days is None else _due_label(days_from_today, work_window_days))
+                add_factor("Due within 3 days" if work_window_days is None else _due_label(days_from_today, work_window_days), 3)
             elif days_until_due < 7:
                 score += 2
-                factors.append("Due within 7 days" if work_window_days is None else _due_label(days_from_today, work_window_days))
+                add_factor("Due within 7 days" if work_window_days is None else _due_label(days_from_today, work_window_days), 2)
             elif days_until_due < 14:
                 score += 1
-                factors.append(_due_label(days_from_today, work_window_days))
+                add_factor(_due_label(days_from_today, work_window_days), 1)
             elif days_until_due < 60:
                 # Neutral — upcoming but not imminent
-                factors.append(_due_label(days_from_today, work_window_days))
+                add_factor(_due_label(days_from_today, work_window_days), 0)
             else:
                 # Long-term deadline reduces urgency
                 score -= 1
                 label = _due_label(days_from_today, work_window_days)
-                factors.append(f"{label} (long-term deadline)")
+                add_factor(f"{label} (long-term deadline)", -1)
         else:
-            # No due date: urgency cannot be determined
-            factors.append("No due date set — urgency cannot be assessed")
+            # No due date: the deadline component of urgency is unavailable, but the
+            # overall urgency is still assessed from risk/impact/keyword signals.
+            add_factor("Due date missing — deadline urgency score capped", 0)
 
         # === TASK DURATION FACTOR (-0 to -2 points) ===
         # A very long project span signals low short-term urgency regardless of complexity
@@ -516,24 +533,23 @@ class PrioritySuggestionService:
             duration_days = (ed - sd).total_seconds() / 86400
             if duration_days > 180:
                 score -= 2
-                factors.append(f"Long-term project span ({int(duration_days)} days — low short-term urgency)")
+                add_factor(f"Long-term project span ({int(duration_days)} days — low short-term urgency)", -2)
             elif duration_days > 90:
                 score -= 1
-                factors.append(f"Extended project timeline ({int(duration_days)} days)")
-        
-        # Blocking tasks (0-3 points) - Check both saved tasks and advanced context
-        blocking_count = 0
+                add_factor(f"Extended project timeline ({int(duration_days)} days)", -1)
+
+        # Timeline dependencies (informational only). `task.dependencies` = tasks that
+        # must finish BEFORE this one, i.e. the tasks this task is BLOCKED BY. Being
+        # blocked does NOT make this task more urgent to start, so it adds no points —
+        # it's surfaced as context, with the correct direction in its label.
+        blocked_by_count = 0
         if task.pk:
-            blocking_count = task.dependencies.count()
+            blocked_by_count = task.dependencies.count()
         elif hasattr(task, '_advanced_context'):
-            blocking_count = task._advanced_context.get('dependencies_count', 0)
-        
-        if blocking_count >= 3:
-            score += 3
-            factors.append(f"Blocks {blocking_count} tasks")
-        elif blocking_count >= 1:
-            score += 2
-            factors.append(f"Blocks {blocking_count} tasks")
+            blocked_by_count = task._advanced_context.get('dependencies_count', 0)
+
+        if blocked_by_count >= 1:
+            add_factor(f"Blocked by {blocked_by_count} task{'s' if blocked_by_count != 1 else ''}", 0)
         
         # Complexity (0-3 points) - Use AI-analyzed complexity if available
         complexity = task.complexity_score
@@ -562,23 +578,23 @@ class PrioritySuggestionService:
         complexity_source = "AI-analyzed" if ai_complexity else "Manual"
         if effective_complexity >= 9:
             score += 3
-            factors.append(f"Very high complexity ({effective_complexity}/10, {complexity_source})")
+            add_factor(f"Very high complexity ({effective_complexity}/10, {complexity_source})", 3)
         elif effective_complexity >= 7:
             score += 2
-            factors.append(f"High complexity ({effective_complexity}/10, {complexity_source})")
+            add_factor(f"High complexity ({effective_complexity}/10, {complexity_source})", 2)
         elif effective_complexity >= 5:
             score += 1
-            factors.append(f"Medium complexity ({effective_complexity}/10)")
-        
+            add_factor(f"Medium complexity ({effective_complexity}/10)", 1)
+
         # Additional points for breakdown recommendation (indicates very complex task)
         if is_breakdown_recommended:
             score += 1
-            factors.append(f"AI recommends breaking into {subtasks_count} subtasks")
-        
+            add_factor(f"AI recommends breaking into {subtasks_count} subtasks", 1)
+
         # Additional consideration for complexity-related risks
         if complexity_risk_count >= 2:
             score += 1
-            factors.append(f"Multiple complexity risks identified ({complexity_risk_count})")
+            add_factor(f"Multiple complexity risks identified ({complexity_risk_count})", 1)
         
         # === ADVANCED RISK ASSESSMENT (0-4 points) ===
         # Check risk_likelihood and risk_impact first (more granular)
@@ -591,23 +607,23 @@ class PrioritySuggestionService:
             combined_risk = risk_likelihood * risk_impact
             if combined_risk >= 6:  # High (6-9)
                 score += 3
-                factors.append(f"High risk assessment (likelihood × impact = {combined_risk})")
+                add_factor(f"High risk assessment (likelihood × impact = {combined_risk})", 3)
             elif combined_risk >= 4:  # Medium (4-5)
                 score += 2
-                factors.append(f"Medium risk assessment (score: {combined_risk})")
+                add_factor(f"Medium risk assessment (score: {combined_risk})", 2)
             elif combined_risk >= 2:  # Low-Medium (2-3)
                 score += 1
-                factors.append(f"Low-medium risk (score: {combined_risk})")
+                add_factor(f"Low-medium risk (score: {combined_risk})", 1)
         elif risk_level:
             # Fallback to risk_level if likelihood/impact not set
             risk_level_scores = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1}
             risk_level_score = risk_level_scores.get(risk_level.lower(), 0)
             if risk_level_score >= 3:
                 score += risk_level_score
-                factors.append(f"Risk level: {risk_level.title()}")
+                add_factor(f"Risk level: {risk_level.title()}", risk_level_score)
             elif risk_level_score >= 1:
                 score += risk_level_score
-                factors.append(f"Risk level: {risk_level.title()}")
+                add_factor(f"Risk level: {risk_level.title()}", risk_level_score)
         else:
             # Original risk_score fallback (0-2 points)
             risk = task.risk_score
@@ -617,13 +633,13 @@ class PrioritySuggestionService:
                         risk = int(risk)
                     except (ValueError, TypeError):
                         risk = 0
-                
+
                 if risk >= 7:
                     score += 2
-                    factors.append("High risk score")
+                    add_factor("High risk score", 2)
                 elif risk >= 4:
                     score += 1
-                    factors.append("Medium risk score")
+                    add_factor("Medium risk score", 1)
         
         # === WORKLOAD IMPACT (0-2 points) ===
         workload_impact = getattr(task, 'workload_impact', None)
@@ -632,12 +648,12 @@ class PrioritySuggestionService:
             workload_score = workload_scores.get(workload_impact.lower(), 0)
             if workload_score > 0:
                 score += workload_score
-                factors.append(f"Workload impact: {workload_impact.title()}")
-        
+                add_factor(f"Workload impact: {workload_impact.title()}", workload_score)
+
         # Collaboration (0-1 point)
         if task.collaboration_required:
             score += 1
-            factors.append("Requires collaboration")
+            add_factor("Requires collaboration", 1)
         
         # === SUBTASK/HIERARCHY CONTEXT (0-1 point) ===
         is_subtask = False
@@ -648,27 +664,29 @@ class PrioritySuggestionService:
         
         if is_subtask:
             # Subtasks might inherit urgency but are generally more focused
-            factors.append("Part of larger task (subtask)")
+            add_factor("Part of larger task (subtask)", 0)
         
         # Determine priority based on recalibrated thresholds (max_score = 25)
         # Proportional bands: low <5 (0-20%), medium 5-8 (20-36%), high 9-14 (36-56%), urgent >=15 (60%+)
         if score >= 15:
             priority = 'urgent'
-            confidence = 0.82
         elif score >= 9:
             priority = 'high'
-            confidence = 0.77
         elif score >= 5:
             priority = 'medium'
-            confidence = 0.72
         else:
             priority = 'low'
-            confidence = 0.67
+
+        # Confidence is DERIVED from the actual score so the badge and the "X/25"
+        # tell one consistent story (previously it was a per-band constant, e.g.
+        # any 9-14 score showed 77%, which looked disconnected from the score).
+        score_ratio = max(0, score) / max_score if max_score else 0
+        confidence = round(min(0.95, max(0.40, 0.45 + 0.50 * score_ratio)), 2)
 
         # Cap at 'high' and reduce confidence when no due date is provided
         # (cannot reliably determine urgency without a deadline)
         if no_due_date:
-            confidence = max(0.45, confidence - 0.10)
+            confidence = max(0.40, round(confidence - 0.10, 2))
             if priority == 'urgent':
                 priority = 'high'
         
@@ -705,13 +723,17 @@ class PrioritySuggestionService:
             explanation += f"AI detected high complexity ({ai_complexity}/10). "
         
         if not factors:
-            factors.append("No strong indicators detected")
-        
-        # Calculate contribution percentages
+            add_factor("No strong indicators detected", 0)
+
+        # Contribution percentages reflect each factor's REAL share of the positive
+        # score (not a positional 40/32/24 ramp), so the bullets reconcile with the
+        # X/25 total. Factors are ordered most-impactful-first; neutral/negative
+        # context factors (no due date, blocked-by, long-term span) show 0%.
+        total_positive = sum(p for p in factor_points if p > 0) or 1
+        paired = sorted(zip(factors, factor_points), key=lambda fp: fp[1], reverse=True)
         top_factors_with_pct = []
-        for i, f in enumerate(factors[:5]):
-            # Estimate contribution based on order and total factors
-            pct = max(10, 40 - (i * 8)) if factors else 0
+        for f, pts in paired[:5]:
+            pct = round(max(0, pts) / total_positive * 100)
             top_factors_with_pct.append({
                 'description': f,
                 'contribution_percentage': pct,

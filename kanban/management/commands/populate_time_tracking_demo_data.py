@@ -5,9 +5,9 @@ This creates comprehensive time entries for demo users so that the
 Time Tracking Dashboard and My Timesheet features show demo data.
 
 Demo data is created for:
-- alex_chen_demo
-- sam_rivera_demo  
-- jordan_taylor_demo
+- priya.sharma
+- marcus.chen  
+- elena.vasquez
 
 The entries are spread over the last 30 days to show realistic time tracking
 patterns with activity every day.
@@ -24,6 +24,8 @@ from django.db.models import Q
 from datetime import timedelta
 from decimal import Decimal
 import random
+
+from accounts.demo_personas import DEMO_PERSONAS
 
 from accounts.models import Organization
 from kanban.models import Board, Task
@@ -48,28 +50,28 @@ class Command(BaseCommand):
         # Get demo organization
         try:
             demo_org = Organization.objects.get(is_demo=True, name='Demo - Acme Corporation')
-            self.stdout.write(self.style.SUCCESS(f'✓ Found organization: {demo_org.name}'))
+            self.stdout.write(self.style.SUCCESS(f'[OK] Found organization: {demo_org.name}'))
         except Organization.DoesNotExist:
-            self.stdout.write(self.style.ERROR('✗ Demo - Acme Corporation not found!'))
+            self.stdout.write(self.style.ERROR('[FAIL] Demo - Acme Corporation not found!'))
             self.stdout.write('  Please run: python manage.py create_demo_organization')
             return
 
         # Get demo users
         demo_users = {
-            'alex': User.objects.filter(username='alex_chen_demo').first(),
-            'sam': User.objects.filter(username='sam_rivera_demo').first(),
-            'jordan': User.objects.filter(username='jordan_taylor_demo').first(),
+            'alex': User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first(),
+            'sam': User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first(),
+            'jordan': User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first(),
         }
         
         # Filter out None values
         demo_users = {k: v for k, v in demo_users.items() if v is not None}
         
         if not demo_users:
-            self.stdout.write(self.style.ERROR('✗ No demo users found!'))
+            self.stdout.write(self.style.ERROR('[FAIL] No demo users found!'))
             self.stdout.write('  Please run: python manage.py create_demo_organization')
             return
 
-        self.stdout.write(self.style.SUCCESS(f'✓ Found {len(demo_users)} demo users'))
+        self.stdout.write(self.style.SUCCESS(f'[OK] Found {len(demo_users)} demo users'))
 
         # Get demo boards and tasks
         demo_boards = Board.objects.filter(organization=demo_org)
@@ -81,7 +83,7 @@ class Command(BaseCommand):
         self.stdout.write(f'  Found {demo_tasks.count()} demo tasks')
 
         if demo_tasks.count() == 0:
-            self.stdout.write(self.style.ERROR('✗ No demo tasks found!'))
+            self.stdout.write(self.style.ERROR('[FAIL] No demo tasks found!'))
             self.stdout.write('  Please run: python manage.py populate_all_demo_data')
             return
 
@@ -95,7 +97,7 @@ class Command(BaseCommand):
         # Summary
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS('=' * 80))
-        self.stdout.write(self.style.SUCCESS('✓ TIME TRACKING DEMO DATA COMPLETE'))
+        self.stdout.write(self.style.SUCCESS('[OK] TIME TRACKING DEMO DATA COMPLETE'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
         self.stdout.write(f'  Time entries created: {stats["entries"]}')
         self.stdout.write(f'  Users with entries: {stats["users"]}')

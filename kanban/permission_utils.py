@@ -164,7 +164,7 @@ def _legacy_user_has_board_permission(user, board, permission):
         from kanban.models import Board as BoardModel
         user_has_demo_org_access = BoardModel.objects.filter(
             organization=board.organization,
-            members=user
+            memberships__user=user
         ).exists()
         if user_has_demo_org_access:
             return True

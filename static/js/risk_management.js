@@ -72,15 +72,9 @@ const RiskManagement = (() => {
         const boardId = document.querySelector('[data-board-id]')?.dataset.boardId;
 
         const assessBtn = taskElement.querySelector('[data-assess-risk]');
-        const originalContent = assessBtn?.innerHTML;
+        const busy = assessBtn ? PrizmLoading.buttonBusy(assessBtn, { label: 'Analyzing…' }) : null;
 
         try {
-            // Show loading state
-            if (assessBtn) {
-                assessBtn.disabled = true;
-                assessBtn.innerHTML = '<span class="spinner-border spinner-border-sm mr-2"></span>Analyzing...';
-            }
-
             const response = await fetch(CONFIG.apiEndpoints.calculateRisk, {
                 method: 'POST',
                 headers: {
@@ -113,10 +107,7 @@ const RiskManagement = (() => {
             console.error('Error assessing risk:', error);
             showNotification('Failed to assess risk. Please try again.', 'danger');
         } finally {
-            if (assessBtn) {
-                assessBtn.disabled = false;
-                assessBtn.innerHTML = originalContent;
-            }
+            if (busy) busy.done();
         }
     }
 
@@ -432,14 +423,9 @@ const RiskManagement = (() => {
         const riskAnalysis = JSON.parse(taskElement.dataset.riskAnalysis || '{}');
 
         const mitigationBtn = taskElement.querySelector('[data-get-mitigation]');
-        const originalContent = mitigationBtn?.innerHTML;
+        const busy = mitigationBtn ? PrizmLoading.buttonBusy(mitigationBtn, { label: 'Generating…' }) : null;
 
         try {
-            if (mitigationBtn) {
-                mitigationBtn.disabled = true;
-                mitigationBtn.innerHTML = '<span class="spinner-border spinner-border-sm mr-2"></span>Generating...';
-            }
-
             const response = await fetch(CONFIG.apiEndpoints.getMitigation, {
                 method: 'POST',
                 headers: {
@@ -472,10 +458,7 @@ const RiskManagement = (() => {
             console.error('Error getting mitigation strategies:', error);
             showNotification('Failed to get mitigation strategies. Please try again.', 'danger');
         } finally {
-            if (mitigationBtn) {
-                mitigationBtn.disabled = false;
-                mitigationBtn.innerHTML = originalContent;
-            }
+            if (busy) busy.done();
         }
     }
 

@@ -16,6 +16,8 @@ from django.views.decorators.http import require_http_methods, require_POST
 from kanban.models import Board
 from kanban.whatif_models import WhatIfScenario
 from kanban.utils.whatif_engine import WhatIfEngine
+from kanban.decorators import demo_write_guard, demo_ai_guard
+from kanban.shadow_views import BRANCH_COLOR_PALETTE
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,11 @@ logger = logging.getLogger(__name__)
 def whatif_dashboard(request, board_id):
     """Render the What-If Scenario Analyzer page with current board state."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     engine = WhatIfEngine(board)
     baseline = engine._capture_baseline()
 
@@ -44,15 +51,21 @@ def whatif_dashboard(request, board_id):
         'baseline_json': json.dumps(baseline),
         'saved_scenarios': saved_scenarios,
         'predicted_date_obj': predicted_date_obj,
+        'predefined_colors': BRANCH_COLOR_PALETTE,
     }
     return render(request, 'kanban/whatif_dashboard.html', context)
 
 
 @login_required
 @require_POST
+@demo_ai_guard
 def whatif_simulate(request, board_id):
     """Run a what-if simulation and return JSON results."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     try:
         body = json.loads(request.body)
@@ -66,6 +79,22 @@ def whatif_simulate(request, board_id):
     }
 
     engine = WhatIfEngine(board)
+
+    # Feed the same live velocity_health signal that Shadow Board promotion
+    # uses (kanban/tasks/shadow_branch_tasks.py), so a scenario's feasibility
+    # score doesn't jump the moment it's promoted to a branch. Baseline is
+    # captured once per request, so the score stays deterministic within
+    # this simulation call.
+    from kanban.tasks.shadow_branch_tasks import (
+        compute_actual_7d_velocity, MIN_BASELINE_VELOCITY,
+    )
+    baseline_velocity = float(engine._capture_baseline().get('velocity_per_week') or 0.0)
+    if baseline_velocity > 0:
+        baseline_velocity = max(baseline_velocity, MIN_BASELINE_VELOCITY)
+        params['velocity_health'] = compute_actual_7d_velocity(board) / baseline_velocity
+    else:
+        params['velocity_health'] = 1.0
+
     results = engine.simulate(params)
 
     # Optional AI analysis
@@ -78,9 +107,14 @@ def whatif_simulate(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def whatif_save(request, board_id):
     """Persist a what-if scenario for later comparison."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     try:
         body = json.loads(request.body)
@@ -130,6 +164,10 @@ def whatif_history(request, board_id):
     """Return saved scenarios for a board as JSON."""
     board = get_object_or_404(Board, id=board_id)
 
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     scenarios = WhatIfScenario.objects.filter(board=board).order_by('-is_starred', '-created_at')[:20]
     data = []
     for s in scenarios:
@@ -145,7 +183,7 @@ def whatif_history(request, board_id):
             'input_parameters': params,
             'delay_probability': projected.get('delay_probability', '—'),
             'risk_level': projected.get('risk_level', '—'),
-            'feasibility_score': results.get('feasibility_score', '—'),
+            'feasibility_score': round(results.get('feasibility_score', 0) * 100) if isinstance(results.get('feasibility_score'), (int, float)) else '—',
         })
 
     return JsonResponse({'success': True, 'scenarios': data})
@@ -153,8 +191,15 @@ def whatif_history(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def whatif_delete(request, board_id, scenario_id):
     """Delete a saved what-if scenario."""
+    board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     scenario = get_object_or_404(
         WhatIfScenario, id=scenario_id, board_id=board_id,
     )

@@ -17,7 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Organization, UserProfile
-from kanban.models import Board, Column, Task, TaskLabel
+from kanban.models import Board, Column, Task, TaskLabel, BoardMembership
 
 
 class BoardViewTests(TestCase):
@@ -47,7 +47,7 @@ class BoardViewTests(TestCase):
             organization=self.org,
             created_by=self.user
         )
-        self.board.members.add(self.user)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user, defaults={'role': 'member'})
     
     def test_board_list_view_requires_login(self):
         """Test board list view requires authentication"""
@@ -168,7 +168,7 @@ class BoardViewTests(TestCase):
             organization=self.org,
             is_admin=False
         )
-        self.board.members.add(non_admin)
+        BoardMembership.objects.get_or_create(board=self.board, user=non_admin, defaults={'role': 'member'})
         
         self.client.login(username='nonadmin', password='testpass123')
         response = self.client.get(
@@ -237,7 +237,7 @@ class TaskViewTests(TestCase):
             organization=self.org,
             created_by=self.user
         )
-        self.board.members.add(self.user)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user, defaults={'role': 'member'})
         self.column = Column.objects.create(
             name='To Do',
             board=self.board,
@@ -336,7 +336,7 @@ class TaskViewTests(TestCase):
             email='user2@example.com',
             password='testpass123'
         )
-        self.board.members.add(user2)
+        BoardMembership.objects.get_or_create(board=self.board, user=user2, defaults={'role': 'member'})
         
         self.client.login(username='testuser', password='testpass123')
         data = {
@@ -393,7 +393,7 @@ class ColumnViewTests(TestCase):
             organization=self.org,
             created_by=self.user
         )
-        self.board.members.add(self.user)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user, defaults={'role': 'member'})
     
     def test_column_create_view_post(self):
         """Test creating column"""

@@ -12,7 +12,7 @@ from rest_framework import status
 from unittest.mock import patch, MagicMock
 
 # Import models from kanban app
-from .models import Board, Column, Task, Comment, TaskLabel, TaskActivity
+from .models import Board, Column, Task, Comment, TaskLabel, TaskActivity, BoardMembership
 from accounts.models import Organization, UserProfile
 
 
@@ -81,12 +81,12 @@ class BoardTestCase(TestCase):
         )
         
         # Add collaborator
-        board.members.add(self.collaborator)
-        self.assertIn(self.collaborator, board.members.all())
+        BoardMembership.objects.get_or_create(board=board, user=self.collaborator, defaults={'role': 'member'})
+        self.assertTrue(board.memberships.filter(user=self.collaborator).exists())
         
         # Remove member
-        board.members.remove(self.collaborator)
-        self.assertNotIn(self.collaborator, board.members.all())
+        BoardMembership.objects.filter(board=board, user=self.collaborator).delete()
+        self.assertFalse(board.memberships.filter(user=self.collaborator).exists())
     
     def test_board_deletion_cascade(self):
         """Test that deleting a board cascades properly"""
@@ -694,7 +694,7 @@ class LeanSixSigmaIntegrationTestCase(TestCase):
             organization=self.organization,
             created_by=self.user
         )
-        self.vsm_board.members.add(self.team_member)
+        BoardMembership.objects.get_or_create(board=self.vsm_board, user=self.team_member, defaults={'role': 'member'})
         
         # Create DMAIC columns
         self.setup_dmaic_columns()
@@ -813,7 +813,7 @@ class PrioritySuggestionServiceTest(TestCase):
             organization=self.organization,
             created_by=self.user
         )
-        self.board.members.add(self.user)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user, defaults={'role': 'member'})
         
         self.column = Column.objects.create(name='To Do', board=self.board, position=0)
         self.service = PrioritySuggestionService()

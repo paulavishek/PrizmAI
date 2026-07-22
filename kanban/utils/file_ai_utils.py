@@ -112,16 +112,19 @@ Rules:
 
     # ── Call Gemini ───────────────────────────────────────────────────────────
     try:
-        from ai_assistant.utils.ai_clients import GeminiClient
-        client = GeminiClient()
-        result = client.get_response(
+        from ai_assistant.utils.ai_router import AIRouter
+        router = AIRouter()
+        # Escape hatch: genuinely large documents get the premium long-context model
+        # (gemini-2.5-flash); everything else stays on the economical default tier.
+        is_large_doc = len(text) > 9_500
+        result = router.complete(
             prompt,
-            task_complexity='complex',
-            temperature=0.3,
-            cache_operation='file_analysis',
+            user=None,
+            complexity='premium' if is_large_doc else 'complex',
+            feature='file_attachment_analysis',
         )
 
-        raw = result.get('content', '')
+        raw = result.get('text', '')
         if result.get('error') and not raw:
             return {
                 'summary': '',

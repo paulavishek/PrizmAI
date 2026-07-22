@@ -15,9 +15,9 @@
             <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-sm btn-outline-primary">
                 <i class="fas fa-dollar-sign"></i> Budget Dashboard
             </a>
-            <button onclick="goBack()" class="btn btn-sm btn-outline-secondary">
+            <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back btn-sm">
                 <i class="fas fa-arrow-left"></i> Back
-            </button>
+            </a>
         </div>
     </div>
 
@@ -237,11 +237,15 @@ function exportToCSV() {
     const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
     csv.push(headers.join(','));
     
+    // Neutralise CSV/formula injection: a cell starting with = + - @ (or tab/CR)
+    // is treated as a formula by spreadsheet apps. Prefix it with a single quote.
+    const csvSafe = (s) => (/^[=+\-@\t\r]/.test(s) ? "'" + s : s);
+
     // Get rows
     const rows = table.querySelectorAll('tbody tr');
     rows.forEach(row => {
         const cols = Array.from(row.querySelectorAll('td')).map(td => {
-            return '"' + td.textContent.trim().replace(/"/g, '""') + '"';
+            return '"' + csvSafe(td.textContent.trim()).replace(/"/g, '""') + '"';
         });
         csv.push(cols.join(','));
     });

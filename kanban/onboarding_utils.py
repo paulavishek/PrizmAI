@@ -56,8 +56,10 @@ def commit_onboarding_workspace(user, preview):
         Mission,
         Strategy,
         Board,
+        BoardMembership,
         Column,
         Task,
+        Workspace,
     )
 
     data = preview.edited_data if preview.edited_data else preview.generated_data
@@ -79,16 +81,52 @@ def commit_onboarding_workspace(user, preview):
 
     org = getattr(user, 'profile', None) and user.profile.organization
 
+    # Auto-create an Organization if the user doesn't have one yet,
+    # or if their current org is the shared demo org (must never use demo org for real workspaces).
+    if not org or getattr(org, 'is_demo', False):
+        from accounts.models import Organization
+        # Prefer the user's full name (e.g. "Program Manager") over the username, and
+        # title-case it so lowercase OAuth profile names ("program manager") still read
+        # cleanly as "Program Manager's Workspace".
+        display_name = (user.get_full_name() or user.username).strip().title()
+        org_name = f"{display_name}'s Workspace"
+        org = Organization.objects.create(
+            name=org_name,
+            created_by=user,
+        )
+        profile = user.profile
+        profile.organization = org
+        profile.save(update_fields=['organization'])
+        logger.info(f"Auto-created Organization '{org_name}' (#{org.pk}) for {user.username}")
+
+    # Ensure the org creator is in the OrgAdmin group
+    from django.contrib.auth.models import Group
+    org_admin_group, _ = Group.objects.get_or_create(name='OrgAdmin')
+    user.groups.add(org_admin_group)
+
     with transaction.atomic():
+        # ── Workspace ──────────────────────────────────────────────────
+        goal_name = goal_data.get('name', 'My Organization Goal')[:200]
+        # Use the organization name (user-provided) rather than the AI goal name
+        ws_name = org.name or goal_name
+        ws = Workspace.objects.create(
+            name=ws_name[:200],
+            organization=org,
+            created_by=user,
+            is_demo=False,
+        )
+        logger.info(f"Created Workspace #{ws.pk} '{ws.name}' for {user.username}")
+
         # ── Organization Goal ──────────────────────────────────────────
         org_goal = OrganizationGoal.objects.create(
-            name=goal_data.get('name', 'My Organization Goal')[:200],
+            name=goal_name,
             description=goal_data.get('description', ''),
             target_metric=goal_data.get('target_metric', '')[:100] if goal_data.get('target_metric') else '',
             target_date=target_date,
             status='active',
             organization=org,
             created_by=user,
+            workspace=ws,
         )
         logger.info(f"Created OrganizationGoal #{org_goal.pk} for {user.username}")
 
@@ -100,6 +138,7 @@ def commit_onboarding_workspace(user, preview):
                 status='active',
                 organization_goal=org_goal,
                 created_by=user,
+                workspace=ws,
             )
 
             # ── Strategies ─────────────────────────────────────────────
@@ -110,6 +149,7 @@ def commit_onboarding_workspace(user, preview):
                     status='active',
                     mission=mission,
                     created_by=user,
+                    workspace=ws,
                 )
 
                 # ── Boards ─────────────────────────────────────────────
@@ -120,8 +160,9 @@ def commit_onboarding_workspace(user, preview):
                         strategy=strategy,
                         organization=org,
                         created_by=user,
+                        workspace=ws,
                     )
-                    board.members.add(user)
+                    BoardMembership.objects.get_or_create(board=board, user=user, defaults={'role': 'owner'})
                     # Auto-set task_prefix for readable task IDs
                     board.task_prefix = board.get_default_prefix()
                     board.save(update_fields=['task_prefix'])
@@ -174,9 +215,40 @@ def commit_onboarding_workspace(user, preview):
         preview.status = 'committed'
         preview.save(update_fields=['status', 'updated_at'])
 
+        # Create workspace-level membership for the creator as Owner
+        from kanban.models import WorkspaceMembership
+        WorkspaceMembership.objects.get_or_create(
+            workspace=ws, user=user,
+            defaults={'role': 'owner', 'added_by': user},
+        )
+
         profile = user.profile
         profile.onboarding_status = 'completed'
-        profile.save(update_fields=['onboarding_status'])
+        profile.active_workspace = ws
+        profile.is_viewing_demo = False
+        profile.save(update_fields=['onboarding_status', 'active_workspace', 'is_viewing_demo'])
 
     logger.info(f"Onboarding workspace committed for {user.username} (Goal #{org_goal.pk})")
+
+    # ── Seed PrizmDiscovery inbox with AI-suggested ideas ─────────────
+    try:
+        from kanban.discovery_ai import DiscoveryAIScorer
+        from kanban.discovery_models import DiscoveryIdea
+        goal_text = (goal_data.get('name', '') + ' ' + (goal_data.get('description', '') or '')).strip()
+        scorer = DiscoveryAIScorer()
+        seed_ideas = scorer.suggest_ideas_for_goal(goal_text, n=4)
+        for idea_data in seed_ideas:
+            DiscoveryIdea.objects.create(
+                organization=org,
+                title=idea_data['title'],
+                description=idea_data['description'],
+                source=idea_data.get('source', 'other'),
+                stage='new',
+                submitted_by=user,
+            )
+        if seed_ideas:
+            logger.info(f"Seeded {len(seed_ideas)} Discovery ideas for {org.name}")
+    except Exception as exc:
+        logger.warning(f"Failed to seed Discovery ideas during onboarding: {exc}")
+
     return org_goal

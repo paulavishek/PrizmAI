@@ -15,6 +15,7 @@ class MemoryNode(models.Model):
         ('milestone', 'Milestone Reached'),
         ('ai_recommendation', 'AI Recommendation'),
         ('manual_log', 'Manual Decision Log'),
+        ('note', 'Note'),
     ]
 
     board = models.ForeignKey(
@@ -35,9 +36,33 @@ class MemoryNode(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     is_auto_captured = models.BooleanField(default=True)
+    is_org_wide = models.BooleanField(
+        default=False,
+        help_text="If True, visible to everyone who collaborates in this board's "
+                  "workspace (workspace-wide), not just members of this board. "
+                  "Only the board owner can set this.",
+    )
     source_object_type = models.CharField(max_length=50, blank=True, default='')
     source_object_id = models.IntegerField(null=True, blank=True)
     importance_score = models.FloatField(default=0.5)
+
+    # ── Spectra Gap Analysis ──────────────────────────────────────────────────
+    # Questions Spectra raised about missing context, and whether this memory
+    # has been reviewed for gaps yet. Populated at creation (pre-save review) or
+    # lazily by the analyze_memory_gaps Celery task.
+    gap_questions = models.JSONField(null=True, blank=True)
+    has_gaps = models.BooleanField(default=False)
+    gaps_analyzed = models.BooleanField(default=False)
+    # How many times the user has edited this memory in response to a "Gaps
+    # Noted" flag. The gap prompt can always surface a deeper question, so after
+    # GAP_ENRICHMENT_CAP rounds the flag clears automatically (see
+    # knowledge_graph.views.edit_manual_memory) — this terminates the loop.
+    gap_enrichment_count = models.IntegerField(default=0)
+    # The canonical gap checklist, frozen the first time gaps are detected. On
+    # later edits we only mark which of THESE remain unanswered (anchored
+    # progressive tracking) instead of generating fresh questions, and compute a
+    # completeness score from len(original) - len(gap_questions remaining).
+    gap_questions_original = models.JSONField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']

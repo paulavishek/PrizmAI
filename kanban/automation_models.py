@@ -230,38 +230,155 @@ class AutomationRule(models.Model):
     with rules migrated from the old models.
     """
 
-    # ── trigger choices (superset of both old models) ──────────
-    TRIGGER_CHOICES = [
-        # event-based (from BoardAutomation)
-        ('task_overdue',           'Task becomes overdue'),
-        ('moved_to_column',        'Task moved to column'),
-        ('task_created',           'Task created'),
-        ('task_completed',         'Task completed'),
-        ('priority_changed',       'Task priority changed'),
-        ('task_assigned',          'Task assigned'),
-        ('due_date_approaching',   'Due date approaching'),
-        # new in redesign
-        ('task_completion_reached', 'Task completion reached threshold'),
-        # schedule-based (from ScheduledAutomation)
-        ('scheduled_daily',        'Scheduled — daily'),
-        ('scheduled_weekly',       'Scheduled — weekly'),
-        ('scheduled_monthly',      'Scheduled — monthly'),
+    # ── trigger groups (seven-group UI taxonomy) ───────────────
+    # Each entry: (group_name, [(value, label), ...])
+    # The template iterates this to render <optgroup> blocks.
+    # ── Lean MVP scope (first release) ─────────────────────────
+    # The builder exposes only the small, everyday set below — every trigger
+    # here fires reliably (via Task post_save, the m2m receiver, or a Celery
+    # task). The rest of the catalog is hidden from the UI but its signal /
+    # handler code is intentionally retained, so any of these can be re-enabled
+    # later simply by re-adding the (value, label) entry here and in
+    # TRIGGER_CHOICES (and the JS map in unified_rule_builder.js). Existing
+    # saved rules that reference a hidden trigger keep executing, because
+    # signals.py matches on the trigger_type string, not on this list.
+    #
+    # Hidden for v1 (still wired, just not selectable):
+    #   Task State:   task_unassigned, task_status_changed (dupes
+    #                 task_moved_to_column), task_progress_changed,
+    #                 task_description_updated, task_label_added
+    #   Time:         task_start_date_reached
+    #   AI & Risk:    risk_level_changed, risk_level_critical, predicted_late,
+    #                 schedule_status_changed, complexity_increased
+    #   Hierarchy:    subtask_completed, all_subtasks_completed,
+    #                 dependency_completed, dependency_overdue,
+    #                 checklist_completed, checklist_item_added,
+    #                 milestone_reached, parent_status_changed
+    #   Scheduled:    scheduled_monthly
+    # Hidden AND not yet wired (no receiver — never fired):
+    #   coach_suggestion_created, conflict_detected, discovery_idea_scored,
+    #   discovery_idea_submitted, comment_added, mention_received,
+    #   attachment_added, immunity_score_dropped, hospice_risk_triggered,
+    #   scope_creep_detected, prediction_confidence_dropped,
+    #   retrospective_finalized, task_thread_message
+    TRIGGER_GROUPS = [
+        ('Task State', [
+            ('task_created',              'Task is created'),
+            ('task_completed',            'Task is completed'),
+            ('task_assigned',             'Task is assigned'),
+            ('task_moved_to_column',      'Task is moved to a column'),
+            ('task_priority_changed',     'Task priority changes'),
+            ('task_due_date_changed',     'Task due date changed'),
+        ]),
+        ('Time & Activity', [
+            ('task_completion_threshold', 'Completion threshold reached'),
+            ('task_overdue',              'Task becomes overdue'),
+            ('due_date_approaching',      'Due date is approaching'),
+            ('task_idle',                 'Task is idle (no updates for N days)'),
+        ]),
+        ('Scheduled', [
+            ('scheduled_daily',           'Every day at a set time'),
+            ('scheduled_weekly',          'Every week on a set day'),
+        ]),
     ]
 
-    # ── action choices (superset + new) ────────────────────────
+    # ── Lean MVP scope (first release) ─────────────────────────
+    # As with TRIGGER_GROUPS, only the everyday, dependency-free actions are
+    # exposed. The hidden actions' handlers remain registered in
+    # automation_actions.py (re-enable by re-adding the entry here and in
+    # ACTION_CHOICES + the JS map). The set below deliberately excludes every
+    # action that silently no-ops when an optional app is missing (wiki,
+    # stakeholder, memory-graph, stress-test, PrizmBrief) plus the advanced
+    # risk / hierarchy / resource / workload actions.
+    #
+    # Hidden for v1 (still wired, just not selectable):
+    #   Task State:   set_description, append_to_description, set_start_date,
+    #                 clear_due_date
+    #   AI & Risk:    set_risk_level, request_ai_analysis, add_risk_indicator,
+    #                 add_mitigation_strategy
+    #   Hierarchy:    cascade_due_date, cascade_priority, assign_subtasks_to,
+    #                 complete_parent_if_all_subtasks_done, notify_blocked_tasks,
+    #                 auto_check_checklist, add_checklist_item, add_subtask
+    #   Resources:    set_workload_impact, set_estimated_hours,
+    #                 set_estimated_cost, assign_to_best_skill_match,
+    #                 assign_to_lightest_workload, add_required_skill,
+    #                 escalate_to_owner
+    #   AI Tools:     acknowledge_coach_suggestion, resolve_conflict,
+    #                 promote_discovery_idea, apply_stress_test_vaccine,
+    #                 create_memory_node, generate_status_report,
+    #                 add_stakeholder_engagement
+    #   Comms/Memory: notify_stakeholders, start_task_thread, link_wiki_page,
+    #                 create_wiki_page, capture_decision, capture_lesson,
+    #                 log_time_entry
+    ACTION_GROUPS = [
+        ('Task State', [
+            ('set_priority',             'Set priority'),
+            ('set_progress',             'Set progress %'),
+            ('add_label',                'Add label'),
+            ('remove_label',             'Remove label'),
+            ('assign_to_user',           'Assign to user'),
+            ('clear_assignee',           'Clear assignee'),
+            ('move_to_column',           'Move to column'),
+            ('set_due_date',             'Set due date'),
+            ('close_task',               'Close task'),
+        ]),
+        ('AI & Risk', [
+            ('flag_for_review',          'Flag for review'),
+        ]),
+        ('Communications', [
+            ('send_notification',        'Send notification'),
+            ('post_comment',             'Post a comment'),
+            ('mention_users_in_comment', 'Mention users in a comment'),
+        ]),
+    ]
+
+    # ── trigger choices ────────────────────────────────────────
+    # Grouped per the seven-group UI taxonomy. The Python order also drives
+    # the order of options in templates that iterate the choices directly.
+    # Lean MVP selectable set — mirrors TRIGGER_GROUPS above. Keep this list and
+    # TRIGGER_GROUPS in sync. Hidden trigger types (see the comment on
+    # TRIGGER_GROUPS) are intentionally omitted here so the API rejects newly
+    # built rules that try to use them; their signal code is retained so any
+    # already-saved rule keeps firing and so a type can be re-enabled later.
+    TRIGGER_CHOICES = [
+        # ── Task State ─────────────────────────────────────────
+        ('task_created',              'Task is created'),
+        ('task_completed',            'Task is completed'),
+        ('task_assigned',             'Task is assigned'),
+        ('task_moved_to_column',      'Task is moved to a column'),
+        ('task_priority_changed',     'Task priority changes'),
+        ('task_due_date_changed',     'Task due date changed'),
+        # ── Time & Activity ────────────────────────────────────
+        ('task_completion_threshold', 'Completion threshold reached'),
+        ('task_overdue',              'Task becomes overdue'),
+        ('due_date_approaching',      'Due date is approaching'),
+        ('task_idle',                 'Task is idle (no updates for N days)'),
+        # ── Schedule-based ─────────────────────────────────────
+        ('scheduled_daily',           'Every day at a set time'),
+        ('scheduled_weekly',          'Every week on a set day'),
+    ]
+
+    # ── action choices ─────────────────────────────────────────
+    # Lean MVP selectable set — mirrors ACTION_GROUPS above. Hidden action types
+    # (see the comment on ACTION_GROUPS) are omitted here but their handlers stay
+    # registered in automation_actions.py for re-enablement / existing rules.
     ACTION_CHOICES = [
-        ('set_priority',       'Set priority'),
-        ('add_label',          'Add label'),
-        ('send_notification',  'Send notification'),
-        ('move_to_column',     'Move to column'),
-        ('assign_to_user',     'Assign to user'),
-        ('set_due_date',       'Set due date (now + N days)'),
-        # new in redesign
-        ('remove_label',       'Remove label'),
-        ('set_due_date_relative', 'Set due date (relative)'),
-        ('close_task',         'Close / complete task'),
-        ('create_comment',     'Post a comment'),
-        ('log_time_entry',     'Log time entry'),
+        # ── Task State ─────────────────────────────────────────
+        ('set_priority',          'Set priority'),
+        ('set_progress',          'Set progress %'),
+        ('add_label',             'Add label'),
+        ('remove_label',          'Remove label'),
+        ('assign_to_user',        'Assign to user'),
+        ('clear_assignee',        'Clear assignee'),
+        ('move_to_column',        'Move to column'),
+        ('set_due_date',          'Set due date'),
+        ('close_task',            'Close task'),
+        # ── AI & Risk ──────────────────────────────────────────
+        ('flag_for_review',       'Flag for review'),
+        # ── Communications ─────────────────────────────────────
+        ('send_notification',     'Send notification'),
+        ('post_comment',          'Post a comment'),
+        ('mention_users_in_comment', 'Mention users in a comment'),
     ]
 
     # ── core fields ────────────────────────────────────────────
@@ -270,7 +387,7 @@ class AutomationRule(models.Model):
         on_delete=models.CASCADE,
         related_name='automation_rules',
     )
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=120)
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(
         User,
@@ -279,24 +396,52 @@ class AutomationRule(models.Model):
         related_name='automation_rules_created',
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-    # ── legacy single-trigger / single-action fields ───────────
+    # ── trigger ────────────────────────────────────────────────
     trigger_type = models.CharField(
         max_length=30, choices=TRIGGER_CHOICES,
         blank=True, default='',
     )
-    trigger_value = models.CharField(max_length=200, blank=True, default='')
-    action_type = models.CharField(
-        max_length=30, choices=ACTION_CHOICES,
-        blank=True, default='',
+    trigger_config = models.JSONField(
+        default=dict,
+        help_text=(
+            'Trigger-specific parameters. '
+            'Examples: task_moved_to_column: {"column_name": "Review"}, '
+            'due_date_approaching: {"days": 2}, '
+            'scheduled_daily: {"time": "09:00"}, '
+            'scheduled_weekly: {"day": "Monday", "time": "09:00"}'
+        ),
     )
-    action_value = models.CharField(max_length=200, blank=True, default='')
 
-    # ── visual flowchart (new) ─────────────────────────────────
-    rule_definition = models.JSONField(
-        blank=True, null=True,
-        help_text='JSON block tree: {id, type, block_type, config, children, else_children}',
+    # ── conditions (IF section) ────────────────────────────────
+    condition_logic = models.CharField(
+        max_length=3,
+        choices=[('AND', 'AND'), ('OR', 'OR')],
+        default='AND',
     )
+    conditions = models.JSONField(
+        default=list,
+        help_text='[{"attribute": "priority", "operator": "is", "value": "Urgent"}, ...]',
+    )
+
+    # ── actions (THEN section) ─────────────────────────────────
+    actions = models.JSONField(
+        default=list,
+        help_text='[{"type": "set_priority", "target": "Urgent", "message": null}, ...]',
+    )
+
+    # ── else branch (OTHERWISE section) ───────────────────────
+    otherwise_actions = models.JSONField(
+        default=list,
+        help_text='Same format as actions. Empty list = no else branch.',
+    )
+
+    # ── legacy fields (deprecated — kept for backward compat) ──
+    trigger_value = models.CharField(max_length=200, blank=True, default='')
+    action_type = models.CharField(max_length=30, blank=True, default='')
+    action_value = models.CharField(max_length=200, blank=True, default='')
+    rule_definition = models.JSONField(blank=True, null=True)
 
     # ── schedule fields (carried from ScheduledAutomation) ─────
     schedule_type = models.CharField(
@@ -318,9 +463,16 @@ class AutomationRule(models.Model):
     run_count = models.IntegerField(default=0)
     failure_count = models.IntegerField(default=0)
     last_run_at = models.DateTimeField(null=True, blank=True)
+    last_execution_result = models.CharField(
+        max_length=10, null=True, blank=True,
+        # values: 'success', 'skipped', 'failed'
+    )
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['board', 'is_active', 'trigger_type']),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.board.name})"
@@ -353,13 +505,14 @@ class AutomationRule(models.Model):
 
 class AutomationLog(models.Model):
     """
-    Audit trail for every automation rule execution (pass or fail).
+    Audit trail for every automation rule execution.
     Written by the Celery worker and signal handler when a rule fires.
     Entries older than 90 days are purged by a scheduled cleanup task.
     """
     OUTCOME_CHOICES = [
-        ('passed', 'Passed'),
-        ('failed', 'Failed'),
+        ('success', 'Success'),
+        ('skipped', 'Skipped'),
+        ('failed',  'Failed'),
     ]
 
     rule = models.ForeignKey(
@@ -367,6 +520,13 @@ class AutomationLog(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         related_name='logs',
+    )
+    rule_name_snapshot = models.CharField(max_length=120, blank=True)
+    board = models.ForeignKey(
+        'kanban.Board',
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='automation_logs',
     )
     triggered_at = models.DateTimeField(auto_now_add=True, db_index=True)
     trigger_event = models.CharField(max_length=100)
@@ -376,19 +536,43 @@ class AutomationLog(models.Model):
         null=True, blank=True,
         related_name='automation_logs',
     )
+    task_title_snapshot = models.CharField(max_length=255, blank=True)
     actions_summary = models.TextField(blank=True)
     outcome = models.CharField(
         max_length=10,
         choices=OUTCOME_CHOICES,
         db_index=True,
     )
+    skip_reason = models.CharField(max_length=100, blank=True)
     error_detail = models.TextField(blank=True)
+    execution_detail = models.JSONField(default=dict)
+
+    # Idempotency key for one logical rule emission. Formatted as
+    # "<rule_id>:<task_id>:<trigger_event>:<assignee_id>:<time_bucket>" by the
+    # signal runner (kanban/signals.py). The unique constraint below lets two
+    # *concurrent* duplicate emissions — e.g. a frontend double-submit that
+    # sends the same POST twice in the same instant — collapse to a single rule
+    # run: both pass the in-memory and short-window checks because neither has
+    # committed its log yet, but only one INSERT can win the constraint. Null
+    # for legacy rows and for any fire where the key could not be computed.
+    dedupe_key = models.CharField(max_length=200, null=True, blank=True)
 
     class Meta:
         ordering = ['-triggered_at']
+        indexes = [
+            models.Index(fields=['board', 'triggered_at']),
+            models.Index(fields=['rule', 'triggered_at']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['dedupe_key'],
+                condition=models.Q(dedupe_key__isnull=False),
+                name='uniq_automationlog_dedupe_key',
+            ),
+        ]
 
     def __str__(self):
-        rule_name = self.rule.name if self.rule else 'Deleted rule'
+        rule_name = self.rule.name if self.rule else (self.rule_name_snapshot or 'Deleted rule')
         return f"{rule_name} — {self.outcome} @ {self.triggered_at:%Y-%m-%d %H:%M}"
 
 
@@ -410,8 +594,13 @@ class AutomationTemplate(models.Model):
     description = models.TextField()
     category = models.CharField(max_length=30, choices=CATEGORY_CHOICES)
     trigger_type = models.CharField(max_length=30)
+    trigger_config = models.JSONField(default=dict)
+    condition_logic = models.CharField(max_length=3, default='AND')
+    conditions = models.JSONField(default=list)
+    actions = models.JSONField(default=list)
     rule_definition = models.JSONField(
-        help_text='JSON block tree identical to AutomationRule.rule_definition',
+        null=True, blank=True,
+        help_text='Deprecated canvas block tree — kept for rollback safety.',
     )
     is_builtin = models.BooleanField(default=False)
 

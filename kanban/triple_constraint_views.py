@@ -11,11 +11,13 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Sum, Avg, Max
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from kanban.models import Board, Task
 from kanban.budget_models import ProjectBudget, TaskCost
 from kanban.burndown_models import BurndownPrediction, TeamVelocitySnapshot, SprintMilestone
 from kanban.utils.triple_constraint_ai import analyze_triple_constraints
+from kanban.project_confidence_service import ProjectConfidenceService
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,13 @@ logger = logging.getLogger(__name__)
 def set_project_deadline(request, board_id):
     """Save the board's project deadline (Time constraint) and redirect back."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board edit permission
+    if not request.user.has_perm('prizmai.edit_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='triple_constraint')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
     if request.method == 'POST':
         raw = request.POST.get('project_deadline', '').strip()
         if raw:
@@ -40,14 +49,12 @@ def set_project_deadline(request, board_id):
     return redirect('triple_constraint_dashboard', board_id=board.id)
 
 
-@login_required
-def triple_constraint_dashboard(request, board_id):
+def _build_triple_constraint_data(board):
     """
-    Triple Constraint Dashboard – shows Scope / Cost / Time interplay.
-    Triggers AI analysis on POST with action=ai_analyze.
+    Compute the Scope / Cost / Time datasets shared by the dashboard page and
+    the AI analysis endpoint. Returns a dict of everything the AI prompt (and
+    the page context) needs.
     """
-    board = get_object_or_404(Board, id=board_id)
-
     # ── Scope ──────────────────────────────────────────────────────────────────
     scope_status = board.get_current_scope_status()
     has_baseline = scope_status is not None
@@ -127,11 +134,28 @@ def triple_constraint_dashboard(request, board_id):
         else:
             variance_days = None  # cannot compute without both dates
 
+        # Recalculate risk level from actual variance so it reflects the
+        # effective_deadline (which may differ from the stored prediction's
+        # target_completion_date, e.g. when board.project_deadline is set).
+        # Convention: variance_days = effective_deadline - predicted_date
+        #   positive  → predicted finishes BEFORE deadline (ahead of schedule)
+        #   negative  → predicted finishes AFTER deadline (behind schedule)
+        if variance_days is None:
+            recalc_risk = latest_prediction.risk_level
+        elif variance_days > 7:
+            recalc_risk = 'low'       # clearly ahead of schedule
+        elif variance_days >= -7:
+            recalc_risk = 'medium'    # within a week of deadline
+        elif variance_days >= -30:
+            recalc_risk = 'high'      # noticeably behind
+        else:
+            recalc_risk = 'critical'  # severely behind
+
         time_data = {
             'target_date': effective_deadline.strftime('%d-%m-%Y') if effective_deadline else None,
             'predicted_date': predicted_date.strftime('%d-%m-%Y') if predicted_date else None,
             'days_ahead_behind': variance_days,
-            'risk_level': latest_prediction.risk_level,
+            'risk_level': recalc_risk,
             'delay_probability': float(latest_prediction.delay_probability or 0),
             'velocity_tasks_per_week': float(
                 latest_prediction.current_velocity) if latest_prediction.current_velocity else 0,
@@ -158,6 +182,9 @@ def triple_constraint_dashboard(request, board_id):
         board=board
     ).order_by('-period_end').first()
     velocity_tasks_per_week = float(latest_velocity.tasks_completed) if latest_velocity else 0
+    # Prefer average velocity from burndown prediction (more reliable than a single-week snapshot)
+    if not velocity_tasks_per_week and latest_prediction and latest_prediction.average_velocity:
+        velocity_tasks_per_week = float(latest_prediction.average_velocity)
 
     # What-if coefficients
     what_if = {
@@ -213,65 +240,155 @@ def triple_constraint_dashboard(request, board_id):
     )
     time_label = time_status_label(time_data)
 
-    # ── AI Analysis (POST action=ai_analyze) ──────────────────────────────────
-    ai_result = None
-    ai_error = None
-    if request.method == 'POST' and request.POST.get('action') == 'ai_analyze':
-        try:
-            ai_result = analyze_triple_constraints(
-                board=board,
-                scope_data=scope_status,
-                budget_data=budget_data,
-                time_data=time_data,
-            )
-            if 'error' in ai_result:
-                ai_error = ai_result['error']
-        except Exception as e:
-            logger.error('Triple constraint AI view error: %s', e)
-            ai_error = 'AI analysis failed. Please check your API key and try again.'
-
-    # ── Commitment Health (Living Commitment Protocols widget) ──────────────────
-    commitment_health = None
-    try:
-        from kanban.commitment_models import CommitmentProtocol
-        cp_qs = CommitmentProtocol.objects.filter(board=board, status__in=['active', 'at_risk', 'critical'])
-        if cp_qs.exists():
-            avg_conf = sum(c.current_confidence for c in cp_qs) / cp_qs.count()
-            commitment_health = {
-                'count': cp_qs.count(),
-                'avg_confidence': round(avg_conf, 1),
-                'critical_count': cp_qs.filter(status='critical').count(),
-                'at_risk_count': cp_qs.filter(status='at_risk').count(),
-            }
-    except Exception:
-        pass  # Non-critical widget — never block the main page
-
-    context = {
-        'board': board,
-        # Scope
+    return {
         'scope_status': scope_status,
         'has_baseline': has_baseline,
         'total_tasks': total_tasks,
         'total_complexity': total_complexity,
         'scope_label': scope_label,
-        # Budget
         'budget': budget,
         'budget_data': budget_data,
         'budget_label': budget_label,
-        # Time
         'latest_prediction': latest_prediction,
         'time_data': time_data,
         'time_label': time_label,
         'effective_deadline': effective_deadline,
         'deadline_source': deadline_source,
-        # What-if coefficients
         'what_if': what_if,
-        # AI
-        'ai_result': ai_result,
-        'ai_error': ai_error,
-        # Commitment Protocols widget
-        'commitment_health': commitment_health,
+    }
+
+
+@login_required
+def triple_constraint_dashboard(request, board_id):
+    """
+    Triple Constraint Dashboard – shows Scope / Cost / Time interplay.
+    AI analysis is fetched separately via triple_constraint_ai_analyze (AJAX).
+    """
+    board = get_object_or_404(Board, id=board_id)
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='triple_constraint')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
+    data = _build_triple_constraint_data(board)
+
+    # ── Project Confidence Score ──────────────────────────────────────────────
+    confidence_data = None
+    confidence_history = []
+    recent_signals = []
+    try:
+        latest_confidence = ProjectConfidenceService.get_latest_score(board)
+        if latest_confidence:
+            confidence_data = {
+                'score': latest_confidence.composite_score,
+                'scope_score': latest_confidence.scope_score,
+                'budget_score': latest_confidence.budget_score,
+                'schedule_score': latest_confidence.schedule_score,
+                'trend': latest_confidence.trend,
+                'previous_score': latest_confidence.previous_score,
+                'color': latest_confidence.confidence_color,
+                'status_label': latest_confidence.status_label,
+                'computed_at': latest_confidence.computed_at,
+            }
+        confidence_history = ProjectConfidenceService.get_confidence_history(board, days=30)
+        recent_signals = ProjectConfidenceService.get_recent_signals(board, limit=10)
+    except Exception:
+        pass  # Non-critical — never block the main page
+
+    context = {
+        'board': board,
+        # AI (populated client-side via triple_constraint_ai_analyze)
+        'ai_result': None,
+        'ai_error': None,
+        # Project Confidence
+        'confidence_data': confidence_data,
+        'confidence_history': confidence_history,
+        'recent_signals': recent_signals,
+        **data,
     }
 
     return render(request, 'kanban/triple_constraint_dashboard.html', context)
+
+
+@login_required
+@require_POST
+def triple_constraint_ai_analyze(request, board_id):
+    """
+    JSON endpoint: run the AI Triple Constraint analysis and return the result
+    without a full page reload. Powers the Spectra loading animation on the
+    'Get AI Recommendation' button.
+    """
+    from django.http import JsonResponse
+
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'ok': False, 'error': 'You do not have access to this board.'}, status=403)
+
+    data = _build_triple_constraint_data(board)
+    try:
+        ai_result = analyze_triple_constraints(
+            board=board,
+            scope_data=data['scope_status'],
+            budget_data=data['budget_data'],
+            time_data=data['time_data'],
+        )
+        if 'error' in ai_result:
+            return JsonResponse({'ok': False, 'error': ai_result['error']})
+        return JsonResponse({'ok': True, 'ai_result': ai_result})
+    except Exception as e:
+        logger.error('Triple constraint AI analyze endpoint error: %s', e)
+        return JsonResponse({'ok': False, 'error': 'AI analysis failed. Please check your API key and try again.'})
+
+
+@login_required
+@require_POST
+def recalculate_confidence(request, board_id):
+    """Recalculate project confidence score on demand."""
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='triple_constraint')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
+    ProjectConfidenceService.compute_score(board)
+    messages.success(request, 'Project confidence recalculated.')
+    return redirect('triple_constraint_dashboard', board_id=board.id)
+
+
+@login_required
+@require_POST
+def record_manual_signal(request, board_id):
+    """Record a manual project signal from the Triple Constraint Dashboard."""
+    from kanban.decorators import demo_write_guard as _dwg
+
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.edit_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='triple_constraint')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
+    signal_type = request.POST.get('signal_type', 'manual_positive')
+    description = request.POST.get('description', '').strip()
+
+    if not description:
+        messages.error(request, 'Please provide a description for the signal.')
+        return redirect('triple_constraint_dashboard', board_id=board.id)
+
+    # Determine strength from type
+    positive_types = {
+        'task_completed', 'milestone_hit', 'blocker_resolved',
+        'scope_approved', 'budget_approved', 'manual_positive',
+    }
+    strength = 0.3 if signal_type in positive_types else -0.3
+
+    ProjectConfidenceService.record_signal(
+        board=board,
+        signal_type=signal_type,
+        strength=strength,
+        description=description,
+        user=request.user,
+    )
+    messages.success(request, 'Signal recorded. Confidence will update on next computation.')
+    return redirect('triple_constraint_dashboard', board_id=board.id)
 

@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, date
 from decimal import Decimal
 from typing import List, Dict, Optional
 from django.db.models import Count, Avg, Q, Sum
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -80,12 +81,19 @@ class CoachingRuleEngine:
     def _check_velocity_drop(self):
         """Detect significant velocity drops"""
         from kanban.burndown_models import TeamVelocitySnapshot
-        
-        # Get recent velocity snapshots
+        from django.utils import timezone
+
+        # Only consider fully-elapsed periods.  The current period is still in
+        # progress (e.g. a sprint week that started today), so its task count is
+        # naturally low and would otherwise read as a ~100% velocity collapse on
+        # day one of every period.  Excluding period_end >= today avoids that
+        # false positive.
+        today = timezone.now().date()
         snapshots = TeamVelocitySnapshot.objects.filter(
-            board=self.board
+            board=self.board,
+            period_end__lt=today,
         ).order_by('-period_end')[:4]
-        
+
         if snapshots.count() < 3:
             return  # Need at least 3 data points
         
@@ -262,7 +270,8 @@ class CoachingRuleEngine:
         from accounts.models import UserProfile
         
         # Get team members with their skill profiles
-        team_members = self.board.members.select_related('profile').all()
+        User = get_user_model()
+        team_members = User.objects.filter(board_memberships__board=self.board).select_related('profile')
         
         for member in team_members:
             try:

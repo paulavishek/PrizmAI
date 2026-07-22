@@ -3,12 +3,51 @@
 
 {% block title %}Retrospective Dashboard - {{ board.name }}{% endblock %}
 
+{% block extra_css %}
+<style>
+.metric-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    cursor: pointer;
+}
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid mt-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">Retrospectives</li>
+        </ol>
+    </nav>
+
+    <div class="mb-3">
+        <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back">
+            <i class="fas fa-arrow-left"></i> Back to Board
+        </a>
+    </div>
+
     <div class="row mb-4">
         <div class="col-md-8">
-            <h2><i class="fas fa-chart-line"></i> Improvement Dashboard - {{ board.name }}</h2>
-            <p class="text-muted">Track organizational learning and continuous improvement over time</p>
+            <h2><i class="fas fa-chart-line"></i> Improvement Dashboard</h2>
+            <p class="text-muted">{{ board.name }} — Track organizational learning and continuous improvement over time</p>
+            <button class="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold"
+                    style="color: #0d6efd;"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#retrospectivesGuide"
+                    aria-expanded="false"
+                    aria-controls="retrospectivesGuide">
+                <i class="fas fa-question-circle me-1"></i>
+                <span id="retrospectives-guide-label">How does this work?</span>
+                <i class="fas fa-chevron-down ms-1 retrospectives-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+            </button>
         </div>
         <div class="col-md-4">
             <div class="d-flex justify-content-end gap-2">
@@ -18,52 +57,201 @@
                 <a href="{% url 'lessons_learned_list' board.id %}" class="btn btn-info">
                     <i class="fas fa-graduation-cap"></i> All Lessons
                 </a>
+                <a href="{% url 'retrospective_actions_list' board.id %}" class="btn btn-warning">
+                    <i class="fas fa-tasks"></i> All Actions
+                </a>
             </div>
             <div class="mt-2">
-                <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-outline-secondary w-100">
+                <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back w-100">
                     <i class="fas fa-arrow-left"></i> Back to Board
                 </a>
             </div>
         </div>
     </div>
 
-    <!-- Key Metrics -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3>{{ stats.total_retrospectives }}</h3>
-                    <p class="text-muted mb-0">Retrospectives</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3>{{ stats.implementation_rate|floatformat:1 }}%</h3>
-                    <p class="text-muted mb-0">Implementation Rate</p>
-                    <small class="text-muted">{{ stats.lessons_implemented }}/{{ stats.total_lessons }}</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3>{{ stats.completion_rate|floatformat:1 }}%</h3>
-                    <p class="text-muted mb-0">Action Completion</p>
-                    <small class="text-muted">{{ stats.actions_completed }}/{{ stats.total_actions }}</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-center {% if stats.recurring_issues > 0 %}border-warning{% endif %}">
-                <div class="card-body">
-                    <h3>{{ stats.recurring_issues }}</h3>
-                    <p class="text-muted mb-0">Recurring Issues</p>
+    <!-- ── How It Works — Collapsible Guide ── -->
+    <div class="collapse mb-4" id="retrospectivesGuide">
+        <div class="card border shadow-sm">
+            <div class="card-body p-4">
+                <div class="row g-4">
+
+                    <!-- What is this? -->
+                    <div class="col-12">
+                        <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-chart-line text-primary me-2"></i>What is AI Retrospectives?</h6>
+                        <p class="mb-0 small text-secondary">AI-facilitated retrospective sessions that structure team learning into four quadrants, then automatically synthesize patterns across multiple retros to surface recurring themes. Insights become tracked action items assigned to real people — so lessons actually get implemented, not just discussed.</p>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Four quadrant section -->
+                    <div class="col-12">
+                        <h6 class="mb-3 fw-semibold text-dark"><i class="fas fa-th-large me-1 text-info"></i>The four quadrants of a retrospective</h6>
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #059669 !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-thumbs-up text-success"></i>
+                                        <strong class="small text-success">What Worked</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-0">Team practices, processes, or decisions that should be repeated. Reinforces positive patterns.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #c0392b !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-thumbs-down text-danger"></i>
+                                        <strong class="small text-danger">What Didn’t Work</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-0">Friction, failures, or blockers that slowed the team. These become the source of improvement actions.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #0891b2 !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-lightbulb" style="color:#0891b2;"></i>
+                                        <strong class="small" style="color:#0891b2;">Ideas</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-0">Experiments to try next sprint. Low-friction suggestions that could be tested quickly.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #d97706 !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-tasks text-warning"></i>
+                                        <strong class="small text-warning">Action Items</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-0">Specific, assigned, time-bound improvements. These are tracked to completion on this dashboard.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- AI Synthesis vs Action Tracking + Metrics -->
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-brain fa-2x text-info"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">AI Synthesis</h6>
+                                <p class="small mb-2 text-secondary">After the team fills in the quadrants, the AI reads all cards across <em>every past retro</em> and identifies recurring themes — patterns that keep appearing sprint after sprint. These surface as synthesized insights you can convert to action items.</p>
+                                <div class="p-2 rounded bg-info bg-opacity-10 border-start border-info border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-repeat text-info me-1"></i><strong>Recurring Issue</strong> — the same theme appeared in 2 or more retros. The AI flags these as systemic problems, not one-offs.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-check-double fa-2x text-success"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Action Tracking &amp; Metrics</h6>
+                                <p class="small mb-2 text-secondary">Every insight that matters becomes a tracked action item — assigned to a person, with a due date and status. The dashboard shows three key metrics:</p>
+                                <div class="d-flex flex-column gap-1 mb-2">
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge bg-primary" style="font-size:0.65rem;">Implementation Rate</span>
+                                        <span class="text-dark">% of insights converted to action items</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge bg-success" style="font-size:0.65rem;">Completion Rate</span>
+                                        <span class="text-dark">% of action items actually completed</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge bg-danger" style="font-size:0.65rem;">Recurring Issues</span>
+                                        <span class="text-dark">Problems that appear in 2+ retros</span>
+                                    </div>
+                                </div>
+                                <h6 class="mb-2 fw-semibold text-dark mt-2"><i class="fas fa-list-ol me-1 text-info"></i>Workflow</h6>
+                                <ol class="small ps-3 mb-0 text-secondary">
+                                    <li class="mb-1">Create a retro session — team adds cards to each quadrant</li>
+                                    <li class="mb-1">AI synthesizes patterns across all past retros</li>
+                                    <li class="mb-1">Convert key insights into action items with owners</li>
+                                    <li>Track implementation until completion rate reaches your target</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Key Metrics -->
+    <div class="row mb-4 row-cols-2 row-cols-md-4 g-3">
+        <div class="col">
+            <a href="{% url 'retrospective_list' board.id %}" class="text-decoration-none">
+                <div class="card text-center h-100 metric-card">
+                    <div class="card-body d-flex flex-column justify-content-center py-4">
+                        <h3 class="mb-1">{{ stats.total_retrospectives }}</h3>
+                        <p class="text-muted mb-1 fw-semibold">Retrospectives</p>
+                        <small class="text-muted">Total conducted</small>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col">
+            <a href="{% url 'lessons_learned_list' board.id %}" class="text-decoration-none">
+                <div class="card text-center h-100 metric-card">
+                    <div class="card-body d-flex flex-column justify-content-center py-4">
+                        <h3 class="mb-1">{{ stats.implementation_rate|floatformat:1 }}%</h3>
+                        <p class="text-muted mb-1 fw-semibold">Implementation Rate</p>
+                        <small class="text-muted">{{ stats.lessons_implemented }}/{{ stats.total_lessons }} lessons implemented or validated</small>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col">
+            <a href="{% url 'retrospective_actions_list' board.id %}" class="text-decoration-none">
+                <div class="card text-center h-100 metric-card">
+                    <div class="card-body d-flex flex-column justify-content-center py-4">
+                        <h3 class="mb-1">{{ stats.completion_rate|floatformat:1 }}%</h3>
+                        <p class="text-muted mb-1 fw-semibold">Action Completion</p>
+                        <small class="text-muted">{{ stats.actions_completed }}/{{ stats.total_actions }} actions</small>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col">
+            {% if stats.recurring_issues > 0 %}<a href="#recurring-themes" class="text-decoration-none">{% endif %}
+                <div class="card text-center h-100 metric-card {% if stats.recurring_issues > 0 %}border-warning{% endif %}">
+                    <div class="card-body d-flex flex-column justify-content-center py-4">
+                        <h3 class="mb-1">{{ stats.recurring_issues }}</h3>
+                        <p class="text-muted mb-1 fw-semibold">Recurring Themes</p>
+                        <small class="text-muted">Issues seen 2+ times</small>
+                    </div>
+                </div>
+            {% if stats.recurring_issues > 0 %}</a>{% endif %}
+        </div>
+    </div>
+
+    <!-- Recurring Issues (lessons flagged as recurring across retrospectives) -->
+    {% if recurring_lessons %}
+    <div class="card mb-4" id="recurring-themes">
+        <div class="card-header">
+            <h5><i class="fas fa-repeat"></i> Recurring Issues</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-2">Lessons flagged as recurring — the same underlying issue has appeared in 2 or more retrospectives.</p>
+            <ul class="list-group">
+                {% for lesson in recurring_lessons %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>{{ lesson.title }}</strong>
+                        <br><small class="text-muted">{{ lesson.get_category_display }} &middot; {{ lesson.get_status_display }}</small>
+                    </div>
+                    <span class="badge bg-warning">{{ lesson.recurrence_count }}x</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Trend Analysis -->
     {% if trend %}
@@ -74,14 +262,24 @@
         <div class="card-body">
             <div class="row">
                 <div class="col-md-6">
-                    <h6>Velocity Trend</h6>
+                    <h6>Velocity Trend
+                        <i class="fas fa-info-circle text-muted ms-1" style="font-size: 0.85em;"
+                           data-bs-toggle="tooltip" data-bs-placement="top"
+                           title="Measures how much work the team completes per sprint — based on action item completion rates across recent retrospectives."></i>
+                    </h6>
+                    <p class="text-muted small mb-1">How efficiently the team is delivering work over time.</p>
                     <div class="alert alert-{% if trend.velocity_trend == 'improving' %}success{% elif trend.velocity_trend == 'declining' %}danger{% else %}info{% endif %}">
                         <i class="fas fa-{% if trend.velocity_trend == 'improving' %}arrow-up{% elif trend.velocity_trend == 'declining' %}arrow-down{% else %}minus{% endif %}"></i>
                         <strong>{{ trend.get_velocity_trend_display }}</strong>
                     </div>
                 </div>
                 <div class="col-md-6">
-                    <h6>Quality Trend</h6>
+                    <h6>Quality Trend
+                        <i class="fas fa-info-circle text-muted ms-1" style="font-size: 0.85em;"
+                           data-bs-toggle="tooltip" data-bs-placement="top"
+                           title="Reflects the team's overall sentiment and lesson implementation rate — a higher score means more issues are being resolved across retrospectives."></i>
+                    </h6>
+                    <p class="text-muted small mb-1">How well the team is improving product and process quality.</p>
                     <div class="alert alert-{% if trend.quality_trend == 'improving' %}success{% elif trend.quality_trend == 'declining' %}danger{% else %}info{% endif %}">
                         <i class="fas fa-{% if trend.quality_trend == 'improving' %}arrow-up{% elif trend.quality_trend == 'declining' %}arrow-down{% else %}minus{% endif %}"></i>
                         <strong>{{ trend.get_quality_trend_display }}</strong>
@@ -90,7 +288,7 @@
             </div>
             
             {% if trend.recurring_issues %}
-            <h6 class="mt-3">Recurring Issues</h6>
+            <h6 class="mt-3">Recurring Themes</h6>
             <ul class="list-group">
                 {% for issue in trend.recurring_issues %}
                 <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -113,11 +311,16 @@
                 </div>
                 <div class="card-body">
                     {% if lessons_by_category %}
-                    <div class="list-group">
+                    <div class="list-group list-group-flush">
                         {% for cat in lessons_by_category %}
-                        <div class="list-group-item d-flex justify-content-between align-items-center">
-                            {{ cat.category|title }}
-                            <span class="badge bg-primary rounded-pill">{{ cat.count }}</span>
+                        <div class="list-group-item px-0">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span>{{ cat.category|title }}</span>
+                                <span class="badge bg-primary rounded-pill">{{ cat.count }}</span>
+                            </div>
+                            <div class="progress" style="height: 6px;">
+                                <div class="progress-bar {% if cat.category == 'process' %}bg-primary{% elif cat.category == 'technical' %}bg-info{% elif cat.category == 'team' %}bg-success{% elif cat.category == 'communication' %}bg-warning{% else %}bg-secondary{% endif %}" role="progressbar" style="width: {% widthratio cat.count stats.total_lessons 100 %}%;"></div>
+                            </div>
                         </div>
                         {% endfor %}
                     </div>
@@ -223,19 +426,29 @@
 
 {% block extra_js %}
 <script>
-// Handle back navigation
-function goBack() {
-    // Check if there's a previous page in history
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        // Fallback to board detail if no history
-        {% if is_demo_mode %}
-        window.location.href = '{% url "demo_board_detail" board.id %}';
-        {% else %}
-        window.location.href = '{% url "board_detail" board.id %}';
-        {% endif %}
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el);
+    });
+
+    // Guide toggle label
+    var retroGuide = document.getElementById('retrospectivesGuide');
+    if (retroGuide) {
+        retroGuide.addEventListener('shown.bs.collapse', function() {
+            var label = document.getElementById('retrospectives-guide-label');
+            if (label) label.textContent = 'Hide guide';
+            var chevron = document.querySelector('.retrospectives-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+        });
+        retroGuide.addEventListener('hidden.bs.collapse', function() {
+            var label = document.getElementById('retrospectives-guide-label');
+            if (label) label.textContent = 'How does this work?';
+            var chevron = document.querySelector('.retrospectives-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+        });
     }
-}
+});
+
 </script>
 {% endblock %}

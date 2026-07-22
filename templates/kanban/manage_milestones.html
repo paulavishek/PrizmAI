@@ -57,15 +57,15 @@
                         Milestones
                     </h2>
                     <p class="text-muted mb-0">
-                        <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="text-decoration-none">{{ board.name }}</a>
+                        <a href="{% url 'board_detail' board.id %}" class="text-decoration-none">{{ board.name }}</a>
                         <i class="fas fa-chevron-right mx-2"></i>
                         Milestone Management
                     </p>
                 </div>
                 <div>
-                    <button onclick="goBack()" class="btn btn-outline-secondary me-2">
+                    <a href="{% url 'gantt_chart' board.id %}" class="btn-prizm-back me-2">
                         <i class="fas fa-arrow-left"></i> Back
-                    </button>
+                    </a>
                     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createMilestoneModal">
                         <i class="fas fa-plus"></i> Create Milestone
                     </button>
@@ -239,10 +239,12 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <p class="required-fields-hint">* indicates a required field</p>
                     <div class="mb-3">
-                        <label for="name" class="form-label">Milestone Name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="name" name="name" required 
+                        <label for="name" class="form-label">Milestone Name <span class="required-asterisk">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" required
                                placeholder="e.g., Sprint 1 End, MVP Release">
+                        <div class="field-validation-msg">Milestone name is required.</div>
                     </div>
                     <div class="mb-3">
                         <label for="description" class="form-label">Description</label>
@@ -250,8 +252,9 @@
                                   placeholder="Describe what this milestone represents..."></textarea>
                     </div>
                     <div class="mb-3">
-                        <label for="target_date" class="form-label">Target Date <span class="text-danger">*</span></label>
+                        <label for="target_date" class="form-label">Target Date <span class="required-asterisk">*</span></label>
                         <input type="date" class="form-control" id="target_date" name="target_date" required>
+                        <div class="field-validation-msg">Target date is required.</div>
                     </div>
                     <div class="mb-3">
                         <label for="target_tasks" class="form-label">Target Tasks Completed</label>

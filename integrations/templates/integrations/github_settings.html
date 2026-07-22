@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block title %}GitHub Integration — {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+
+            {# Header #}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h3><i class="bi bi-github me-2"></i>GitHub Integration</h3>
+                    <p class="text-muted mb-0">Board: {{ board.name }}</p>
+                </div>
+                <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back">
+                    <i class="bi bi-arrow-left"></i> Back
+                </a>
+            </div>
+
+            {# How it works #}
+            <div class="card mb-4">
+                <div class="card-body">
+                    <p class="fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i> How it works</p>
+                    <p class="text-muted small mb-0">
+                        When a GitHub Pull Request is opened (or updated) and its title or description contains a
+                        task ID from this board — e.g. <code>{{ board.task_prefix|default:"PRZ" }}-101</code> — PrizmAI
+                        automatically moves that task to the <strong>"In Review"</strong> column you choose below.
+                    </p>
+                </div>
+            </div>
+
+            {% if messages %}
+            {% for msg in messages %}
+            <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+                {{ msg }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            {# Config form #}
+            <div class="card mb-4">
+                <div class="card-header fw-semibold">
+                    {% if integration %}Edit Configuration{% else %}Connect GitHub Repository{% endif %}
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="save">
+
+                        <div class="mb-3">
+                            <label class="form-label">
+                                {{ form.repo_full_name.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.repo_full_name }}
+                            {% if form.repo_full_name.errors %}
+                            <div class="text-danger small">{{ form.repo_full_name.errors }}</div>
+                            {% endif %}
+                            <small class="form-text text-muted">{{ form.repo_full_name.help_text }}</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">{{ form.in_review_column.label }}</label>
+                            {{ form.in_review_column }}
+                            {% if form.in_review_column.errors %}
+                            <div class="text-danger small">{{ form.in_review_column.errors }}</div>
+                            {% endif %}
+                            <small class="form-text text-muted">{{ form.in_review_column.help_text }}</small>
+                        </div>
+
+                        <div class="mb-3 p-3 border rounded bg-light d-flex align-items-center justify-content-between">
+                            <div>
+                                <label class="form-label mb-0 fw-semibold">Integration Active</label>
+                                <div class="text-muted small">Pause without deleting your configuration</div>
+                            </div>
+                            <div class="form-check form-switch ms-3 mb-0">
+                                {{ form.is_active }}
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            {% if integration %}Save Changes{% else %}Connect Repository{% endif %}
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            {# Webhook setup instructions — only shown when an integration exists #}
+            {% if integration %}
+            <div class="card mb-4">
+                <div class="card-header fw-semibold">
+                    <i class="bi bi-plug me-1"></i> GitHub Webhook Setup
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        Add the following webhook to your GitHub repository at<br>
+                        <strong>Settings → Webhooks → Add webhook</strong>
+                    </p>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Payload URL</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace small"
+                                   id="receiverUrl" value="{{ receiver_url }}" readonly>
+                            <button class="btn btn-outline-secondary btn-sm" type="button"
+                                    onclick="copyText('receiverUrl', this)">
+                                <i class="bi bi-clipboard"></i> Copy
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Secret</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace small"
+                                   id="webhookSecret" value="{{ integration.webhook_secret }}" readonly>
+                            <button class="btn btn-outline-secondary btn-sm" type="button"
+                                    onclick="copyText('webhookSecret', this)">
+                                <i class="bi bi-clipboard"></i> Copy
+                            </button>
+                        </div>
+                        <small class="form-text text-muted">
+                            Keep this secret. GitHub will use it to sign every request so PrizmAI can verify authenticity.
+                        </small>
+                    </div>
+
+                    <ul class="list-unstyled small text-muted mb-3">
+                        <li><strong>Content type:</strong> application/json</li>
+                        <li><strong>Events:</strong> Pull requests</li>
+                        <li><strong>SSL verification:</strong> Enable (required on production)</li>
+                    </ul>
+
+                    {# Regenerate secret #}
+                    <form method="post" class="d-inline"
+                          onsubmit="return confirm('Regenerate the secret? You will need to update it in GitHub too.');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="regenerate_secret">
+                        <button type="submit" class="btn btn-outline-warning btn-sm">
+                            <i class="bi bi-arrow-repeat me-1"></i> Regenerate Secret
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            {# Danger zone #}
+            <div class="card border-danger mb-4">
+                <div class="card-header text-danger fw-semibold">Danger Zone</div>
+                <div class="card-body">
+                    <p class="text-muted small">
+                        Removing the integration will stop PrizmAI from processing GitHub webhooks for this board.
+                        Your tasks will not be affected.
+                    </p>
+                    <form method="post"
+                          onsubmit="return confirm('Remove the GitHub integration for this board?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                            <i class="bi bi-trash me-1"></i> Remove Integration
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+
+<script>
+function copyText(inputId, btn) {
+    const el = document.getElementById(inputId);
+    if (!el) return;
+    navigator.clipboard.writeText(el.value).then(() => {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check"></i> Copied';
+        setTimeout(() => { btn.innerHTML = orig; }, 2000);
+    });
+}
+</script>
+{% endblock %}

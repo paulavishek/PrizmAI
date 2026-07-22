@@ -58,13 +58,13 @@
 }
 
 .column-ordering-panel.collapsed {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
 }
 
 .column-ordering-badge {
     display: inline-flex;
     align-items: center;
-    background-color: #ffffff;
+    background-color: var(--card-bg);
     border: 1px solid #dee2e6;
     border-radius: 6px;
     padding: 8px 12px;
@@ -95,7 +95,7 @@
 
 .column-ordering-badge span {
     font-weight: 500;
-    color: #495057;
+    color: var(--text-secondary);
 }
 
 kbd {
@@ -124,7 +124,7 @@ kbd {
 }
 
 .kanban-task {
-    background: white;
+    background: var(--card-bg);
     border-radius: 6px;
     padding: 15px;
     margin-bottom: 10px;
@@ -151,7 +151,7 @@ kbd {
 .task-title {
     font-weight: 600;
     margin-bottom: 8px;
-    color: #333;
+    color: var(--text-primary);
     font-size: 0.95rem;
 }
 
@@ -191,8 +191,8 @@ kbd {
 }
 
 .priority-low {
-    background-color: #e9ecef;
-    color: #495057;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
 }
 
 .priority-medium {
@@ -245,7 +245,7 @@ kbd {
 
 /* Feature sections */
 .feature-section {
-    background: white;
+    background: var(--card-bg);
     border-radius: 8px;
     padding: 20px;
     margin-bottom: 20px;
@@ -296,7 +296,7 @@ kbd {
 
 .stat-item {
     flex: 1;
-    background: white;
+    background: var(--card-bg);
     padding: 15px;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -355,7 +355,7 @@ kbd {
 .preview-item {
     padding: 10px;
     border-left: 3px solid #667eea;
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     border-radius: 4px;
     margin-bottom: 10px;
     transition: all 0.2s ease;
@@ -369,7 +369,7 @@ kbd {
 .preview-item-link {
     padding: 10px;
     border-left: 3px solid #667eea;
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     border-radius: 4px;
     margin-bottom: 10px;
     cursor: pointer;
@@ -414,9 +414,9 @@ kbd {
         {% endif %}
     </div>
     <div class="btn-group">
-        <button onclick="goBack()" class="btn btn-outline-secondary">
+        <a href="{% url 'demo_dashboard' %}" class="btn-prizm-back">
             <i class="fas fa-arrow-left me-1"></i> Back
-        </button>
+        </a>
         <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary">
             <i class="fas fa-chart-pie me-1"></i> Analytics
         </a>
@@ -692,8 +692,19 @@ kbd {
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
-                    <div class="btn-group" role="group">
+                <div class="d-flex align-items-center gap-2 mt-2 mt-md-0 flex-wrap">
+                    {# Scope toggle: This Board / All Boards #}
+                    <div class="btn-group" role="group" aria-label="Search scope">
+                        <input type="radio" class="btn-check" name="searchScope" id="scopeThisBoard" value="this_board" checked>
+                        <label class="btn btn-outline-secondary btn-sm" for="scopeThisBoard">
+                            <i class="fas fa-columns me-1"></i>This Board
+                        </label>
+                        <input type="radio" class="btn-check" name="searchScope" id="scopeAllBoards" value="all_boards">
+                        <label class="btn btn-outline-primary btn-sm" for="scopeAllBoards">
+                            <i class="fas fa-globe me-1"></i>All Boards
+                        </label>
+                    </div>
+                    <div class="btn-group" role="group" id="searchModeGroup">
                         <input type="radio" class="btn-check" name="searchMode" id="keywordMode" value="keyword" checked>
                         <label class="btn btn-outline-secondary btn-sm" for="keywordMode">
                             <i class="fas fa-keyboard me-1"></i> Keyword
@@ -711,6 +722,8 @@ kbd {
             <i class="fas fa-lightbulb text-warning me-1"></i>
             <strong>AI Tip:</strong> Try natural language like "video content", "social media tasks", or "urgent deadlines"
         </div>
+        {# Dropdown for All Boards results #}
+        <div id="globalSearchResults" class="mt-2" style="display:none;"></div>
     </div>
 </div>
 
@@ -724,15 +737,16 @@ kbd {
                 <div class="d-flex align-items-center">
                     <span class="column-position-badge">{{ column.position|add:1 }}</span>
                     <span class="column-name-text">{{ column.name }}</span>
-                    <span class="ms-2" style="font-size: 0.8rem; color: #6c757d; white-space: nowrap;">
+                    <span class="ms-2" style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">
                         <span style="font-weight: 500;">Tasks:</span> <span class="column-task-count"></span>
                     </span>
                 </div>
                 <div class="column-actions">
                     {% if column.name|lower == 'to do' or column.name|lower == 'todo' %}
                         <!-- Edit button for To Do column -->
-                        <button type="button" class="btn btn-sm btn-outline-primary me-2 edit-column-btn" 
+                        <button type="button" class="btn btn-sm btn-outline-primary me-2 edit-column-btn"
                                 data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
+                                data-column-type="{{ column.column_type }}"
                                 data-bs-toggle="modal" data-bs-target="#editColumnModal"
                                 title="Rename Column">
                             <i class="fas fa-edit"></i>
@@ -744,8 +758,9 @@ kbd {
                         </button>
                     {% else %}
                         <!-- Edit button for other columns -->
-                        <button type="button" class="btn btn-sm btn-outline-primary me-2 edit-column-btn" 
+                        <button type="button" class="btn btn-sm btn-outline-primary me-2 edit-column-btn"
                                 data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
+                                data-column-type="{{ column.column_type }}"
                                 data-bs-toggle="modal" data-bs-target="#editColumnModal"
                                 title="Rename Column">
                             <i class="fas fa-edit"></i>
@@ -1015,6 +1030,23 @@ kbd {
                         <label for="editColumnName" class="form-label">Column Name</label>
                         <input type="text" class="form-control" id="editColumnName" name="name" required>
                     </div>
+                    <div class="mb-3">
+                        <label for="editColumnType" class="form-label">Column type</label>
+                        <select class="form-select" id="editColumnType" name="column_type">
+                            <option value="">Auto (detect from name)</option>
+                            <option value="todo">To Do</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="review">Review</option>
+                            <option value="done">Done</option>
+                            <option value="blocked">Blocked</option>
+                            <option value="other">Other</option>
+                        </select>
+                        <small class="form-text text-muted">
+                            Leave on Auto to detect from the name. Set explicitly if you name the
+                            column something custom (e.g. &quot;Achieved&quot;) so features still
+                            recognise it as a Done column.
+                        </small>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1053,6 +1085,7 @@ kbd {
 {% endblock %}
 
 {% block extra_js %}
+<script>window.isDemoBoardReadOnly = {{ is_demo_board|yesno:'true,false' }};</script>
 <script src="{% static 'js/kanban.js' %}?v={{ board.id }}_{% now 'U' %}" id="kanban-script"></script>
 <script src="{% static 'js/aha_moment_detection.js' %}"></script>
 <script src="{% static 'js/conversion_nudges.js' %}"></script>
@@ -1099,11 +1132,16 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.addEventListener('click', function() {
             const columnId = this.dataset.columnId;
             const columnName = this.dataset.columnName;
+            const columnType = this.dataset.columnType || '';
             const editForm = document.getElementById('editColumnForm');
             const editColumnNameInput = document.getElementById('editColumnName');
-            
+            const editColumnTypeInput = document.getElementById('editColumnType');
+
             editForm.action = `/columns/${columnId}/update/`;
             editColumnNameInput.value = columnName;
+            if (editColumnTypeInput) {
+                editColumnTypeInput.value = columnType;
+            }
         });
     });
     
@@ -1198,14 +1236,6 @@ function getCsrfToken() {
     return cookie ? cookie.split('=')[1] : '';
 }
 
-// Back button functionality
-function goBack() {
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        window.location.href = '{% url "demo_dashboard" %}';
-    }
-}
 </script>
 
 <!-- Task Search Script -->

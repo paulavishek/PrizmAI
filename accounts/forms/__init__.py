@@ -70,6 +70,7 @@ class CustomPasswordChangeForm(PasswordChangeForm):
     )
 
 class OrganizationForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = Organization
         fields = ['name', 'domain']
@@ -111,6 +112,12 @@ class RegistrationForm(UserCreationForm):
         widgets = {
             'username': forms.TextInput(attrs={'class': 'form-control'}),
         }
+        # Override default error messages to prevent username enumeration
+        error_messages = {
+            'username': {
+                'unique': "This username is not available.",
+            }
+        }
     
     def __init__(self, *args, **kwargs):
         # Remove organization param if passed (for backward compatibility)
@@ -135,7 +142,7 @@ class RegistrationForm(UserCreationForm):
         
         # Check for duplicate email
         if User.objects.filter(email=email).exists():
-            raise ValidationError("A user with this email already exists.")
+            raise ValidationError("This email address is not available for registration.")
         
         return email
     
@@ -182,7 +189,7 @@ class UserProfileForm(forms.ModelForm):
             'rows': 3,
             'placeholder': 'Enter skills separated by commas (e.g., Python, JavaScript, Project Management)'
         }),
-        help_text='Enter your skills separated by commas. Example: Python, Django, React, AWS',
+        help_text='Enter your skills separated by commas. Example: Python, Django, React, AWS. Skill matching is case-insensitive (e.g., "python" matches "Python").',
         label='Skills'
     )
     
@@ -197,7 +204,11 @@ class UserProfileForm(forms.ModelForm):
     
     class Meta:
         model = UserProfile
-        fields = ['profile_picture', 'weekly_capacity_hours', 'timezone', 'display_mode']
+        fields = [
+            'profile_picture', 'weekly_capacity_hours', 'timezone',
+            'response_tone', 'response_length', 'response_structure',
+            'custom_ai_instructions',
+        ]
         widgets = {
             'profile_picture': forms.FileInput(attrs={'class': 'form-control'}),
             'weekly_capacity_hours': forms.NumberInput(attrs={
@@ -205,13 +216,27 @@ class UserProfileForm(forms.ModelForm):
                 'min': 1,
                 'max': 168
             }),
-            'display_mode': forms.HiddenInput(),
+            'response_tone': forms.Select(attrs={'class': 'form-select'}),
+            'response_length': forms.Select(attrs={'class': 'form-select'}),
+            'response_structure': forms.Select(attrs={'class': 'form-select'}),
+            'custom_ai_instructions': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'maxlength': 600,
+                'placeholder': 'Anything the AI should always remember about your preferred format '
+                               '(e.g. "Always start with a one-line TL;DR").'
+            }),
         }
         labels = {
             'weekly_capacity_hours': 'Weekly Working Hours',
+            'response_tone': 'Tone',
+            'response_length': 'Length',
+            'response_structure': 'Structure',
+            'custom_ai_instructions': 'Custom instructions',
         }
         help_texts = {
             'weekly_capacity_hours': 'How many hours per week are you available for work?',
+            'custom_ai_instructions': 'Applied to AI-generated briefs, retrospectives, coaching, and Spectra replies.',
         }
     
     def clean_weekly_capacity_hours(self):
@@ -279,6 +304,7 @@ class OrganizationSettingsForm(forms.ModelForm):
     A form for admins to update organization settings.
     Domain changes require careful validation to not break existing accounts.
     """
+    required_css_class = 'required'
     class Meta:
         model = Organization
         fields = ['name', 'domain']
@@ -499,3 +525,95 @@ class SocialSignupForm(forms.Form):
         user.username = self.cleaned_data.get('username')
         user.save()
         return user
+
+
+# ======================================================================
+# AI Provider Settings — User Level
+# ======================================================================
+
+class UserAISettingsForm(forms.Form):
+    """
+    Form for individual users to configure their personal AI provider
+    preference and optional personal BYOK API key.
+
+    Rendered on: accounts/profile.html
+    Processed in: accounts.views.profile_view (POST, form_type='user_ai_settings')
+    """
+
+    provider_override = forms.ChoiceField(
+        # Choices injected in __init__ so we can relabel 'inherit'
+        choices=[],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Preferred AI Provider',
+        help_text="Select 'Use workspace default' to follow your organisation's setting.",
+    )
+
+    byok_provider = forms.ChoiceField(
+        choices=[('', '--- Select provider ---')],  # extended in __init__
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='BYOK Key Provider',
+    )
+
+    raw_api_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(
+            attrs={'class': 'form-control', 'autocomplete': 'off'},
+            render_value=False,
+        ),
+        label='API Key',
+        help_text=(
+            'Leave blank to keep your existing key. '
+            'Enter a new key to replace it.'
+        ),
+    )
+
+    remove_byok_key = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        label='Remove my stored API key',
+    )
+
+    byok_model = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+        label='Preferred Model',
+        max_length=100,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Lazy import to avoid circular dependency at module load time
+        from ai_assistant.models import PROVIDER_CHOICES
+        self.fields['provider_override'].choices = [
+            ('inherit', 'Use workspace default'),
+            ('gemini', 'Google Gemini'),
+            ('openai', 'OpenAI'),
+            ('anthropic', 'Anthropic Claude'),
+        ]
+        self.fields['byok_provider'].choices = (
+            [('', '--- Select provider ---')] + list(PROVIDER_CHOICES)
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        raw_key = cleaned.get('raw_api_key', '').strip()
+        byok_provider = cleaned.get('byok_provider', '').strip()
+        remove = cleaned.get('remove_byok_key', False)
+
+        if raw_key and not byok_provider:
+            raise forms.ValidationError(
+                'Please select which provider this API key belongs to.'
+            )
+
+        if remove and raw_key:
+            raise forms.ValidationError(
+                'You cannot enter a new key and remove the key at the same time.'
+            )
+
+        if not raw_key:
+            cleaned['raw_api_key'] = ''
+        else:
+            cleaned['raw_api_key'] = raw_key
+
+        return cleaned

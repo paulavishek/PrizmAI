@@ -51,14 +51,30 @@ class CustomAccountAdapter(DefaultAccountAdapter):
 
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
     """Custom adapter for social account signup (Google OAuth)"""
-    
+
+    def _is_google(self, sociallogin):
+        """
+        Return True when the social login comes from Google.
+
+        We check multiple fields because in allauth 65.x the
+        ``provider`` field stored on SocialAccount may be either
+        ``'google'`` (correct) or the raw Google client-ID string
+        (a historical DB misconfiguration).  Checking the provider
+        registry ``id`` is always reliable.
+        """
+        try:
+            return sociallogin.account.get_provider().id == 'google'
+        except Exception:
+            provider = sociallogin.account.provider or ''
+            return provider == 'google' or provider.endswith('.apps.googleusercontent.com')
+
     def pre_social_login(self, request, sociallogin):
         """
         Called just after a user successfully authenticates via a social provider,
         but before the login is processed.
         """
         # Get the user's email from Google
-        if sociallogin.account.provider == 'google':
+        if self._is_google(sociallogin):
             email = sociallogin.account.extra_data.get('email')
             if email:
                 # Check if user already exists with this email
@@ -73,15 +89,15 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
                         sociallogin.user = user
                 except User.DoesNotExist:
                     pass
-    
+
     def populate_user(self, request, sociallogin, data):
         """
         Hook to populate user instance from social account data.
         This is called BEFORE the user is saved, allowing us to set proper values.
         """
         user = super().populate_user(request, sociallogin, data)
-        
-        if sociallogin.account.provider == 'google':
+
+        if self._is_google(sociallogin):
             extra_data = sociallogin.account.extra_data
             
             # Set first and last name from Google profile
@@ -122,8 +138,8 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         Creates user profile after the user is saved.
         """
         user = super().save_user(request, sociallogin, form)
-        
-        if sociallogin.account.provider == 'google':
+
+        if self._is_google(sociallogin):
             # Get user's email domain
             email = user.email
             domain = email.split('@')[-1].lower()
@@ -193,7 +209,8 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
                     return '/onboarding/generating/'
                 if profile.onboarding_status == 'workspace_generated':
                     return '/onboarding/review/'
-            # completed, skipped, demo_exploring, or v1 → dashboard
-            return '/dashboard/'
+            # completed, skipped, demo_exploring, or v1 → workspace-aware redirect
+            from accounts.views import _resolve_post_login_redirect
+            return _resolve_post_login_redirect(request.user)
         except (AttributeError, UserProfile.DoesNotExist):
             return '/accounts/social-signup-complete/'

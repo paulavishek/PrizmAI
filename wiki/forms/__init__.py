@@ -4,6 +4,7 @@ from ..models import WikiPage, WikiCategory, WikiAttachment, WikiLink, MeetingNo
 
 
 class WikiCategoryForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = WikiCategory
         fields = ['name', 'description', 'icon', 'color', 'position', 'ai_assistant_type']
@@ -23,6 +24,7 @@ class WikiCategoryForm(forms.ModelForm):
 
 
 class WikiPageForm(forms.ModelForm):
+    required_css_class = 'required'
     # Override tags field to use CharField instead of JSONField's default widget
     tags = forms.CharField(
         required=False,
@@ -56,15 +58,33 @@ class WikiPageForm(forms.ModelForm):
             'is_pinned': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
     
-    def __init__(self, *args, organization=None, **kwargs):
+    def __init__(self, *args, organization=None, workspace=None, scope_q=None, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         # Convert tags list to comma-separated string for editing
         if self.instance and self.instance.pk and self.instance.tags:
             if isinstance(self.instance.tags, list):
                 self.initial['tags'] = ', '.join(self.instance.tags)
-        
-        if organization:
+
+        # ``scope_q`` (the shared wiki_scope_q) is the single source of truth for
+        # visibility — in the demo workspace it isolates the choices to the user's
+        # own per-user clones (sandbox_owner), which a plain workspace filter
+        # can't do since all demo users share one workspace. Prefer it when given.
+        if scope_q is not None:
+            self.fields['category'].queryset = WikiCategory.objects.filter(scope_q).distinct()
+            self.fields['parent_page'].queryset = WikiPage.objects.filter(
+                scope_q
+            ).exclude(pk=self.instance.pk if self.instance.pk else None).distinct()
+        # Workspace is the tenant boundary — when provided, scope the category /
+        # parent-page choices strictly to it (org scoping below is legacy).
+        elif workspace is not None:
+            from django.db.models import Q
+            ws_filter = Q(workspace=workspace)
+            self.fields['category'].queryset = WikiCategory.objects.filter(ws_filter).distinct()
+            self.fields['parent_page'].queryset = WikiPage.objects.filter(
+                ws_filter
+            ).exclude(pk=self.instance.pk if self.instance.pk else None).distinct()
+        elif organization:
             from django.db.models import Q
             from accounts.models import Organization
             
@@ -136,26 +156,27 @@ class WikiLinkForm(forms.ModelForm):
             }),
         }
     
-    def __init__(self, *args, organization=None, user=None, **kwargs):
+    def __init__(self, *args, organization=None, user=None, workspace=None, **kwargs):
+        # ``workspace`` accepted for call-site consistency; board/task choices are
+        # already scoped via the centralized board helper below.
         super().__init__(*args, **kwargs)
         from kanban.models import Board, Task
         from django.db.models import Q
-        
-        # MVP Mode: Get all accessible boards (demo boards + user's boards)
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        
+
+        # Use centralized helper for demo/workspace-aware board scoping
         if user:
-            user_boards = Board.objects.filter(
-                Q(created_by=user) | Q(members=user)
-            )
-            accessible_boards = (demo_boards | user_boards).distinct()
+            from kanban.utils.demo_protection import get_user_boards
+            accessible_boards = get_user_boards(user)
         elif organization:
             # Fallback to organization-based filtering if no user
-            accessible_boards = Board.objects.filter(organization=organization)
-            accessible_boards = (demo_boards | accessible_boards).distinct()
+            accessible_boards = Board.objects.filter(
+                organization=organization,
+                is_official_demo_board=False,
+                is_sandbox_copy=False,
+            )
         else:
-            # If no user or organization, show demo boards
-            accessible_boards = demo_boards
+            # If no user or organization, empty queryset
+            accessible_boards = Board.objects.none()
         
         # Filter tasks and boards to accessible boards
         self.fields['task'].queryset = Task.objects.filter(column__board__in=accessible_boards)
@@ -265,10 +286,16 @@ class WikiPageSearchForm(forms.Form):
         })
     )
     
-    def __init__(self, *args, organization=None, **kwargs):
+    def __init__(self, *args, organization=None, workspace=None, **kwargs):
         super().__init__(*args, **kwargs)
-        # MVP Mode: Show all categories (from user's org + demo org)
-        if organization:
+        # Workspace is the tenant boundary — scope the category filter to it when
+        # provided (org scoping below is legacy fallback).
+        if workspace is not None:
+            from django.db.models import Q
+            self.fields['category'].queryset = WikiCategory.objects.filter(
+                Q(workspace=workspace)
+            ).distinct()
+        elif organization:
             from django.db.models import Q
             from accounts.models import Organization
             demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
@@ -309,16 +336,33 @@ class QuickWikiLinkForm(forms.Form):
         })
     )
     
-    def __init__(self, *args, organization=None, **kwargs):
+    def __init__(self, *args, organization=None, workspace=None, scope_q=None, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         from django.db.models import Q
         from accounts.models import Organization
-        
+
+        # ``scope_q`` (shared wiki_scope_q) isolates demo users to their own
+        # per-user wiki clones; prefer it over a plain workspace filter, which
+        # can't separate users inside the single shared demo workspace.
+        if scope_q is not None:
+            self.fields['wiki_pages'].queryset = WikiPage.objects.filter(
+                scope_q, is_published=True,
+            )
+            return
+
+        # Workspace is the tenant boundary — when provided, scope linkable pages
+        # strictly to it (org scoping below is legacy fallback).
+        if workspace is not None:
+            self.fields['wiki_pages'].queryset = WikiPage.objects.filter(
+                workspace=workspace, is_published=True,
+            )
+            return
+
         # Include demo organization pages along with user's org pages
         demo_org_names = ['Demo - Acme Corporation']
         demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-        
+
         # Build query filter
         if organization:
             # User has an organization - show their org pages + demo pages

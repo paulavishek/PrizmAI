@@ -4,10 +4,9 @@
 {% block title %}My Calendar — PrizmAI{% endblock %}
 
 {% block extra_css %}
-<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet' />
 <style>
     .calendar-container {
-        background: #fff;
+        background: var(--card-bg);
         border-radius: 12px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         padding: 24px;
@@ -15,9 +14,12 @@
     }
     .fc-event {
         cursor: pointer;
-        border-radius: 4px !important;
+        border-radius: 5px !important;
         font-size: 0.8rem;
-        padding: 2px 4px;
+        padding: 3px 8px;
+        margin-bottom: 3px;
+        font-weight: 500;
+        border-left-width: 3px !important;
     }
     .fc-event:hover { opacity: 0.85; transform: translateY(-1px); transition: 0.15s; }
     /* Pointer cursor on clickable day cells */
@@ -25,13 +27,124 @@
     .fc .fc-timegrid-slot,
     .fc .fc-daygrid-bg-harness,
     .fc .fc-daygrid-day-frame { cursor: pointer; }
+    /* Breathing room: taller day cells, lighter header/grid lines (less "loud") */
+    .fc .fc-daygrid-day-frame {
+        padding: 6px 6px 4px;
+        min-height: 108px;
+    }
+    .fc .fc-daygrid-day-events {
+        margin-top: 4px;
+    }
+    .fc .fc-col-header-cell {
+        padding: 10px 0;
+        background: #fafbfc;
+    }
+    .fc.fc-theme-standard td,
+    .fc.fc-theme-standard th {
+        border-color: #eef0f2;
+    }
+    [data-bs-theme="dark"] .fc .fc-col-header-cell {
+        background: var(--bg-tertiary);
+    }
+    [data-bs-theme="dark"] .fc .fc-col-header-cell-cushion {
+        color: var(--text-primary);
+    }
+    [data-bs-theme="dark"] .fc.fc-theme-standard td,
+    [data-bs-theme="dark"] .fc.fc-theme-standard th {
+        border-color: var(--bg-tertiary);
+    }
+    /* Custom list view (replaces FullCalendar's built-in listMonth, which
+       re-lists a multi-day task on every day it spans) */
+    .list-view-row {
+        cursor: pointer;
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin-bottom: 6px;
+        transition: filter 0.1s;
+    }
+    .list-view-row:hover { filter: brightness(0.97); }
+    .list-view-date-col { min-width: 130px; flex-shrink: 0; }
+    /* Row background/accent color comes from inline styles (same palette as
+       the grid view's fc-event colors), which are tuned for a light card —
+       in dark mode force a dark neutral surface + bright text instead of
+       letting the light pastel bg-color show through. */
+    [data-bs-theme="dark"] .list-view-row {
+        background: var(--bg-tertiary) !important;
+    }
+    [data-bs-theme="dark"] .list-view-row:hover { filter: brightness(1.15); }
+    [data-bs-theme="dark"] .list-view-title { color: var(--text-primary); }
+    [data-bs-theme="dark"] .list-view-date-col,
+    [data-bs-theme="dark"] .list-view-row .text-muted { color: #b0b6bd !important; }
     .stat-card {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-radius: 8px;
         padding: 16px;
         text-align: center;
     }
     .stat-card .stat-number { font-size: 2rem; font-weight: 700; }
+
+    /* ---- Time Health panel -------------------------------------------- */
+    /* Plain flex bars rather than a chart library: a 4-segment stacked bar
+       needs no canvas, and sidesteps chart theming entirely. */
+    .th-panel {
+        background: var(--bg-tertiary);
+        border-radius: 8px;
+        padding: 12px 16px;
+    }
+    .th-toggle {
+        display: flex; align-items: center; width: 100%;
+        background: none; border: 0; padding: 4px 0;
+        color: var(--text-primary); text-align: left;
+    }
+    .th-chevron { transition: transform .15s ease; font-size: .75rem; opacity: .7; }
+    .th-toggle[aria-expanded="false"] .th-chevron { transform: rotate(-90deg); }
+    .th-bar {
+        display: flex; height: 22px; border-radius: 5px;
+        overflow: hidden; margin: 12px 0 10px;
+        background: rgba(128,128,128,.18);
+    }
+    .th-seg { height: 100%; }
+    .th-seg-meeting { background: #6f42c1; }   /* matches event-type purple */
+    .th-seg-focus   { background: #64748b; }   /* busy_block slate */
+    .th-seg-ooo     { background: #f59e0b; }   /* OOO amber */
+    .th-seg-free    { background: #10b981; }   /* free = healthy green */
+    /* Actuals overlay — same scale as the scheduled bar so the two rows can be
+       read against each other; deliberately a different hue so nobody mistakes
+       logged hours for another slice of the scheduled stack. */
+    .th-bar-actual { margin-top: 4px; }
+    .th-seg-logged { background: #0ea5e9; }
+    .th-seg-logged-over { background: #ef4444; }  /* logged beyond capacity */
+    .th-row-label {
+        font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+        font-weight: 600; opacity: .75; color: var(--text-primary);
+    }
+    .th-delta { font-size: .8rem; margin-top: 6px; color: var(--text-primary); }
+    .th-legend {
+        display: flex; flex-wrap: wrap; gap: 14px;
+        font-size: .8rem; color: var(--text-primary);
+    }
+    .th-legend .th-dot {
+        display: inline-block; width: 10px; height: 10px;
+        border-radius: 50%; margin-right: 6px;
+    }
+    .th-legend .th-hours { opacity: .75; margin-left: 4px; }
+    .th-commit {
+        margin-top: 12px; padding-top: 10px; font-size: .85rem;
+        border-top: 1px solid rgba(128,128,128,.22);
+        color: var(--text-primary);
+    }
+    .th-flags { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .th-flag { font-size: .8rem; }
+    .th-flag-warning { color: #b45309; }
+    .th-flag-danger  { color: #b91c1c; }
+    /* On dark, flag text must stay bright — the light-mode ambers/reds above go
+       muddy against a dark surface. */
+    [data-bs-theme="dark"] .th-flag-warning { color: #fbbf24; }
+    [data-bs-theme="dark"] .th-flag-danger  { color: #fca5a5; }
+    [data-bs-theme="dark"] .th-panel .text-muted { color: #b0b6bd !important; }
+    .th-links { margin-top: 10px; display: flex; gap: 16px; font-size: .8rem; }
+    .th-links a { text-decoration: none; }
+    .th-links a:hover { text-decoration: underline; }
     /* Tooltip */
     #cal-tooltip {
         position: fixed;
@@ -92,11 +205,113 @@
         border-top-right-radius: 0 !important;
         border-bottom-right-radius: 0 !important;
     }
+
+    /* Draggable affordance: only editable events show the grab cursor. */
+    .fc-event.fc-event-draggable { cursor: grab; }
+    .fc-event.fc-event-draggable:active { cursor: grabbing; }
+
+    /* Dependency cascade banner (ported from the Gantt chart) — fixed at the
+       top so it's visible regardless of scroll after a drag. */
+    .cal-dep-banner {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10001;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        width: 420px;
+        max-width: calc(100vw - 32px);
+        max-height: calc(100vh - 32px);
+        overflow-y: auto;
+        padding: 12px 16px;
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        border: 1px solid #475569;
+        border-radius: 8px;
+        color: #f1f5f9;
+        font-size: 13px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+        animation: calBannerSlideIn 0.3s ease;
+    }
+    .cal-dep-banner > i { color: #fbbf24; margin-top: 2px; }
+    .cal-dep-banner .cal-dep-body { flex: 1; min-width: 0; }
+    .cal-dep-banner .cal-dep-msg { display: block; }
+    .cal-dep-banner .cal-dep-note { font-style: italic; opacity: 0.8; }
+    .cal-dep-banner .cal-dep-list {
+        margin: 6px 0 0;
+        padding-left: 18px;
+        list-style: disc;
+        font-size: 12.5px;
+        color: #e2e8f0;
+    }
+    .cal-dep-banner .cal-dep-list li {
+        margin: 2px 0;
+        word-break: break-word;
+    }
+    .cal-dep-banner .cal-dep-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+    .cal-dep-banner .cal-dep-btn {
+        border: none;
+        padding: 5px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        color: #fff;
+        white-space: nowrap;
+    }
+    .cal-dep-banner .cal-dep-btn-primary { background: #f59e0b; }
+    .cal-dep-banner .cal-dep-btn-primary:hover { background: #d97706; }
+    .cal-dep-banner .cal-dep-close {
+        background: none;
+        border: none;
+        color: #cbd5e1;
+        cursor: pointer;
+        font-size: 16px;
+        padding: 0 4px;
+        line-height: 1;
+    }
+    @keyframes calBannerSlideIn {
+        from { opacity: 0; transform: translate(-50%, -10px); }
+        to   { opacity: 1; transform: translate(-50%, 0); }
+    }
+
+    /* Bottom-right toasts for reschedule errors / cascade confirmations. */
+    .cal-toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 10000;
+        color: #fff;
+        font-size: 13px;
+        padding: 10px 18px;
+        border-radius: 8px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        animation: calToastSlideIn 0.25s ease;
+    }
+    .cal-toast-error { background: #dc2626; }
+    .cal-toast-info  { background: #16a34a; }
+    @keyframes calToastSlideIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid px-4">
+
+    <div class="mb-2">
+        <a href="{% url 'dashboard' %}" class="btn-prizm-back btn-sm">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
 
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
@@ -121,7 +336,7 @@
         </div>
         <div class="col-6 col-md-4">
             <div class="stat-card">
-                <div class="stat-number text-purple" style="color:#6f42c1">{{ events_this_month }}</div>
+                <div class="stat-number text-purple" id="stat-events-this-month" style="color:#6f42c1">{{ events_this_month }}</div>
                 <div class="text-muted small">Events This Month</div>
             </div>
         </div>
@@ -133,22 +348,102 @@
         </div>
     </div>
 
-    <!-- Legend -->
-    <div class="d-flex flex-wrap gap-2 align-items-center mb-1" style="font-size:0.8rem;">
-        <strong class="small text-muted me-1">Your tasks (priority):</strong>
-        <span class="small"><span class="badge" style="background:#dc3545;">●</span> Urgent</span>
-        <span class="small"><span class="badge" style="background:#fd7e14;">●</span> High</span>
-        <span class="small"><span class="badge" style="background:#0d6efd;">●</span> Medium</span>
-        <span class="small"><span class="badge" style="background:#198754;">●</span> Low</span>
-        <span class="ms-3 small text-muted me-1">Events:</span>
-        <span class="small"><span class="badge" style="background:#6f42c1;">●</span> Meeting</span>
-        <span class="small"><span class="badge" style="background:#f59e0b;">●</span> Out of Office</span>
-        <span class="small"><span class="badge" style="background:#64748b;">●</span> Busy Block</span>
-        <span class="small"><span class="badge" style="background:#0284c7;">●</span> Team Event</span>
+    <!-- Time Health — scheduled-hours breakdown for the viewer's own time.
+         Hours come only from CalendarEvents (real start/end); tasks are shown
+         as a commitment COUNT, never summed as hours (a task bar is a deadline
+         window, not worked time). See kanban/utils/calendar_analytics.py. -->
+    <div class="th-panel mb-4">
+        <button class="th-toggle" type="button" id="th-toggle" aria-expanded="true"
+                aria-controls="th-body">
+            <i class="fas fa-chevron-down th-chevron me-2"></i>
+            <i class="fas fa-heart-pulse me-2 text-primary"></i>
+            <span class="fw-semibold">Time Health</span>
+            <span class="text-muted small ms-2" id="th-range-label"></span>
+        </button>
+        <div id="th-body">
+            <div class="th-loading text-muted small py-2" id="th-loading">
+                <i class="fas fa-circle-notch fa-spin me-1"></i> Calculating&hellip;
+            </div>
+            <div id="th-content" style="display:none;">
+                <div class="th-row-label">Scheduled</div>
+                <div class="th-bar" id="th-bar" role="img" aria-label="Scheduled time breakdown"></div>
+                <div class="th-legend" id="th-legend"></div>
+                <!-- Actuals overlay: logged TimeEntry hours on the SAME scale as
+                     the scheduled bar above, so the two read as planned vs actual.
+                     Never summed with it — an hour can be both. -->
+                <div id="th-actual-wrap" style="display:none;">
+                    <div class="th-row-label mt-3">
+                        Logged <span class="text-muted" id="th-actual-sub"></span>
+                    </div>
+                    <div class="th-bar th-bar-actual" id="th-actual-bar"
+                         role="img" aria-label="Logged time versus scheduled"></div>
+                    <div class="th-delta" id="th-delta"></div>
+                </div>
+                <div class="th-commit" id="th-commit"></div>
+                <div class="th-flags" id="th-flags"></div>
+                <div class="th-links">
+                    <a href="{% url 'decision_center:decision_center' %}">
+                        <i class="fas fa-bolt me-1"></i>Focus Today
+                    </a>
+                    <a href="{% url 'conflict_dashboard' %}">
+                        <i class="fas fa-triangle-exclamation me-1"></i>Conflicts
+                    </a>
+                </div>
+            </div>
+            <div class="th-empty text-muted small py-2" id="th-empty" style="display:none;">
+                No scheduled events in this range — nothing to break down yet.
+            </div>
+        </div>
     </div>
-    <!-- Teammate colour legend (built by JS) -->
-    <div class="d-flex flex-wrap gap-2 align-items-center mb-3" id="teammate-legend" style="font-size:0.8rem;">
-        <strong class="small text-muted me-1">Teammates:</strong>
+
+    <!-- Filter dropdowns: priority, events, teammates -->
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-3" style="font-size:0.8rem;">
+
+        <!-- Priority filter -->
+        <div class="d-flex align-items-center gap-2">
+            <strong class="small text-muted">Your tasks (priority):</strong>
+            <div class="dropdown" id="priority-dropdown-wrapper">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                        id="priority-dropdown-btn" data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside" aria-expanded="false"
+                        style="font-size:0.8rem; padding:2px 10px;">
+                    <span id="priority-dropdown-label">All visible</span>
+                </button>
+                <ul class="dropdown-menu shadow-sm py-1" id="priority-dropdown-menu"
+                    aria-labelledby="priority-dropdown-btn" style="min-width:150px;"></ul>
+            </div>
+        </div>
+
+        <!-- Events filter -->
+        <div class="d-flex align-items-center gap-2">
+            <strong class="small text-muted">Events:</strong>
+            <div class="dropdown" id="event-type-dropdown-wrapper">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                        id="event-type-dropdown-btn" data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside" aria-expanded="false"
+                        style="font-size:0.8rem; padding:2px 10px;">
+                    <span id="event-type-dropdown-label">All visible</span>
+                </button>
+                <ul class="dropdown-menu shadow-sm py-1" id="event-type-dropdown-menu"
+                    aria-labelledby="event-type-dropdown-btn" style="min-width:160px;"></ul>
+            </div>
+        </div>
+
+        <!-- Teammate filter (built by JS) -->
+        <div class="d-flex align-items-center gap-2" id="teammate-legend">
+            <strong class="small text-muted">Teammates:</strong>
+            <div class="dropdown" id="teammate-dropdown-wrapper" style="display:none;">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                        id="teammate-dropdown-btn" data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside" aria-expanded="false"
+                        style="font-size:0.8rem; padding:2px 10px;">
+                    <span id="teammate-dropdown-label">All visible</span>
+                </button>
+                <ul class="dropdown-menu shadow-sm py-1" id="teammate-dropdown-menu"
+                    aria-labelledby="teammate-dropdown-btn" style="min-width:160px;"></ul>
+            </div>
+        </div>
+
     </div>
 
     <!-- Board filter chips -->
@@ -161,29 +456,15 @@
     </div>
     {% endif %}
 
-    <!-- Team view mode toggle -->
-    <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
-        <span class="small text-muted fw-semibold">Team view:</span>
-        <div class="btn-group btn-group-sm" role="group" aria-label="Team view mode">
-            <button type="button" class="btn btn-outline-secondary" id="btn-mode-detail">
-                <i class="fas fa-list-ul me-1"></i> Detail
-            </button>
-            <button type="button" class="btn btn-outline-secondary" id="btn-mode-avail">
-                <i class="fas fa-calendar-check me-1"></i> Availability
-            </button>
-        </div>
-        <span class="text-muted small" id="team-mode-badge"></span>
-    </div>
-    <!-- Teammate filter chips (built by JS) -->
-    <div class="d-flex flex-wrap gap-2 mb-3" id="teammate-chips" style="display:none!important;"></div>
 
     <!-- Calendar -->
     <div class="calendar-container">
         <div class="d-flex align-items-center gap-2 mb-3 text-muted" style="font-size:0.82rem;">
             <i class="fas fa-hand-pointer" style="color:#0d6efd;"></i>
-            <span>Click any date to quickly <strong>create a task</strong> or <strong>schedule an event</strong> on that day.</span>
+            <span>Click any date to quickly <strong>create a task</strong> or <strong>schedule an event</strong> on that day. Drag or resize <strong>your own</strong> items to reschedule them — teammates' items can't be moved.</span>
         </div>
         <div id='calendar'></div>
+        <div id='calendar-list-view' style="display:none;"></div>
     </div>
 
 </div>
@@ -271,6 +552,7 @@
             <label class="form-label fw-semibold">Visibility</label>
             <select class="form-select" id="event-visibility">
               <option value="team">Team can see I’m busy</option>
+              <option value="public">🌐 Public (visible to entire board)</option>
               <option value="private">🔒 Private (only me)</option>
             </select>
             <small class="text-muted" id="event-visibility-hint" style="font-size:0.78rem;">Teammates see you’re blocked but not the reason.</small>
@@ -382,7 +664,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+<script src='{% static "vendor/fullcalendar.min.js" %}'></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // ---- Data from Django ----
@@ -395,9 +677,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const CREATE_EVENT_URL = '{% url "calendar_create_event" %}';
 
     // ---- Board filter state ----
-    let activeBoardIds = [];  // empty = all
+    // Pre-filtered when arriving from a board's "Calendar" tab (?board=<id>).
+    let activeBoardIds = {{ active_board_ids_json|safe }};  // empty = all
     const DEFAULT_SUBTITLE = 'All tasks & events across your boards \u2014 {{ current_month }}';
     const CURRENT_MONTH = '{{ current_month }}';
+    const MONTH_START = '{{ month_start_iso }}';
+    const MONTH_END   = '{{ month_end_iso }}';
 
     // ---- Quick-view drawer open / close (reuse base.html drawer) ----
     const drawer   = document.getElementById('task-drawer');
@@ -423,19 +708,81 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ---- Team layer / view mode state ----
-    let teamViewMode      = localStorage.getItem('prizmTeamViewMode') || 'detail';
+    const teamViewMode = 'detail';
     let hiddenTeammateIds = new Set();
+    let hiddenPriorities  = new Set();
+    let hiddenEventTypes  = new Set();
+
+    // ---- Custom list view state (replaces FullCalendar's built-in listMonth,
+    // which re-lists a multi-day task on every day it spans) ----
+    let listModeActive = false;
+    let currentRangeStart = null;
+    let currentRangeEnd = null;
+
+    // ---- Time Health state (see the TIME HEALTH PANEL section below) ----
+    // Declared up here on purpose: calendar.render() fires datesSet
+    // synchronously, which calls loadTimeHealth(); if these were declared next
+    // to that code they'd still be in the temporal dead zone and throw.
+    const TH_SEGMENTS = [
+        { key: 'meeting', label: 'Meetings',      cls: 'th-seg-meeting', color: '#6f42c1' },
+        { key: 'focus',   label: 'Focus',         cls: 'th-seg-focus',   color: '#64748b' },
+        { key: 'ooo',     label: 'Out of office', cls: 'th-seg-ooo',     color: '#f59e0b' },
+        { key: 'free',    label: 'Free',          cls: 'th-seg-free',    color: '#10b981' },
+    ];
+    let thRequestSeq = 0;
+
+    // ---- Editability: which items can be dragged/resized ----
+    // Only the current user's OWN items are editable — teammate tasks and
+    // sanitized busy/OOO status blocks stay locked (the server also 403s them,
+    // but locking client-side avoids a confusing snap-back). Aggregated 'busy'
+    // blocks (availability mode) are never editable.
+    function applyEditability(e) {
+        const p = e.extendedProps || {};
+        let editable = false;
+        if (p.source === 'task' && p.layer === 'mine') {
+            editable = true;
+        } else if (p.source === 'event' && p.is_mine) {
+            editable = true;
+        }
+        e.editable = editable;
+        e.startEditable = editable;
+        // durationEditable is toggled per-view too (no resize in week view) —
+        // see applyDurationEditability(), called on view change. Seed it here.
+        e.durationEditable = editable;
+        return e;
+    }
 
     // ---- Layer/mode event processing ----
     function processEvents(data) {
-        let filtered = data;
-        // Apply teammate visibility filter (hides tasks AND status events from that teammate)
+        let filtered = data.map(applyEditability);
+        // Apply teammate visibility filter (covers all task layers + unassigned, sentinel -1)
         if (hiddenTeammateIds.size > 0) {
-            filtered = data.filter(function(e) {
+            filtered = filtered.filter(function(e) {
                 const p = e.extendedProps;
                 if (!p) return true;
-                if (p.layer === 'teammate')        return !hiddenTeammateIds.has(p.assignee_id);
+                if (p.source === 'task') {
+                    const aid = (p.assignee_id != null) ? p.assignee_id : -1;
+                    return !hiddenTeammateIds.has(aid);
+                }
                 if (p.layer === 'teammate_status') return !hiddenTeammateIds.has(p.creator_id);
+                return true;
+            });
+        }
+        // Priority filter (own tasks)
+        if (hiddenPriorities.size > 0) {
+            filtered = filtered.filter(function(e) {
+                const p = e.extendedProps;
+                if (!p) return true;
+                if (p.source === 'task' && p.layer === 'mine') return !hiddenPriorities.has(p.priority);
+                return true;
+            });
+        }
+        // Event type filter
+        if (hiddenEventTypes.size > 0) {
+            filtered = filtered.filter(function(e) {
+                const p = e.extendedProps;
+                if (!p) return true;
+                if (p.source === 'event') return !hiddenEventTypes.has(p.event_type_key);
                 return true;
             });
         }
@@ -474,6 +821,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 title: `${b.name} — busy (${n} task${n !== 1 ? 's' : ''})`,
                 start: b.date,
                 color: b.color,
+                editable: false, startEditable: false, durationEditable: false,
                 extendedProps: { source: 'busy', layer: 'busy',
                                  assignee_name: b.name, count: n },
             });
@@ -507,6 +855,134 @@ document.addEventListener('DOMContentLoaded', function () {
         tooltip.style.top  = (e.clientY - 10) + 'px';
     });
 
+    // ---- Shared item behaviors (used by both the FullCalendar grid AND the
+    // custom list view below, so the two never drift apart) ----
+
+    // Click on a task → open the quick-view drawer; click on an event → open the detail modal.
+    function handleItemClick(id, p, title) {
+        if (!p || p.source === 'busy') return;
+
+        if (p.source === 'task') {
+            var taskId = String(id).replace('task-', '');
+            if (taskId) {
+                htmx.ajax('GET', '/tasks/' + taskId + '/quick-view/', {
+                    target: '#task-drawer-body', swap: 'innerHTML'
+                });
+            }
+            return;
+        }
+
+        // Non-task events — detail modal
+        document.getElementById('detail-title').textContent = title;
+
+        let body = '';
+        if (p.layer === 'teammate_status') {
+            // Teammate’s status event — show limited info
+            body = `
+                <div><strong>Type:</strong> ${p.event_type}</div>
+                ${p.linked_task_title ? `<div><strong>Working on:</strong> ${p.linked_task_title}</div>` : ''}
+            `;
+            document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/?from=unified`;
+            document.getElementById('detail-open-link').style.display = '';
+        } else {
+            // My own events (or events I'm invited to) — full detail
+            const organizerStr = p.created_by ? (p.created_by + ' (organizer)') : '';
+            const participantList = (p.participants || []).filter(u => u !== p.created_by);
+            const allParticipants = organizerStr
+                ? [organizerStr, ...participantList]
+                : participantList;
+            const participants = allParticipants.length ? allParticipants.join(', ') : '(only you)';
+            const privBadge = p.visibility === 'private'
+                ? '<div class="mt-2"><span class="badge bg-secondary">🔒 Private</span></div>' : '';
+            body = `
+                <div><strong>Type:</strong> ${p.event_type}</div>
+                ${p.board ? `<div><strong>Board:</strong> ${p.board}</div>` : ''}
+                ${p.location ? `<div><strong>Location:</strong> ${p.location}</div>` : ''}
+                ${p.description ? `<div><strong>Notes:</strong> ${p.description}</div>` : ''}
+                ${p.linked_task_title ? `<div><strong>Linked task:</strong> ${p.linked_task_title}</div>` : ''}
+                ${p.event_type_key === 'meeting' || p.event_type_key === 'team_event'
+                    ? `<div><strong>Participants:</strong> ${participants}</div>` : ''}
+                ${privBadge}
+            `;
+            document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/?from=unified`;
+            document.getElementById('detail-open-link').style.display = '';
+        }
+        document.getElementById('detail-body').innerHTML = body;
+        new bootstrap.Modal(document.getElementById('detailModal')).show();
+    }
+
+    // Tooltip body for a task/event — identical content in grid and list view.
+    function buildTooltipHtml(title, p) {
+        if (p.source === 'busy') {
+            return `<strong>${title}</strong><br><span style="color:#aaa;">Switch to Detail view to see individual tasks.</span>`;
+        } else if (p.source === 'task') {
+            const layerBit = p.layer === 'teammate'
+                ? `<br><span style="color:${p.assignee_color}; font-weight:600;">● ${p.assignee_name || p.assignee}’s task</span>`
+                : '';
+            return `
+                <strong>${title}</strong><br>
+                📋 ${p.board} › ${p.column}<br>
+                🚩 ${p.priority}${layerBit}
+                ${p.assignee ? `<br>👤 ${p.assignee}` : ''}
+                <br>⬜ ${p.progress}% complete
+            `;
+        } else if (p.layer === 'teammate_status') {
+            // Sanitized title already contains name + status
+            const icons = {
+                'out_of_office': '🏖',
+                'busy_block': '🔴',
+                'team_event': '🏟',
+                'meeting': '🤝',
+            };
+            const icon = icons[p.event_type_key] || '🗓';
+            return `${icon} <strong>${title}</strong>
+                ${p.linked_task_title ? `<br>📋 Task: ${p.linked_task_title}` : ''}`;
+        } else {
+            // My own event
+            const privBadge = p.visibility === 'private'
+                ? '<br><span style="color:var(--text-muted);">🔒 Private — only you see this</span>' : '';
+            return `
+                <strong>${title}</strong><br>
+                🗓 ${p.event_type}
+                ${p.board ? `<br>📋 ${p.board}` : ''}
+                ${p.location ? `<br>📍 ${p.location}` : ''}
+                ${p.linked_task_title ? `<br>📋 Task: ${p.linked_task_title}` : ''}
+                ${privBadge}
+            `;
+        }
+    }
+
+    // Past/overdue dim + strikethrough styling — same rule in grid and list view.
+    function computeDimStyle(p, isListLike) {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        if (p.source === 'task') {
+            const dueStr = p.due_date_str;
+            if (dueStr) {
+                // Parse as LOCAL date to avoid UTC date-shift in UTC± timezones
+                const [dy, dm, dd] = dueStr.split('-').map(Number);
+                const dueLocal = new Date(dy, dm - 1, dd);
+                const isPast = dueLocal < today;
+                if (isPast) {
+                    // List view: strike through ALL past tasks (completed or not) — means "in the past"
+                    // Month/week view: only strike incomplete past tasks — highlights overdue work
+                    if (isListLike || p.progress < 100) {
+                        return { opacity: '0.7', textDecoration: 'line-through' };
+                    }
+                }
+            }
+        } else if (p.source === 'event' && isListLike) {
+            const evEndStr = p.end_date_str;
+            if (evEndStr) {
+                const [ey, em, ed] = evEndStr.split('-').map(Number);
+                const endLocal = new Date(ey, em - 1, ed);
+                if (endLocal < today) {
+                    return { opacity: '0.55', textDecoration: 'line-through' };
+                }
+            }
+        }
+        return null;
+    }
+
     // ---- FullCalendar ----
     const calendarEl = document.getElementById('calendar');
     const userTz = document.body.getAttribute('data-user-timezone') || 'Asia/Kolkata';
@@ -514,12 +990,49 @@ document.addEventListener('DOMContentLoaded', function () {
         timeZone: userTz,
         initialView: 'dayGridMonth',
         firstDay: 1,
+        customButtons: {
+            listToggle: {
+                text: 'list',
+                click: function () { toggleListMode(); },
+            },
+            // Plain 'dayGridMonth'/'timeGridWeek' toolbar buttons are no-ops
+            // (no viewDidMount fires) when list mode is active and the
+            // calendar's underlying view already matches the clicked button
+            // (e.g. list was toggled on from Week — clicking "week" again
+            // wouldn't change anything, leaving the list overlay stuck on).
+            // Exiting list mode explicitly here, before changeView, fixes that.
+            monthView: {
+                text: 'month',
+                click: function () { exitListMode(); calendar.changeView('dayGridMonth'); },
+            },
+            weekView: {
+                text: 'week',
+                click: function () { exitListMode(); calendar.changeView('timeGridWeek'); },
+            },
+        },
         headerToolbar: {
             left:   'prev,next today',
             center: 'title',
-            right:  'dayGridMonth,timeGridWeek,listMonth',
+            right:  'monthView,weekView,listToggle',
         },
         height: 'auto',
+        // Density controls — the timeGrid week/day view was cramming every
+        // overlapping event into ever-narrower side-by-side columns (truncated
+        // "10:00 Foc" / "10:00 Elen" labels) across an unused full-24h span.
+        expandRows: true,
+        nowIndicator: true,
+        slotMinTime: '07:00:00',   // trim empty pre-dawn hours (working-day window)
+        slotMaxTime: '20:00:00',   // ...and late-night hours
+        eventMinHeight: 30,        // short (e.g. 15-min) meetings still get room for their title
+        eventMaxStack: 3,          // collapse dense overlaps to a "+N more" popover
+        dayMaxEvents: 4,           // month view: cap per-day rows, overflow → "+N more"
+        // Drag-and-drop + resize. Global editing is ON, but each event is stamped
+        // with per-item editability in applyEditability() (only your own items),
+        // and resize is disabled in week view via applyDurationEditability().
+        editable: true,
+        eventResizableFromStart: true,   // month-view task bars stretch from the left edge too
+        eventStartEditable: true,
+        eventDurationEditable: true,
         events: function (fetchInfo, successCallback, failureCallback) {
             let url = `${EVENTS_URL}?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`;
             if (activeBoardIds.length > 0) {
@@ -540,96 +1053,19 @@ document.addEventListener('DOMContentLoaded', function () {
         eventClick: function (info) {
             info.jsEvent.preventDefault();
             createPopup.style.display = 'none';
-            const p = info.event.extendedProps;
-            if (!p || p.source === 'busy') return;
-
-            // Task — open quick-view drawer via HTMX (same as board calendar)
-            if (p.source === 'task') {
-                var rawId = info.event.id;  // 'task-123'
-                var taskId = rawId.replace('task-', '');
-                if (taskId) {
-                    htmx.ajax('GET', '/tasks/' + taskId + '/quick-view/', {
-                        target: '#task-drawer-body', swap: 'innerHTML'
-                    });
-                }
-                return;
-            }
-
-            // Non-task events — keep existing detail modal
-            const title = info.event.title;
-            document.getElementById('detail-title').textContent = title;
-
-            let body = '';
-            if (p.layer === 'teammate_status') {
-                // Teammate’s status event — show limited info
-                body = `
-                    <div><strong>Type:</strong> ${p.event_type}</div>
-                    ${p.linked_task_title ? `<div><strong>Working on:</strong> ${p.linked_task_title}</div>` : ''}
-                `;
-                document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/`;
-                document.getElementById('detail-open-link').style.display = '';
-            } else {
-                // My own events — full detail
-                const participants = p.participants && p.participants.length
-                    ? p.participants.join(', ')
-                    : '(none beyond you)';
-                const privBadge = p.visibility === 'private'
-                    ? '<div class="mt-2"><span class="badge bg-secondary">🔒 Private</span></div>' : '';
-                body = `
-                    <div><strong>Type:</strong> ${p.event_type}</div>
-                    ${p.board ? `<div><strong>Board:</strong> ${p.board}</div>` : ''}
-                    ${p.location ? `<div><strong>Location:</strong> ${p.location}</div>` : ''}
-                    ${p.description ? `<div><strong>Notes:</strong> ${p.description}</div>` : ''}
-                    ${p.linked_task_title ? `<div><strong>Linked task:</strong> ${p.linked_task_title}</div>` : ''}
-                    ${p.event_type_key === 'meeting' || p.event_type_key === 'team_event'
-                        ? `<div><strong>Participants:</strong> ${participants}</div>` : ''}
-                    ${privBadge}
-                `;
-                document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/`;
-                document.getElementById('detail-open-link').style.display = '';
-            }
-            document.getElementById('detail-body').innerHTML = body;
-            new bootstrap.Modal(document.getElementById('detailModal')).show();
+            handleItemClick(info.event.id, info.event.extendedProps, info.event.title);
+        },
+        // Drag a bar to move it (tasks & events).
+        eventDrop: function (info) {
+            handleReschedule(info, 'drop');
+        },
+        // Stretch a task bar from either end (month view only for tasks; events
+        // are guarded against week-view resize inside handleReschedule).
+        eventResize: function (info) {
+            handleReschedule(info, 'resize');
         },
         eventMouseEnter: function (info) {
-            const p = info.event.extendedProps;
-            if (p.source === 'busy') {
-                tooltip.innerHTML = `<strong>${info.event.title}</strong><br><span style="color:#aaa;">Switch to Detail view to see individual tasks.</span>`;
-            } else if (p.source === 'task') {
-                const layerBit = p.layer === 'teammate'
-                    ? `<br><span style="color:${info.event.backgroundColor}; font-weight:600;">● ${p.assignee_name || p.assignee}’s task</span>`
-                    : '';
-                tooltip.innerHTML = `
-                    <strong>${info.event.title}</strong><br>
-                    📋 ${p.board} › ${p.column}<br>
-                    🚩 ${p.priority}${layerBit}
-                    ${p.assignee ? `<br>👤 ${p.assignee}` : ''}
-                    <br>⬜ ${p.progress}% complete
-                `;
-            } else if (p.layer === 'teammate_status') {
-                // Sanitized title already contains name + status
-                const icons = {
-                    'out_of_office': '🏖',
-                    'busy_block': '🔴',
-                    'team_event': '🏟',
-                    'meeting': '🤝',
-                };
-                const icon = icons[p.event_type_key] || '🗓';
-                tooltip.innerHTML = `${icon} <strong>${info.event.title}</strong>
-                    ${p.linked_task_title ? `<br>📋 Task: ${p.linked_task_title}` : ''}`;  
-            } else {
-                // My own event
-                const privBadge = p.visibility === 'private'
-                    ? '<br><span style="color:#9ca3af;">🔒 Private — only you see this</span>' : '';
-                tooltip.innerHTML = `
-                    <strong>${info.event.title}</strong><br>
-                    🗓 ${p.event_type}
-                    ${p.board ? `<br>📋 ${p.board}` : ''}
-                    ${p.location ? `<br>📍 ${p.location}` : ''}
-                    ${p.linked_task_title ? `<br>📋 Task: ${p.linked_task_title}` : ''}
-                    ${privBadge}
-                `;
-            }
+            tooltip.innerHTML = buildTooltipHtml(info.event.title, info.event.extendedProps);
             tooltip.style.display = 'block';
         },
         eventMouseLeave: function () { tooltip.style.display = 'none'; },
@@ -639,99 +1075,768 @@ document.addEventListener('DOMContentLoaded', function () {
             if (p.layer === 'teammate') {
                 info.el.style.opacity = '0.72';
             }
-            // Mark overdue tasks using due_date_str (not start date)
-            if (p.source === 'task') {
-                var dueStr = p.due_date_str;
-                if (dueStr) {
-                    const d = new Date(dueStr);
-                    const today = new Date(); today.setHours(0,0,0,0);
-                    if (d < today && p.progress < 100) {
-                        info.el.style.opacity = '0.7';
-                        info.el.style.textDecoration = 'line-through';
-                    }
-                }
+            const dim = computeDimStyle(p, info.view.type.startsWith('list'));
+            if (dim) {
+                info.el.style.opacity = dim.opacity;
+                info.el.style.textDecoration = dim.textDecoration;
             }
+        },
+        // A real view (Month/Week) mounting means the user navigated away from
+        // our custom list overlay (or this is the initial page load) — make sure
+        // the grid is actually visible and list mode's UI state is cleared.
+        viewDidMount: function (info) {
+            exitListMode();
+            updateGridButtonActiveState(info.view.type);
+        },
+        // Fires on every navigation (prev/next/today) AND on initial render —
+        // this is what keeps date-range navigation working while our custom
+        // list overlay is showing (FullCalendar's own view stays hidden but
+        // its internal date state still advances).
+        datesSet: function (info) {
+            currentRangeStart = info.startStr;
+            currentRangeEnd = info.endStr;
+            applyDurationEditability(info.view.type);
+            if (listModeActive) {
+                renderListView(info.startStr, info.endStr);
+            }
+            // Keep Time Health in step with the visible range (also fires on
+            // initial render, which is what performs the panel's first load).
+            loadTimeHealth();
         },
     });
     calendar.render();
 
-    // ---- Apply stored team view mode ----
-    (function applyMode() {
-        const detailBtn = document.getElementById('btn-mode-detail');
-        const availBtn  = document.getElementById('btn-mode-avail');
-        const badge     = document.getElementById('team-mode-badge');
-        if (!detailBtn) return;
-        if (teamViewMode === 'detail') {
-            detailBtn.classList.add('active');
-            availBtn.classList.remove('active');
-            if (badge) badge.textContent = 'Showing teammate task details';
+    // Week view = drag-to-move only (no stretch). Toggle FullCalendar's global
+    // durationEditable per view; per-item startEditable already gates ownership.
+    function applyDurationEditability(viewType) {
+        calendar.setOption('eventDurationEditable', viewType !== 'timeGridWeek');
+    }
+
+    // ---- Drag/resize persistence ----------------------------------------
+    // Format a JS Date as a LOCAL 'YYYY-MM-DD' — never toISOString() (that is
+    // UTC and can shift the date across midnight).
+    function fmtLocalDate(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+    // Format a JS Date as a floating local 'YYYY-MM-DDTHH:MM:SS' (no offset) —
+    // matches how the server emits/stores timed events (see calendar_views.py).
+    function fmtLocalDateTime(d) {
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        return `${fmtLocalDate(d)}T${hh}:${mm}:${ss}`;
+    }
+
+    // Central handler for both eventDrop and eventResize. Branches on task vs
+    // event, PATCHes the right endpoint, and reverts on failure.
+    function handleReschedule(info, kind) {
+        const ev = info.event;
+        const p = ev.extendedProps || {};
+
+        // Defensive: only own items are editable; anything else reverts.
+        const isMineTask = p.source === 'task' && p.layer === 'mine';
+        const isMineEvent = p.source === 'event' && p.is_mine;
+        if (!isMineTask && !isMineEvent) { info.revert(); return; }
+
+        if (p.source === 'task') {
+            rescheduleCalendarTask(info, kind);
+        } else if (p.source === 'event') {
+            rescheduleCalendarEvent(info, kind);
         } else {
-            availBtn.classList.add('active');
-            detailBtn.classList.remove('active');
-            if (badge) badge.textContent = 'Showing busy / free blocks';
-        }
-    })();
-
-    document.getElementById('btn-mode-detail').addEventListener('click', function() {
-        teamViewMode = 'detail';
-        localStorage.setItem('prizmTeamViewMode', 'detail');
-        document.getElementById('btn-mode-detail').classList.add('active');
-        document.getElementById('btn-mode-avail').classList.remove('active');
-        const b = document.getElementById('team-mode-badge');
-        if (b) b.textContent = 'Showing teammate task details';
-        calendar.refetchEvents();
-    });
-    document.getElementById('btn-mode-avail').addEventListener('click', function() {
-        teamViewMode = 'availability';
-        localStorage.setItem('prizmTeamViewMode', 'availability');
-        document.getElementById('btn-mode-avail').classList.add('active');
-        document.getElementById('btn-mode-detail').classList.remove('active');
-        const b = document.getElementById('team-mode-badge');
-        if (b) b.textContent = 'Showing busy / free blocks';
-        calendar.refetchEvents();
-    });
-
-    // ---- Build teammate legend + filter chips ----
-    const tmLegendEl = document.getElementById('teammate-legend');
-    const tmChipsEl  = document.getElementById('teammate-chips');
-
-    if (teammatesData.length > 0) {
-        if (tmChipsEl) tmChipsEl.style.removeProperty('display');
-        teammatesData.forEach(function(t) {
-            // Legend entry
-            if (tmLegendEl) {
-                const ls = document.createElement('span');
-                ls.className = 'small';
-                ls.innerHTML = `<span class="badge" style="background:${t.color};">●</span> ${t.display}`;
-                tmLegendEl.appendChild(ls);
-            }
-            // Filter chip
-            if (tmChipsEl) {
-                const chip = document.createElement('span');
-                chip.className = 'badge teammate-chip';
-                chip.dataset.teammateId = t.id;
-                chip.style.background = t.color;
-                chip.textContent = t.display;
-                tmChipsEl.appendChild(chip);
-            }
-        });
-
-        if (tmChipsEl) {
-            tmChipsEl.addEventListener('click', function(e) {
-                const chip = e.target.closest('.teammate-chip');
-                if (!chip) return;
-                const tid = parseInt(chip.dataset.teammateId, 10);
-                if (hiddenTeammateIds.has(tid)) {
-                    hiddenTeammateIds.delete(tid);
-                    chip.classList.remove('inactive');
-                } else {
-                    hiddenTeammateIds.add(tid);
-                    chip.classList.add('inactive');
-                }
-                calendar.refetchEvents();
-            });
+            info.revert();
         }
     }
+
+    function rescheduleCalendarTask(info, kind) {
+        const ev = info.event;
+        const taskId = String(ev.id).replace(/^task-/, '');
+
+        // FullCalendar 'end' is EXCLUSIVE for all-day bars; the feed added +1 day,
+        // so subtract it back to get the inclusive due date.
+        const payload = {};
+        if (ev.start) {
+            payload.start_date = fmtLocalDate(ev.start);
+        }
+        if (ev.end) {
+            const inclusiveEnd = new Date(ev.end);
+            inclusiveEnd.setDate(inclusiveEnd.getDate() - 1);
+            payload.due_date = fmtLocalDate(inclusiveEnd);
+        }
+
+        // A left-edge resize changes only start; a right-edge resize only due.
+        // eventResize gives startDelta / endDelta so we can tell which edge moved
+        // and send just that side (matching the Gantt reschedule contract).
+        if (kind === 'resize') {
+            const movedStart = info.startDelta &&
+                (info.startDelta.days || info.startDelta.milliseconds);
+            const movedEnd = info.endDelta &&
+                (info.endDelta.days || info.endDelta.milliseconds);
+            if (movedStart && !movedEnd) { delete payload.due_date; }
+            else if (movedEnd && !movedStart) { delete payload.start_date; }
+        }
+
+        fetch(`/api/tasks/${taskId}/reschedule/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+            body: JSON.stringify(payload),
+        })
+        .then(r => {
+            if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Reschedule failed'); });
+            return r.json();
+        })
+        .then(data => {
+            if (!data.success) { throw new Error(data.error || 'Reschedule failed'); }
+            if (data.affected_dependents && data.affected_dependents.length > 0) {
+                showDependencyBanner(data.affected_dependents, taskId, data.total_dependents, payload);
+            }
+        })
+        .catch(err => {
+            info.revert();
+            showCalErrorToast(err.message || 'Could not update the task. Changes reverted.');
+        });
+    }
+
+    function rescheduleCalendarEvent(info, kind) {
+        const ev = info.event;
+        const eventId = ev.extendedProps.event_id;
+
+        const payload = { is_all_day: ev.allDay };
+        if (ev.allDay) {
+            // All-day: date-only. FullCalendar's exclusive end → inclusive stored end.
+            payload.start_datetime = fmtLocalDate(ev.start);
+            const end = ev.end ? new Date(ev.end) : new Date(ev.start);
+            if (ev.end) { end.setDate(end.getDate() - 1); }
+            payload.end_datetime = fmtLocalDate(end);
+        } else {
+            // Timed (week view): floating local datetime strings.
+            payload.start_datetime = fmtLocalDateTime(ev.start);
+            const end = ev.end || ev.start;
+            payload.end_datetime = fmtLocalDateTime(end);
+        }
+
+        fetch(`/calendar/events/${eventId}/reschedule/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+            body: JSON.stringify(payload),
+        })
+        .then(r => {
+            if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Reschedule failed'); });
+            return r.json();
+        })
+        .then(data => {
+            if (!data.success) { throw new Error(data.error || 'Reschedule failed'); }
+        })
+        .catch(err => {
+            info.revert();
+            showCalErrorToast(err.message || 'Could not update the event. Changes reverted.');
+        });
+    }
+
+    function escapeHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = String(s == null ? '' : s);
+        return d.innerHTML;
+    }
+
+    // ---- Dependency cascade banner (ported from the Gantt chart) ----------
+    // Mirrors the Gantt "warn, then optionally shift" behavior so Calendar and
+    // Gantt feel identical. Lists each affected task by title (like the Gantt's
+    // "Review Dependencies" highlight, adapted to a plain list since the
+    // calendar has no bar SVG to highlight) — just Shift / Dismiss.
+    function showDependencyBanner(dependents, sourceTaskId, totalDependents, srcPayload) {
+        const old = document.getElementById('cal-dep-banner');
+        if (old) old.remove();
+
+        const count = dependents.length;
+        const skipped = (typeof totalDependents === 'number')
+            ? Math.max(0, totalDependents - count) : 0;
+        const skippedNote = skipped > 0
+            ? ' <span class="cal-dep-note">' + skipped + ' other dependent' +
+              (skipped > 1 ? 's' : '') + ' already start' + (skipped > 1 ? '' : 's') +
+              ' after the new date.</span>'
+            : '';
+        const titleList = '<ul class="cal-dep-list">' +
+            dependents.map(function (d) {
+                return '<li>' + escapeHtml(d.title) + '</li>';
+            }).join('') +
+            '</ul>';
+
+        const banner = document.createElement('div');
+        banner.id = 'cal-dep-banner';
+        banner.className = 'cal-dep-banner';
+        banner.innerHTML =
+            '<i class="fas fa-exclamation-triangle"></i>' +
+            '<div class="cal-dep-body">' +
+            '<span class="cal-dep-msg">This change affects <strong>' + count +
+            '</strong> dependent task' + (count > 1 ? 's' : '') + ':' + skippedNote + '</span>' +
+            titleList +
+            '</div>' +
+            '<div class="cal-dep-actions">' +
+            '<button class="cal-dep-btn cal-dep-btn-primary" id="cal-dep-shift">' +
+            'Shift ' + count + ' task' + (count > 1 ? 's' : '') + '</button>' +
+            '<button class="cal-dep-close" id="cal-dep-close">&times;</button>' +
+            '</div>';
+        document.body.appendChild(banner);
+
+        document.getElementById('cal-dep-shift').addEventListener('click', function () {
+            const ok = window.confirm(
+                'Shift ' + count + ' dependent task' + (count > 1 ? 's' : '') +
+                ' so the schedule stays valid?\n\nEach is moved to start after its ' +
+                'predecessor finishes, keeping its original duration. This may move ' +
+                'further downstream tasks too.'
+            );
+            if (!ok) return;
+            banner.remove();
+            cascadeCalendarReschedule(sourceTaskId, srcPayload);
+        });
+        document.getElementById('cal-dep-close').addEventListener('click', function () {
+            banner.remove();
+        });
+    }
+
+    function cascadeCalendarReschedule(sourceTaskId, srcPayload) {
+        fetch(`/api/tasks/${sourceTaskId}/cascade-reschedule/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+            body: JSON.stringify(srcPayload || {}),
+        })
+        .then(r => {
+            if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Cascade failed'); });
+            return r.json();
+        })
+        .then(data => {
+            if (!data.success) { throw new Error(data.error || 'Could not shift dependent tasks.'); }
+            calendar.refetchEvents();
+            const moved = (data.updated || []).length;
+            showCalInfoToast(moved
+                ? moved + ' dependent task' + (moved > 1 ? 's' : '') + ' rescheduled.'
+                : 'No dependent tasks needed shifting.');
+        })
+        .catch(err => { showCalErrorToast(err.message || 'Could not shift dependent tasks.'); });
+    }
+
+    // ---- Lightweight toasts ----------------------------------------------
+    function showCalToast(message, cls) {
+        const toast = document.createElement('div');
+        toast.className = 'cal-toast ' + cls;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 4000);
+    }
+    function showCalErrorToast(msg) { showCalToast(msg, 'cal-toast-error'); }
+    function showCalInfoToast(msg) { showCalToast(msg, 'cal-toast-info'); }
+
+    // ---- Custom list view rendering ----
+
+    function setListModeUI(active) {
+        const harness = calendarEl.querySelector('.fc-view-harness');
+        const listEl = document.getElementById('calendar-list-view');
+        const btn = document.querySelector('.fc-listToggle-button');
+        if (harness) harness.style.display = active ? 'none' : '';
+        if (listEl) listEl.style.display = active ? '' : 'none';
+        if (btn) btn.classList.toggle('fc-button-active', active);
+        if (active) updateGridButtonActiveState(null);
+    }
+
+    function toggleListMode() {
+        listModeActive = !listModeActive;
+        setListModeUI(listModeActive);
+        if (listModeActive) {
+            renderListView(currentRangeStart, currentRangeEnd);
+        } else {
+            updateGridButtonActiveState(calendar.view.type);
+        }
+    }
+
+    // Used by monthView/weekView toolbar buttons so a click always leaves
+    // list mode, even when it targets the view already active underneath
+    // (which wouldn't otherwise trigger viewDidMount).
+    function exitListMode() {
+        if (listModeActive) {
+            listModeActive = false;
+            setListModeUI(false);
+        }
+    }
+
+    // monthView/weekView are customButtons (not FullCalendar view buttons),
+    // so they don't get automatic .fc-button-active toggling — drive it manually.
+    function updateGridButtonActiveState(viewType) {
+        const monthBtn = document.querySelector('.fc-monthView-button');
+        const weekBtn = document.querySelector('.fc-weekView-button');
+        if (monthBtn) monthBtn.classList.toggle('fc-button-active', viewType === 'dayGridMonth');
+        if (weekBtn) weekBtn.classList.toggle('fc-button-active', viewType === 'timeGridWeek');
+    }
+
+    // Refetch/re-render whichever view (grid or list) is currently active —
+    // used by every filter control below instead of calling
+    // calendar.refetchEvents() directly, so filters affect the custom list too.
+    function refreshCurrentView() {
+        if (listModeActive) {
+            renderListView(currentRangeStart, currentRangeEnd);
+        } else {
+            calendar.refetchEvents();
+        }
+        loadTimeHealth();
+    }
+
+    // ================================================================
+    //  TIME HEALTH PANEL
+    // ================================================================
+    // NOTE: TH_SEGMENTS / thRequestSeq are declared ABOVE the calendar
+    // construction, not here — calendar.render() fires datesSet synchronously,
+    // which calls loadTimeHealth(), and a `const`/`let` declared here would
+    // still be in the temporal dead zone at that point (ReferenceError on load).
+
+    function fmtHours(h) {
+        const total = Math.round(h * 60);
+        const hrs = Math.floor(total / 60);
+        const mins = total % 60;
+        if (!hrs) return mins + 'm';
+        return mins ? hrs + 'h ' + mins + 'm' : hrs + 'h';
+    }
+
+    function loadTimeHealth() {
+        const loadingEl = document.getElementById('th-loading');
+        const contentEl = document.getElementById('th-content');
+        const emptyEl = document.getElementById('th-empty');
+        if (!loadingEl) return;
+
+        let url = '/calendar/time-health/';
+        const params = [];
+        if (currentRangeStart && currentRangeEnd) {
+            params.push('start=' + encodeURIComponent(currentRangeStart));
+            params.push('end=' + encodeURIComponent(currentRangeEnd));
+        }
+        if (activeBoardIds.length > 0) {
+            params.push('boards=' + activeBoardIds.join(','));
+        }
+        if (params.length) url += '?' + params.join('&');
+
+        // Guard against out-of-order responses when the user navigates quickly.
+        const seq = ++thRequestSeq;
+        loadingEl.style.display = '';
+        contentEl.style.display = 'none';
+        emptyEl.style.display = 'none';
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.ok ? r.json() : Promise.reject(r.status))
+            .then(data => {
+                if (seq !== thRequestSeq) return;   // a newer request superseded us
+                renderTimeHealth(data);
+            })
+            .catch(() => {
+                if (seq !== thRequestSeq) return;
+                loadingEl.style.display = 'none';
+                emptyEl.textContent = 'Could not load Time Health right now.';
+                emptyEl.style.display = '';
+            });
+    }
+
+    function renderTimeHealth(data) {
+        const loadingEl = document.getElementById('th-loading');
+        const contentEl = document.getElementById('th-content');
+        const emptyEl = document.getElementById('th-empty');
+        const totals = data.totals || {};
+
+        loadingEl.style.display = 'none';
+
+        // Only truly empty when there is no schedule, no logged effort AND
+        // nothing due — logged-but-unscheduled time is itself a finding worth
+        // showing, so it must not fall through to the empty state.
+        const booked = (totals.meeting || 0) + (totals.focus || 0) + (totals.ooo || 0);
+        if (booked <= 0 && !data.commitments_due && !data.has_logged_time) {
+            emptyEl.style.display = '';
+            return;
+        }
+
+        const rangeLabel = document.getElementById('th-range-label');
+        if (rangeLabel) {
+            rangeLabel.textContent = data.range_start + ' → ' + data.range_end;
+        }
+
+        // Stacked bar, proportional to capacity across the whole window.
+        // Shared scale for BOTH rows (scheduled + logged) so they can be read
+        // against each other. Includes `logged` so an over-capacity week widens
+        // the scale instead of overflowing the bar past 100%.
+        const denom = Math.max(
+            totals.capacity || 0,
+            booked + (totals.free || 0),
+            totals.logged || 0
+        ) || 1;
+        const barEl = document.getElementById('th-bar');
+        barEl.innerHTML = '';
+        TH_SEGMENTS.forEach(seg => {
+            const val = totals[seg.key] || 0;
+            if (val <= 0) return;
+            const div = document.createElement('div');
+            div.className = 'th-seg ' + seg.cls;
+            div.style.width = (val / denom * 100).toFixed(2) + '%';
+            div.title = seg.label + ': ' + fmtHours(val);
+            barEl.appendChild(div);
+        });
+
+        const legendEl = document.getElementById('th-legend');
+        legendEl.innerHTML = '';
+        TH_SEGMENTS.forEach(seg => {
+            const val = totals[seg.key] || 0;
+            const span = document.createElement('span');
+            const dot = document.createElement('span');
+            dot.className = 'th-dot';
+            dot.style.background = seg.color;
+            span.appendChild(dot);
+            span.appendChild(document.createTextNode(seg.label));
+            const hrs = document.createElement('span');
+            hrs.className = 'th-hours';
+            hrs.textContent = fmtHours(val);
+            span.appendChild(hrs);
+            legendEl.appendChild(span);
+        });
+
+        // ---- Actuals overlay: logged hours vs the schedule above ----------
+        // Drawn on the SAME denominator as the scheduled bar so the two rows
+        // are visually comparable. Logged time is NOT added to the stack — an
+        // hour can be both scheduled and logged, so summing double-counts.
+        const actualWrap = document.getElementById('th-actual-wrap');
+        if (data.has_logged_time) {
+            const logged = totals.logged || 0;
+            const capacity = totals.capacity || 0;
+            const actualBar = document.getElementById('th-actual-bar');
+            actualBar.innerHTML = '';
+
+            const within = Math.min(logged, capacity || logged);
+            const over = Math.max(0, logged - (capacity || logged));
+
+            const mk = (val, cls, label) => {
+                if (val <= 0) return;
+                const d = document.createElement('div');
+                d.className = 'th-seg ' + cls;
+                d.style.width = (val / denom * 100).toFixed(2) + '%';
+                d.title = label + ': ' + fmtHours(val);
+                actualBar.appendChild(d);
+            };
+            mk(within, 'th-seg-logged', 'Logged');
+            mk(over, 'th-seg-logged-over', 'Logged beyond capacity');
+
+            document.getElementById('th-actual-sub').textContent =
+                '· ' + fmtHours(logged) + ' across '
+                + data.days_logged + (data.days_logged === 1 ? ' day' : ' days');
+
+            // Plain-language read of the gap between plan and reality.
+            const scheduled = totals.scheduled || 0;
+            const deltaEl = document.getElementById('th-delta');
+            if (scheduled <= 0) {
+                deltaEl.textContent =
+                    'All of this work happened outside scheduled calendar time.';
+            } else {
+                const diff = logged - scheduled;
+                const absTxt = fmtHours(Math.abs(diff));
+                deltaEl.textContent = Math.abs(diff) < 0.25
+                    ? 'Logged time closely matches what was scheduled.'
+                    : (diff > 0
+                        ? absTxt + ' more logged than scheduled.'
+                        : absTxt + ' less logged than scheduled.');
+            }
+            actualWrap.style.display = '';
+        } else {
+            actualWrap.style.display = 'none';
+        }
+
+        // The differentiating line: commitments due vs. time actually left.
+        const commitEl = document.getElementById('th-commit');
+        const n = data.commitments_due || 0;
+        commitEl.textContent = n
+            ? n + (n === 1 ? ' task' : ' tasks') + ' due in this range vs '
+              + fmtHours(totals.free || 0) + ' unscheduled'
+            : 'No tasks due in this range — ' + fmtHours(totals.free || 0) + ' unscheduled.';
+
+        const flagsEl = document.getElementById('th-flags');
+        flagsEl.innerHTML = '';
+        (data.flags || []).forEach(f => {
+            const div = document.createElement('div');
+            div.className = 'th-flag th-flag-' + (f.level || 'warning');
+            div.textContent = f.text;
+            flagsEl.appendChild(div);
+        });
+
+        contentEl.style.display = '';
+    }
+
+    (function initTimeHealthToggle() {
+        const btn = document.getElementById('th-toggle');
+        const body = document.getElementById('th-body');
+        if (!btn || !body) return;
+        btn.addEventListener('click', function () {
+            const open = btn.getAttribute('aria-expanded') === 'true';
+            btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+            body.style.display = open ? 'none' : '';
+        });
+    })();
+
+    // Parse a 'YYYY-MM-DD[...]' string as a LOCAL date (avoids the UTC
+    // off-by-one bug documented above in computeDimStyle).
+    function parseLocalDate(dateStr) {
+        const [y, m, d] = dateStr.slice(0, 10).split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+
+    function formatDateRangeLabel(startStr, endStr) {
+        const start = parseLocalDate(startStr);
+        const end = endStr ? parseLocalDate(endStr) : start;
+        const fmtOpts = { month: 'short', day: 'numeric' };
+        const startLabel = start.toLocaleDateString('en-US', fmtOpts);
+        if (end.getTime() <= start.getTime()) return startLabel;
+        const endLabel = end.toLocaleDateString('en-US', fmtOpts);
+        return `${startLabel} – ${endLabel}`;
+    }
+
+    const EVENT_TYPE_ICONS = {
+        'out_of_office': '🏖',
+        'busy_block': '🔴',
+        'team_event': '🏟',
+        'meeting': '🤝',
+    };
+
+    function renderListRows(items) {
+        const listEl = document.getElementById('calendar-list-view');
+        // Defensive dedup by id — the API already returns one row per
+        // task/event (not day-exploded), but this guards against drift.
+        const byId = new Map();
+        items.forEach(function (e) { byId.set(e.id, e); });
+        const rows = Array.from(byId.values());
+        rows.sort(function (a, b) { return a.start.slice(0, 10).localeCompare(b.start.slice(0, 10)); });
+
+        listEl.innerHTML = '';
+        if (rows.length === 0) {
+            listEl.innerHTML = '<div class="text-muted text-center py-5">No tasks or events in this range.</div>';
+            return;
+        }
+
+        rows.forEach(function (e) {
+            const p = e.extendedProps || {};
+            const isTask = p.source === 'task';
+            const rangeStart = isTask ? (p.start_date_str || p.due_date_str) : e.start;
+            const rangeEnd   = isTask ? p.due_date_str : (p.end_date_str || e.start);
+            const dateLabel  = formatDateRangeLabel(rangeStart, rangeEnd);
+            const accentColor = e.borderColor || e.color || '#6c757d';
+            const bgColor = e.backgroundColor || '#f8f9fa';
+
+            const row = document.createElement('div');
+            row.className = 'list-view-row d-flex align-items-center gap-3';
+            row.style.borderLeft = `4px solid ${accentColor}`;
+            row.style.background = bgColor;
+
+            let metaBits;
+            if (isTask) {
+                metaBits = `<span class="text-muted small">${p.board || ''} › ${p.column || ''} · ${p.priority || ''}${p.assignee_name ? ' · ' + p.assignee_name : ''}</span>`;
+            } else {
+                const icon = EVENT_TYPE_ICONS[p.event_type_key] || '🗓';
+                metaBits = `<span class="text-muted small">${icon} ${p.event_type || ''}${p.location ? ' · ' + p.location : ''}</span>`;
+            }
+
+            row.innerHTML = `
+                <div class="list-view-date-col text-muted small">${dateLabel}</div>
+                <div class="flex-grow-1">
+                    <div class="fw-semibold list-view-title">${e.title}</div>
+                    ${metaBits}
+                </div>
+            `;
+
+            const dim = computeDimStyle(p, true);
+            if (dim) {
+                row.style.opacity = dim.opacity;
+                row.querySelector('.list-view-title').style.textDecoration = dim.textDecoration;
+            }
+
+            row.addEventListener('click', function () { handleItemClick(e.id, p, e.title); });
+            row.addEventListener('mouseenter', function () {
+                tooltip.innerHTML = buildTooltipHtml(e.title, p);
+                tooltip.style.display = 'block';
+            });
+            row.addEventListener('mouseleave', function () { tooltip.style.display = 'none'; });
+
+            listEl.appendChild(row);
+        });
+    }
+
+    function renderListView(startStr, endStr) {
+        const listEl = document.getElementById('calendar-list-view');
+        if (!startStr || !endStr) return;
+        let url = `${EVENTS_URL}?start=${startStr}&end=${endStr}`;
+        if (activeBoardIds.length > 0) {
+            url += `&boards=${activeBoardIds.join(',')}`;
+        }
+        fetch(url)
+            .then(r => r.json())
+            .then(data => renderListRows(processEvents(data)))
+            .catch(() => {
+                listEl.innerHTML = '<div class="text-muted text-center py-4">Failed to load events.</div>';
+            });
+    }
+
+    // ---- Build priority filter dropdown ----
+    const PRIORITY_OPTIONS = [
+        { key: 'Urgent', label: 'Urgent', color: '#dc3545' },
+        { key: 'High',   label: 'High',   color: '#fd7e14' },
+        { key: 'Medium', label: 'Medium', color: '#0d6efd' },
+        { key: 'Low',    label: 'Low',    color: '#198754' },
+    ];
+    const prioMenu  = document.getElementById('priority-dropdown-menu');
+    const prioLabel = document.getElementById('priority-dropdown-label');
+
+    function updatePriorityLabel() {
+        if (!prioLabel) return;
+        const total   = PRIORITY_OPTIONS.length;
+        const visible = total - hiddenPriorities.size;
+        prioLabel.textContent = hiddenPriorities.size === 0 ? 'All visible' : `${visible} of ${total} visible`;
+    }
+
+    if (prioMenu) {
+        PRIORITY_OPTIONS.forEach(function(opt) {
+            const li = document.createElement('li');
+            li.innerHTML =
+                `<label class="dropdown-item d-flex align-items-center gap-2 py-1"
+                        style="cursor:pointer; font-size:0.82rem; user-select:none;">
+                    <input type="checkbox" class="prio-check" data-priority="${opt.key}" checked
+                           style="width:14px; height:14px; flex-shrink:0;">
+                    <span>${opt.label}</span>
+                </label>`;
+            prioMenu.appendChild(li);
+        });
+        prioMenu.addEventListener('change', function(e) {
+            const cb = e.target.closest('.prio-check');
+            if (!cb) return;
+            if (cb.checked) hiddenPriorities.delete(cb.dataset.priority);
+            else            hiddenPriorities.add(cb.dataset.priority);
+            updatePriorityLabel();
+            refreshCurrentView();
+        });
+        updatePriorityLabel();
+    }
+
+    // ---- Build event-type filter dropdown ----
+    const EVENT_TYPE_OPTIONS = [
+        { key: 'meeting',       label: 'Meeting' },
+        { key: 'out_of_office', label: 'Out of Office' },
+        { key: 'busy_block',    label: 'Busy Block' },
+        { key: 'team_event',    label: 'Team Event' },
+    ];
+    const evtMenu  = document.getElementById('event-type-dropdown-menu');
+    const evtLabel = document.getElementById('event-type-dropdown-label');
+
+    function updateEventTypeLabel() {
+        if (!evtLabel) return;
+        const total   = EVENT_TYPE_OPTIONS.length;
+        const visible = total - hiddenEventTypes.size;
+        evtLabel.textContent = hiddenEventTypes.size === 0 ? 'All visible' : `${visible} of ${total} visible`;
+    }
+
+    if (evtMenu) {
+        EVENT_TYPE_OPTIONS.forEach(function(opt) {
+            const li = document.createElement('li');
+            li.innerHTML =
+                `<label class="dropdown-item d-flex align-items-center gap-2 py-1"
+                        style="cursor:pointer; font-size:0.82rem; user-select:none;">
+                    <input type="checkbox" class="evt-check" data-event-type="${opt.key}" checked
+                           style="width:14px; height:14px; flex-shrink:0;">
+                    <span>${opt.label}</span>
+                </label>`;
+            evtMenu.appendChild(li);
+        });
+        evtMenu.addEventListener('change', function(e) {
+            const cb = e.target.closest('.evt-check');
+            if (!cb) return;
+            if (cb.checked) hiddenEventTypes.delete(cb.dataset.eventType);
+            else            hiddenEventTypes.add(cb.dataset.eventType);
+            updateEventTypeLabel();
+            refreshCurrentView();
+        });
+        updateEventTypeLabel();
+    }
+
+    // ---- Build teammate filter dropdown ----
+    const tmDropdownWrapper = document.getElementById('teammate-dropdown-wrapper');
+    const tmDropdownMenu    = document.getElementById('teammate-dropdown-menu');
+    const tmDropdownLabel   = document.getElementById('teammate-dropdown-label');
+
+    function updateTeammateDropdownLabel() {
+        if (!tmDropdownLabel || !tmDropdownMenu) return;
+        // Count against the teammates *currently rendered* — the list is scoped to
+        // the selected board, so totals change as you switch boards.
+        const checks  = tmDropdownMenu.querySelectorAll('.tm-check');
+        const total   = checks.length;
+        let   visible = 0;
+        checks.forEach(c => { if (c.checked) visible++; });
+        tmDropdownLabel.textContent = (visible === total)
+            ? 'All visible'
+            : `${visible} of ${total} visible`;
+    }
+
+    // Teammates shown in the filter follow the selected board: all teammates when
+    // "All Boards" is active, otherwise only members of the selected board(s).
+    function visibleTeammates() {
+        if (activeBoardIds.length === 0) return teammatesData;
+        const allowed = new Set();
+        activeBoardIds.forEach(function(bid) {
+            const b = boardsData.find(x => String(x.id) === String(bid));
+            if (b && b.members) b.members.forEach(id => allowed.add(id));
+        });
+        return teammatesData.filter(t => allowed.has(t.id));
+    }
+
+    function buildTeammateDropdown() {
+        if (!tmDropdownWrapper || !tmDropdownMenu) return;
+        if (teammatesData.length === 0) { tmDropdownWrapper.style.display = 'none'; return; }
+        tmDropdownWrapper.style.display = '';
+        tmDropdownMenu.innerHTML = '';
+
+        visibleTeammates().forEach(function(t) {
+            const li = document.createElement('li');
+            li.innerHTML =
+                `<label class="dropdown-item d-flex align-items-center gap-2 py-1"
+                        style="cursor:pointer; font-size:0.82rem; user-select:none;">
+                    <input type="checkbox" class="tm-check" data-teammate-id="${t.id}"
+                           ${hiddenTeammateIds.has(t.id) ? '' : 'checked'}
+                           style="accent-color:${t.color}; width:14px; height:14px; flex-shrink:0;">
+                    <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                                 background:${t.color};flex-shrink:0;"></span>
+                    <span>${t.display}</span>
+                </label>`;
+            tmDropdownMenu.appendChild(li);
+        });
+
+        // Add "Unassigned" as a static entry (sentinel id = -1)
+        const liUnassigned = document.createElement('li');
+        liUnassigned.innerHTML =
+            `<label class="dropdown-item d-flex align-items-center gap-2 py-1"
+                    style="cursor:pointer; font-size:0.82rem; user-select:none;">
+                <input type="checkbox" class="tm-check" data-teammate-id="-1"
+                       ${hiddenTeammateIds.has(-1) ? '' : 'checked'}
+                       style="accent-color:#9ca3af; width:14px; height:14px; flex-shrink:0;">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                             background:#9ca3af;flex-shrink:0;"></span>
+                <span>Unassigned</span>
+            </label>`;
+        tmDropdownMenu.appendChild(liUnassigned);
+
+        updateTeammateDropdownLabel();
+    }
+
+    if (tmDropdownMenu) {
+        tmDropdownMenu.addEventListener('change', function(e) {
+            const cb = e.target.closest('.tm-check');
+            if (!cb) return;
+            const tid = parseInt(cb.dataset.teammateId, 10);
+            if (cb.checked) hiddenTeammateIds.delete(tid);
+            else            hiddenTeammateIds.add(tid);
+            updateTeammateDropdownLabel();
+            refreshCurrentView();
+        });
+    }
+
+    buildTeammateDropdown();
 
     // Close popup on outside click
     document.addEventListener('click', function (e) {
@@ -793,9 +1898,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
             updateBoardChipUI();
-            calendar.refetchEvents();
+            buildTeammateDropdown();   // teammate list follows the selected board
+            refreshCurrentView();
         });
     });
+
+    // Reflect any server-side pre-filter (?board=<id>) in the chip UI on load.
+    updateBoardChipUI();
+    buildTeammateDropdown();   // scope teammate list to any ?board= pre-filter
 
     // ================================================================
     //  CREATE TASK FLOW (redirects to full Kanban task creation form)
@@ -869,6 +1979,21 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('event-all-day').checked = true;
             document.getElementById('event-datetime-row').style.display = 'none';
             document.getElementById('event-allday-row').style.removeProperty('display');
+        }
+        // Team Event is always fully shared board-wide — lock visibility to
+        // "Public" instead of silently overriding whatever the creator picked.
+        const visSelect = document.getElementById('event-visibility');
+        const visHint = document.getElementById('event-visibility-hint');
+        if (type === 'team_event') {
+            visSelect.value = 'public';
+            visSelect.disabled = true;
+            visHint.textContent = 'Team Events are always visible to the whole board — title, notes and participants are shown to everyone.';
+        } else {
+            visSelect.disabled = false;
+            if (visSelect.value === 'public') {
+                visSelect.value = 'team';
+            }
+            visHint.textContent = 'Teammates see you’re blocked but not the reason.';
         }
     }
     document.getElementById('event-type').addEventListener('change', function() {
@@ -965,6 +2090,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 Array.from(partSelect.options).forEach(o => o.selected = false);
                 // Add to calendar immediately
                 calendar.addEvent(data.event);
+                if (listModeActive) {
+                    renderListView(currentRangeStart, currentRangeEnd);
+                }
+                // Live-update "Events This Month" instead of leaving it stale
+                // until the next full page load — mirrors the server's own
+                // month-range filter (unified_calendar view) using only the
+                // just-created event's own start date.
+                const evDateStr = data.event.start.split('T')[0];
+                if (evDateStr >= MONTH_START && evDateStr <= MONTH_END) {
+                    const statEl = document.getElementById('stat-events-this-month');
+                    statEl.textContent = String(parseInt(statEl.textContent, 10) + 1);
+                }
             } else {
                 errDiv.textContent = data.error || 'Failed to create event.';
                 errDiv.classList.remove('d-none');

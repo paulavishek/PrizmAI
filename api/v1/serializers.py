@@ -89,7 +89,26 @@ class TaskSerializer(serializers.ModelSerializer):
 
     def get_progress_status(self, obj):
         return obj.progress_status
-    
+
+    def validate(self, attrs):
+        """Reject assigning a task to a user who can't access its board."""
+        attrs = super().validate(attrs)
+        assigned = attrs.get('assigned_to', serializers.empty)
+        if assigned is serializers.empty:
+            return attrs  # assignee not being changed
+        # Resolve the board from the incoming column or the existing instance.
+        column = attrs.get('column') or getattr(self.instance, 'column', None)
+        if assigned and column is not None:
+            from kanban.simple_access import can_be_assigned_to_board
+            if not can_be_assigned_to_board(assigned, column.board):
+                raise serializers.ValidationError({
+                    'assigned_to': (
+                        "This user is not a member of the board and cannot be "
+                        "assigned to its tasks."
+                    )
+                })
+        return attrs
+
     def create(self, validated_data):
         # Set created_by from request user
         validated_data['created_by'] = self.context['request'].user
@@ -131,12 +150,12 @@ class BoardSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'organization', 'organization_name',
             'created_at', 'created_by', 'created_by_user', 'columns',
-            'member_count', 'task_count', 'members'
+            'member_count', 'task_count'
         ]
         read_only_fields = ['id', 'created_at', 'created_by']
     
     def get_member_count(self, obj):
-        return obj.members.count()
+        return obj.memberships.count()
     
     def get_task_count(self, obj):
         return Task.objects.filter(column__board=obj).count()
@@ -148,7 +167,15 @@ class BoardSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         if hasattr(user, 'profile'):
             validated_data['organization'] = user.profile.organization
-        return super().create(validated_data)
+        # Set workspace from request (populated by WorkspaceMiddleware)
+        request = self.context.get('request')
+        if request and hasattr(request, 'workspace') and request.workspace:
+            validated_data['workspace'] = request.workspace
+        board = super().create(validated_data)
+        # Auto-add workspace members to the new board
+        from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+        auto_add_workspace_members_to_board(board)
+        return board
 
 
 class BoardListSerializer(serializers.ModelSerializer):

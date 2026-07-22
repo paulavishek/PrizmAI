@@ -7,7 +7,7 @@
 {% block extra_css %}
 <style>
     .link-form-section {
-        background-color: #f8f9fa;
+        background-color: var(--bg-tertiary);
         padding: 20px;
         border-radius: 8px;
         margin-bottom: 20px;
@@ -19,9 +19,9 @@
 <div class="row">
     <div class="col-lg-8">
         <div class="mb-3">
-            <button onclick="goBack()" class="btn btn-outline-secondary btn-sm">
+            <a href="{% url 'wiki:knowledge_hub_home' %}" class="btn-prizm-back btn-sm">
                 <i class="fas fa-arrow-left"></i> Back
-            </button>
+            </a>
         </div>
         <h2 class="mb-4">
             <i class="fas fa-link"></i> Link Wiki Page to Task/Board
@@ -45,10 +45,12 @@
         
         <form method="post" class="link-form-section">
             {% csrf_token %}
-            
+            <p class="required-fields-hint">* indicates a required field</p>
+
             <div class="mb-3">
-                {{ form.link_type.label_tag }}
+                <label class="form-label" for="{{ form.link_type.id_for_label }}">{{ form.link_type.label }} <span class="required-asterisk">*</span></label>
                 {{ form.link_type|add_class:"form-control" }}
+                <div class="field-validation-msg">Link type is required.</div>
                 {{ form.link_type.errors }}
             </div>
             

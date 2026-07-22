@@ -9,23 +9,32 @@
  */
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize sparklines
-    renderSparklines();
-    
-    // Initialize compare mode
-    initCompareMode();
-    
-    // Initialize branch card actions
-    initBranchCardActions();
-    
-    // Initialize create branch form
-    initCreateBranchForm();
-    
-    // Load saved scenarios into select
-    loadScenarios();
+    // Mini sparklines on cards were removed — a single-snapshot branch
+    // rendered as a flat line that misleadingly implied long-term
+    // stability.  The Feasibility Trend chart on the branch detail page
+    // remains the authoritative trend view.
 
-    // Poll for branches still calculating their first snapshot
+    initCompareMode();
+    initBranchCardActions();
+    initCreateBranchForm();
+    initColorPicker();
+    loadScenarios();
     pollPendingBranches();
+    pollBranchScoresForSettle();
+
+    const restoreAllBtn = document.getElementById('restoreAllArchivedBtn');
+    if (restoreAllBtn) {
+        restoreAllBtn.addEventListener('click', restoreAllArchived);
+    }
+
+    // Manual refresh button: forces a synchronous recalc against the
+    // current board state, then reloads.  Lets the user explicitly
+    // resolve the "did anything change?" question after moving tasks,
+    // without having to guess whether Celery has finished.
+    const refreshBtn = document.getElementById('refreshScoresBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', refreshAllBranchScores);
+    }
 });
 
 /**
@@ -69,83 +78,95 @@ function pollPendingBranches() {
 }
 
 /**
- * Render sparklines for each branch
+ * Briefly poll the live score endpoint so card numbers settle in place when a
+ * background recalc (e.g. triggered by a task completion or AI backfill) lands
+ * while the user is already looking at the board — no manual reload needed.
+ *
+ * Bounded on purpose: a handful of polls over ~16s, not a permanent poller.
+ * Updates the score text, the high/medium/low colour class, and the "Updated
+ * N ago" line.  Skips branches still showing "Calculating first snapshot…"
+ * (those are handled by pollPendingBranches, which reloads when ready).
  */
-function renderSparklines() {
-    const branchCards = document.querySelectorAll('.branch-card');
-    
-    branchCards.forEach(card => {
-        const branchId = card.dataset.branchId;
-        const canvas = document.getElementById(`sparkline-${branchId}`);
-        
-        if (!canvas) return;
-        
-        // Fetch branch snapshots via API
-        fetch(`/api/boards/${getBoardId()}/shadow/branch/${branchId}/snapshots/`)
+function pollBranchScoresForSettle() {
+    const badges = document.querySelectorAll('[data-score-badge]');
+    if (badges.length === 0) return;
+
+    const boardId = getBoardId();
+    let polls = 0;
+    const maxPolls = 4;
+    const timer = setInterval(function () {
+        polls++;
+        fetch(`/api/boards/${boardId}/shadow/scores/`)
             .then(r => r.json())
             .then(data => {
-                if (data.scores && data.scores.length > 0) {
-                    drawSparkline(canvas, data.scores);
-                }
+                (data.scores || []).forEach(function (s) {
+                    const badge = document.querySelector(
+                        `[data-score-badge="${s.branch_id}"]`
+                    );
+                    if (!badge) return;
+                    const score = Number(s.feasibility_score);
+                    // Whole-number display to match the server-rendered card
+                    // badge (|floatformat:0); the stored value keeps 2dp.
+                    const shown = `${Math.round(score)}%`;
+                    if (badge.textContent.trim() !== shown) {
+                        badge.textContent = shown;
+                        badge.classList.remove('score-high', 'score-medium', 'score-low');
+                        badge.classList.add(
+                            score >= 70 ? 'score-high'
+                            : score >= 50 ? 'score-medium'
+                            : 'score-low'
+                        );
+                        const updated = badge.parentElement
+                            ? badge.parentElement.querySelector('small[title]')
+                            : null;
+                        if (updated) {
+                            updated.innerHTML = '<i class="fas fa-clock me-1"></i>Updated just now';
+                        }
+                    }
+                });
             })
-            .catch(e => console.warn('Could not load sparkline:', e));
-    });
+            .catch(() => {});
+        if (polls >= maxPolls) clearInterval(timer);
+    }, 4000);
 }
 
 /**
- * Draw a sparkline chart on a canvas
+ * Manual refresh: synchronously recalculate every active branch on this
+ * board against the live state, then reload the page so the cards and
+ * the Quantum Standup table reflect the new snapshots.
+ *
+ * Why this exists: signal-driven recalcs run in Celery and can take a
+ * few seconds.  Users who move a task and immediately re-open the
+ * Shadow Board see "did anything change?" stale data.  The button
+ * lets them resolve the question on demand without polling.
  */
-function drawSparkline(canvas, scores) {
-    if (typeof Chart === 'undefined') return;
-    
-    const ctx = canvas.getContext('2d');
-    const colors = scores.map(s => {
-        if (s >= 70) return '#198754';
-        if (s >= 50) return '#fd7e14';
-        return '#dc3545';
-    });
-    
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: scores.map((_, i) => i),
-            datasets: [{
-                label: 'Feasibility',
-                data: scores,
-                borderColor: '#0d6efd',
-                backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.4,
-                pointRadius: 0,
-                pointHoverRadius: 4,
-                pointBackgroundColor: colors
-            }]
+function refreshAllBranchScores() {
+    const btn = document.getElementById('refreshScoresBtn');
+    if (!btn) return;
+
+    const busy = PrizmLoading.buttonBusy(btn, { label: 'Refreshing…' });
+
+    fetch(`/api/boards/${getBoardId()}/shadow/refresh/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest',
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: (context) => `Feasibility: ${context.parsed.y}%`
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    min: 0,
-                    max: 100,
-                    ticks: { display: false },
-                    grid: { display: false }
-                },
-                x: {
-                    display: false,
-                    grid: { display: false }
-                }
-            }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Server already wrote new snapshots; reloading is enough
+            // to pick them up everywhere on the page.
+            window.location.reload();
+        } else {
+            busy.done();
+            alertError('Could not refresh: ' + (data.error || 'Unknown error'));
         }
+    })
+    .catch(e => {
+        busy.done();
+        alertError('Could not refresh: ' + e.message);
     });
 }
 
@@ -199,19 +220,31 @@ function hideCompareCheckboxes() {
     });
 }
 
+// Maximum number of branches that can be compared simultaneously.  Eight
+// is the server-side cap too (see get_branches_comparison_multi).  Beyond
+// that the diff table stops being useful on a normal monitor.
+const MAX_COMPARE_BRANCHES = 8;
+
 /**
- * Handle branch selection for comparison
+ * Handle branch selection for comparison.  Supports N branches (2-8); when
+ * the user tries to check a 9th, the click is reverted with a brief hint.
  */
 function handleBranchSelection() {
-    const checked = document.querySelectorAll('.branch-checkbox:checked');
+    const checked = Array.from(document.querySelectorAll('.branch-checkbox:checked'));
     const compareTable = document.getElementById('compareTable');
-    
-    // Only allow 2 selections
-    if (checked.length > 2) {
-        checked[2].previousElementSibling?.click(); // Uncheck the third
+
+    // Enforce the upper bound.  Uncheck the most recently checked box
+    // (i.e., whichever pushed the count over the limit) so the user keeps
+    // their earlier selection rather than being silently overridden.
+    if (checked.length > MAX_COMPARE_BRANCHES) {
+        const overflow = checked[checked.length - 1];
+        overflow.checked = false;
+        const card = overflow.closest('.branch-card');
+        if (card) card.classList.remove('selected');
+        alertError(`You can compare up to ${MAX_COMPARE_BRANCHES} branches at a time.`);
         return;
     }
-    
+
     // Update selected card styling
     document.querySelectorAll('.branch-card').forEach(card => {
         card.classList.remove('selected');
@@ -220,85 +253,156 @@ function handleBranchSelection() {
             card.classList.add('selected');
         }
     });
-    
-    if (checked.length === 2) {
-        // Show comparison
-        const branchAId = checked[0].dataset.branchId;
-        const branchBId = checked[1].dataset.branchId;
-        showComparison(branchAId, branchBId);
+
+    if (checked.length >= 2) {
+        const branchIds = checked.map(cb => cb.dataset.branchId);
+        showComparison(branchIds);
     } else {
-        // Hide comparison table
+        // Need at least 2 to compare — hide the table.
         compareTable.style.display = 'none';
     }
 }
 
 /**
- * Fetch and display branch comparison
+ * Fetch and display N-way branch comparison.
+ *
+ * @param {string[]} branchIds  Array of branch IDs in click order.
  */
-async function showComparison(branchAId, branchBId) {
+async function showComparison(branchIds) {
+    if (!Array.isArray(branchIds) || branchIds.length < 2) return;
+
     try {
-        // First get the comparison data (snapshots)
+        const qs = new URLSearchParams({ branch_ids: branchIds.join(',') });
         const response = await fetch(
-            `/api/boards/${getBoardId()}/shadow/branches/${branchAId}/${branchBId}/`
+            `/api/boards/${getBoardId()}/shadow/branches-compare/?${qs.toString()}`
         );
         const data = await response.json();
-        
-        if (data.error) {
-            console.error('Comparison error:', data.error);
+
+        if (!response.ok || data.error) {
+            alertError('Comparison failed: ' + (data.error || response.statusText));
             return;
         }
-        
-        renderComparisonTable(data);
+
+        renderComparisonTable(data.branches);
         document.getElementById('compareTable').style.display = 'block';
     } catch (e) {
         console.error('Error fetching comparison:', e);
+        alertError('Could not load comparison: ' + e.message);
     }
 }
 
 /**
- * Render the comparison table
+ * Render the N-column comparison table.
+ *
+ * Rebuilds both the table header (one column per branch) and the body
+ * rows (one row per field).  Each row highlights:
+ *   - diff-row-match: every branch has the same value
+ *   - diff-row-conflict: numeric values disagree in sign (e.g. one branch
+ *     adds scope, another removes it)
+ *   - diff-row-diff: values vary but don't conflict in sign
+ *
+ * @param {Array} branches  Server payload from /branches-compare/.
  */
-function renderComparisonTable(data) {
+function renderComparisonTable(branches) {
     const title = document.getElementById('compareTitle');
-    const headerA = document.getElementById('branchAHeader');
-    const headerB = document.getElementById('branchBHeader');
+    const table = document.getElementById('diffTable');
+    const thead = table.querySelector('thead');
     const body = document.getElementById('diffTableBody');
-    
-    const branchA = data.branch_a;
-    const branchB = data.branch_b;
-    
-    title.textContent = `${branchA.name} vs ${branchB.name}`;
-    headerA.textContent = branchA.name;
-    headerB.textContent = branchB.name;
-    body.innerHTML = '';
-    
-    const snapA = branchA.snapshot;
-    const snapB = branchB.snapshot;
-    
-    const rows = [
-        { label: 'Scope Delta', fieldA: snapA.scope_delta, fieldB: snapB.scope_delta },
-        { label: 'Team Delta', fieldA: snapA.team_delta, fieldB: snapB.team_delta },
-        { label: 'Deadline Delta (weeks)', fieldA: snapA.deadline_delta_weeks, fieldB: snapB.deadline_delta_weeks },
-        { label: 'Feasibility Score', fieldA: snapA.feasibility_score + '%', fieldB: snapB.feasibility_score + '%' },
-        { label: 'Projected Completion', fieldA: snapA.projected_completion_date || 'N/A', fieldB: snapB.projected_completion_date || 'N/A' },
-        { label: 'Budget Utilization', fieldA: snapA.projected_budget_utilization + '%', fieldB: snapB.projected_budget_utilization + '%' },
-    ];
-    
-    rows.forEach(row => {
-        const isConflict = (row.fieldA !== row.fieldB) && 
-            (typeof row.fieldA === 'number' && typeof row.fieldB === 'number' &&
-             Math.sign(row.fieldA) !== Math.sign(row.fieldB));
-        
-        const diffClass = row.fieldA === row.fieldB ? 'diff-row-match' : 
-                        (isConflict ? 'diff-row-conflict' : 'diff-row-diff');
-        
-        const tr = document.createElement('tr');
-        tr.className = diffClass;
-        tr.innerHTML = `
-            <td><strong>${row.label}</strong></td>
-                    <td>${row.fieldA}</td>
-            <td>${row.fieldB}</td>
+
+    // Title summarises the comparison set; truncate names so a 6-way
+    // comparison doesn't blow up the card header.
+    const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+    title.textContent = branches.map(b => truncate(b.name, 30)).join(' vs ');
+
+    // Rebuild the header row entirely so column count matches the
+    // selected branch count.  The original static "branchAHeader" /
+    // "branchBHeader" cells are replaced.
+    const branchColPct = Math.max(8, Math.floor(75 / branches.length));
+    thead.innerHTML = '';
+    const headerRow = document.createElement('tr');
+    const fieldTh = document.createElement('th');
+    fieldTh.style.width = '25%';
+    fieldTh.textContent = 'Field';
+    headerRow.appendChild(fieldTh);
+    branches.forEach(b => {
+        const th = document.createElement('th');
+        th.style.width = `${branchColPct}%`;
+        // Coloured swatch so the diff table maps visually back to the
+        // cards (which use the same per-branch colour as a left border).
+        th.innerHTML = `
+            <span class="d-inline-block me-1" style="
+                width: 10px; height: 10px; border-radius: 50%;
+                background: ${b.color || '#0d6efd'};
+            "></span>${b.name}
         `;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+
+    // Build rows.  When ALL branches have missing snapshots, render a
+    // single explanatory row.  When SOME branches are missing, fill
+    // those cells with a "Calculating…" placeholder so the user
+    // understands why a column is sparse.
+    body.innerHTML = '';
+
+    const allMissing = branches.every(b => b.snapshot_missing);
+    if (allMissing) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td colspan="${branches.length + 1}" class="text-muted text-center py-3">
+                <i class="fas fa-hourglass-half me-1"></i>
+                None of the selected branches have a snapshot yet — try again in a few seconds.
+            </td>
+        `;
+        body.appendChild(tr);
+        return;
+    }
+
+    const fields = [
+        { label: 'Scope Delta', key: 'scope_delta', suffix: '' },
+        { label: 'Team Delta', key: 'team_delta', suffix: '' },
+        { label: 'Deadline Delta (weeks)', key: 'deadline_delta_weeks', suffix: '' },
+        { label: 'Feasibility Score', key: 'feasibility_score', suffix: '%' },
+        { label: 'Projected Completion', key: 'projected_completion_date', suffix: '' },
+        { label: 'Budget Utilization', key: 'projected_budget_utilization', suffix: '%' },
+    ];
+
+    fields.forEach(field => {
+        const values = branches.map(b => {
+            if (b.snapshot_missing || !b.snapshot) return null;
+            return b.snapshot[field.key];
+        });
+
+        // Diff classification across N columns:
+        //   - all equal              → match
+        //   - any pair has opposite signs (numeric only) → conflict
+        //   - otherwise              → diff
+        const presentValues = values.filter(v => v !== null && v !== undefined);
+        const allEqual = presentValues.length === values.length &&
+            presentValues.every(v => v === presentValues[0]);
+        let hasSignConflict = false;
+        if (!allEqual) {
+            const numericVals = presentValues.filter(v => typeof v === 'number' && v !== 0);
+            const signs = new Set(numericVals.map(v => Math.sign(v)));
+            hasSignConflict = signs.size > 1;
+        }
+        const rowClass = allEqual
+            ? 'diff-row-match'
+            : (hasSignConflict ? 'diff-row-conflict' : 'diff-row-diff');
+
+        const tr = document.createElement('tr');
+        tr.className = rowClass;
+        const labelCell = `<td><strong>${field.label}</strong></td>`;
+        const valueCells = values.map(v => {
+            if (v === null || v === undefined) {
+                return `<td class="text-muted"><small><i class="fas fa-hourglass-half me-1"></i>Calculating…</small></td>`;
+            }
+            const display = (typeof v === 'number')
+                ? `${v}${field.suffix}`
+                : `${v}${field.suffix}`;
+            return `<td>${display}</td>`;
+        }).join('');
+        tr.innerHTML = labelCell + valueCells;
         body.appendChild(tr);
     });
 }
@@ -334,7 +438,35 @@ function initBranchCardActions() {
             const branchName = deleteBtn.dataset.branchName || 'this branch';
             showDeleteConfirmation(branchId, branchName);
         }
+
+        const restoreBtn = e.target.closest('.btn-restore');
+        if (restoreBtn) {
+            const branchId = restoreBtn.dataset.branchId;
+            restoreBranch(branchId);
+        }
     });
+}
+
+/**
+ * Restore an archived branch back to active
+ */
+function restoreBranch(branchId) {
+    fetch(`/api/boards/${getBoardId()}/shadow/${branchId}/restore/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            setTimeout(() => window.location.reload(), 400);
+        } else {
+            alertError('Could not restore branch: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(e => alertError('Could not restore branch: ' + e.message));
 }
 
 /**
@@ -353,8 +485,12 @@ function showDeleteConfirmation(branchId, branchName) {
     .then(r => r.json())
     .then(data => {
         if (data.success) {
-            // Reload after brief delay to reflect updated branch list
-            setTimeout(() => window.location.reload(), 600);
+            if (data.restore_message) {
+                showSuccess(`Branch deleted. ${data.restore_message}`);
+            } else {
+                showSuccess('Branch deleted.');
+            }
+            setTimeout(() => window.location.reload(), 1600);
         } else {
             alertError('Could not delete branch: ' + (data.error || 'Unknown error'));
         }
@@ -363,39 +499,90 @@ function showDeleteConfirmation(branchId, branchName) {
 }
 
 /**
- * Toggle star status for branch
+ * Apply star visual state to button icon + card title.
+ * Extracted so it can be called for both optimistic apply and error revert.
+ */
+function applyStarVisuals(icon, btn, starred) {
+    if (starred) {
+        icon.classList.replace('far', 'fas');
+        btn.classList.add('text-warning');
+    } else {
+        icon.classList.replace('fas', 'far');
+        btn.classList.remove('text-warning');
+    }
+
+    const card = btn.closest('.branch-card');
+    if (!card) return;
+    const titleEl = card.querySelector('.card-title');
+    if (!titleEl) return;
+    const existingTitleStar = titleEl.querySelector('.fa-star');
+
+    if (starred && !existingTitleStar) {
+        const newStar = document.createElement('i');
+        newStar.className = 'fas fa-star text-warning me-1';
+        titleEl.prepend(newStar);
+    } else if (!starred && existingTitleStar) {
+        existingTitleStar.remove();
+    }
+}
+
+/**
+ * Toggle star status for branch.
+ * Optimistic update: UI changes immediately on click; reverted on error.
  */
 function toggleStarBranch(branchId, btn) {
-    const isStarred = btn.querySelector('i').classList.contains('fas');
-    
+    const icon = btn.querySelector('i');
+    const wasStarred = icon.classList.contains('fas');
+    const nowStarred = !wasStarred;
+
+    // Apply immediately so the user sees instant feedback without waiting
+    // for the server round-trip.
+    applyStarVisuals(icon, btn, nowStarred);
+
     fetch(`/api/boards/${getBoardId()}/shadow/${branchId}/toggle-star/`, {
         method: 'POST',
         headers: {
             'X-CSRFToken': getCsrfToken(),
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ starred: !isStarred })
+        body: JSON.stringify({ starred: nowStarred })
     })
     .then(r => r.json())
     .then(data => {
-        // Toggle icon
-        btn.querySelector('i').classList.toggle('fas');
-        btn.querySelector('i').classList.toggle('far');
+        if (!data.success) {
+            // Server rejected — revert to previous state
+            applyStarVisuals(icon, btn, wasStarred);
+        }
     })
-    .catch(e => alertError('Could not toggle star: ' + e.message));
+    .catch(() => {
+        // Network / parse error — revert
+        applyStarVisuals(icon, btn, wasStarred);
+        alertError('Could not toggle star. Please try again.');
+    });
 }
 
 /**
  * Show commit confirmation modal
  */
 function showCommitConfirmation(branchId) {
-    // Find branch name for display
     const branchCard = document.querySelector(`[data-branch-id="${branchId}"]`);
-    const branchName = branchCard?.querySelector('.card-title').textContent.trim() || 'Unknown';
-    
-    if (confirm(`Are you sure you want to commit branch "${branchName}"?`)) {
+    const branchName = branchCard?.querySelector('.card-title')?.textContent.trim() || 'this branch';
+
+    // Populate modal
+    const nameEl = document.getElementById('commitBranchName');
+    if (nameEl) nameEl.textContent = `"${branchName}"`;
+
+    const modal = new bootstrap.Modal(document.getElementById('commitConfirmModal'));
+    modal.show();
+
+    // Wire up confirm button (replace any previous listener)
+    const confirmBtn = document.getElementById('confirmCommitBtn');
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    newConfirmBtn.addEventListener('click', function () {
+        modal.hide();
         commitBranch(branchId);
-    }
+    });
 }
 
 /**
@@ -478,6 +665,51 @@ function loadScenarios() {
             }
         })
         .catch(e => console.warn('Could not load scenarios:', e));
+}
+
+/**
+ * Initialize color picker — marks the initially-checked swatch and keeps
+ * the .color-selected class in sync so the CSS checkmark + ring shows correctly.
+ */
+function initColorPicker() {
+    const picker = document.querySelector('.branch-color-picker');
+    if (!picker) return;
+
+    picker.querySelectorAll('input[type="radio"]').forEach(function(radio) {
+        const label = radio.closest('label');
+        if (!label) return;
+
+        // Apply selected class to whichever radio starts checked
+        if (radio.checked) label.classList.add('color-selected');
+
+        radio.addEventListener('change', function() {
+            picker.querySelectorAll('label').forEach(l => l.classList.remove('color-selected'));
+            if (radio.checked) label.classList.add('color-selected');
+        });
+    });
+}
+
+/**
+ * Restore all archived branches on this board to active.
+ */
+function restoreAllArchived() {
+    fetch(`/api/boards/${getBoardId()}/shadow/restore-all/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showSuccess(data.message || 'All archived branches restored.');
+            setTimeout(() => window.location.reload(), 1200);
+        } else {
+            alertError('Could not restore branches: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(e => alertError('Could not restore branches: ' + e.message));
 }
 
 // ============================================================================

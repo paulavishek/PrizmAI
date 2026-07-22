@@ -95,20 +95,19 @@ class Command(BaseCommand):
             # This is the single source of truth for all demo data
             # ============================================================
             
-            self.stdout.write('[1/3] Resetting all demo data via populate_all_demo_data...')
+            self.stdout.write('[1/2] Resetting all demo data via populate_all_demo_data...')
             call_command('populate_all_demo_data', '--reset', stdout=out, stderr=out)
             self.stdout.write(self.style.SUCCESS('  Done'))
-            
-            # Step 2: Refresh all dates to current
-            self.stdout.write('[2/3] Refreshing dates...')
-            try:
-                call_command('refresh_demo_dates', '--force', stdout=out, stderr=out)
-                self.stdout.write(self.style.SUCCESS('  Done'))
-            except Exception as e:
-                self.stdout.write(self.style.WARNING(f'  Skipped: {str(e)}'))
-            
-            # Step 3: Detect conflicts for fresh data
-            self.stdout.write('[3/3] Detecting conflicts...')
+
+            # NOTE: refresh_demo_dates is intentionally NOT called here.
+            # populate_all_demo_data writes dynamic dates relative to TODAY at
+            # seed time, and refresh_demo_dates would overwrite the intentional
+            # narrative (overdue task, mid-progress states, etc.). The seeder
+            # already calls detect_conflicts at the end.
+
+            # Step 2: Detect conflicts for fresh data (idempotent - runs again
+            # in case populate_all_demo_data's internal call was skipped)
+            self.stdout.write('[2/2] Detecting conflicts...')
             try:
                 call_command('detect_conflicts', '--clear', stdout=out, stderr=out)
                 self.stdout.write(self.style.SUCCESS('  Done'))

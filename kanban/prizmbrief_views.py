@@ -11,10 +11,13 @@ import re
 from datetime import timedelta
 
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from kanban.models import Board, Column, Task
+from kanban.prizmbrief_models import SavedBrief
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,7 @@ PURPOSE_CHOICES = [
 # ── Mode options ──────────────────────────────────────────────────────────────
 MODE_CHOICES = [
     ("executive_summary", "Executive Summary",
-     "5–6 slides, key numbers only, no deep detail. Good for busy stakeholders."),
+     "5–7 slides, key numbers only, no deep detail. Good for busy stakeholders."),
     ("full_briefing",     "Full Briefing",
      "8–10 slides, complete data, context, and recommended actions. Good for team reviews."),
 ]
@@ -107,7 +110,7 @@ def _gather_board_data(board):
     from django.db.models import Count
     workload_qs = (
         all_tasks.filter(assigned_to__isnull=False, progress__lt=100)
-        .values('assigned_to__username')
+        .values('assigned_to__username', 'assigned_to__first_name', 'assigned_to__last_name')
         .annotate(open_tasks=Count('id'))
         .order_by('-open_tasks')
     )
@@ -115,8 +118,9 @@ def _gather_board_data(board):
     workload = []
     for row in workload_qs[:8]:
         capacity_pct = round((row['open_tasks'] / total_tasks * 100), 1) if total_tasks else 0
+        full_name = f"{row['assigned_to__first_name']} {row['assigned_to__last_name']}".strip()
         workload.append({
-            'name':       row['assigned_to__username'],
+            'name':       full_name or row['assigned_to__username'],
             'open_tasks': row['open_tasks'],
             'capacity':   capacity_pct,
         })
@@ -265,12 +269,20 @@ def prizmbrief_setup(request, board_id):
 
     board = get_object_or_404(Board, id=board_id)
 
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='prizmbrief')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
     # ── Shared context bits for the form ──────────────────────────────────────
+    saved_briefs = SavedBrief.objects.filter(user=request.user, board=board)[:SavedBrief.MAX_PER_USER_BOARD]
     form_context = {
         'board':            board,
         'audience_choices': AUDIENCE_CHOICES,
         'purpose_choices':  PURPOSE_CHOICES,
         'mode_choices':     MODE_CHOICES,
+        'saved_briefs':     saved_briefs,
     }
 
     if request.method == 'GET':
@@ -311,7 +323,8 @@ def prizmbrief_setup(request, board_id):
         'purpose':       purpose,
         'purpose_label': _label(PURPOSE_CHOICES, purpose),
         'mode':          mode,
-        'user_name':     request.user.get_full_name() or request.user.username,
+        'user_name':     request.user.get_full_name() or request.user.username.replace('_', ' ').title(),
+        'user':          request.user,
     }
 
     raw_text = generate_prizmbrief(brief_data)
@@ -361,6 +374,17 @@ def prizmbrief_setup(request, board_id):
     import re as _re
     safe_name = _re.sub(r'[^A-Za-z0-9_-]', '_', board.name)
 
+    # JSON-safe slides data for the Save button
+    import json as _json
+    from django.utils.safestring import mark_safe
+    slides_for_save = [
+        {'number': s['number'], 'title': s['title'], 'body': s['body'], 'body_html': s['body_html']}
+        for s in slides
+    ]
+    slides_json_tag = '<script id="pb-slides-json" type="application/json">{}</script>'.format(
+        _json.dumps(slides_for_save)
+    )
+
     return render(request, 'kanban/prizmbrief_result.html', {
         'board':          board,
         'slides':         slides,
@@ -372,8 +396,158 @@ def prizmbrief_setup(request, board_id):
         'report_date':    metrics['report_date'],
         'report_time':    metrics['report_time'],
         'data_warnings':  data_warnings,
+        'slides_json_data': mark_safe(slides_json_tag),
         # Pass back so Regenerate can pre-fill
         'last_audience':  audience,
         'last_purpose':   purpose,
         'last_mode':      mode,
+        # Saved briefs count for the save button
+        'saved_count':    _saved_brief_count(request.user, board),
+        'max_saved':      SavedBrief.MAX_PER_USER_BOARD,
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Saved Briefs
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _saved_brief_count(user, board):
+    """Return the number of saved briefs for this user + board."""
+    return SavedBrief.objects.filter(user=user, board=board).count()
+
+
+def _check_board_access(request, board_id, require_edit=False):
+    """Shared board-access check; returns (board, error_response) tuple.
+
+    When ``require_edit`` is True the user must also have edit rights, so
+    read-only viewers cannot save/rename/delete briefs.
+    """
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.view_board', board):
+        return board, JsonResponse({'error': 'Access denied.'}, status=403)
+    if require_edit and not request.user.has_perm('prizmai.edit_board', board):
+        return board, JsonResponse({'error': 'Access denied.'}, status=403)
+    return board, None
+
+
+@login_required
+@require_POST
+def save_brief(request, board_id):
+    """AJAX: Save the current brief. Body is JSON with name, slides, full_text, meta."""
+    import json
+
+    board, err = _check_board_access(request, board_id, require_edit=True)
+    if err:
+        return err
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid request body.'}, status=400)
+
+    name = (data.get('name') or '').strip()[:120]
+    if not name:
+        return JsonResponse({'error': 'Name is required.'}, status=400)
+
+    # Enforce cap
+    count = _saved_brief_count(request.user, board)
+    if count >= SavedBrief.MAX_PER_USER_BOARD:
+        return JsonResponse({
+            'error': f'Limit reached ({SavedBrief.MAX_PER_USER_BOARD}). Delete an old brief first.',
+        }, status=400)
+
+    slides_json = data.get('slides', [])
+    full_text = data.get('full_text', '')
+    if not slides_json:
+        return JsonResponse({'error': 'No slide content to save.'}, status=400)
+
+    brief = SavedBrief.objects.create(
+        board=board,
+        user=request.user,
+        name=name,
+        audience=data.get('audience', ''),
+        purpose=data.get('purpose', ''),
+        mode=data.get('mode', ''),
+        audience_label=data.get('audience_label', ''),
+        purpose_label=data.get('purpose_label', ''),
+        mode_label=data.get('mode_label', ''),
+        slides_json=slides_json,
+        full_text=full_text,
+    )
+
+    return JsonResponse({
+        'ok': True,
+        'id': brief.id,
+        'saved_count': _saved_brief_count(request.user, board),
+        'max_saved': SavedBrief.MAX_PER_USER_BOARD,
+    })
+
+
+@login_required
+def saved_brief_detail(request, board_id, brief_id):
+    """View a previously saved brief — renders the same result template."""
+    board, err_resp = _check_board_access(request, board_id)
+    if err_resp:
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='prizmbrief')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
+    brief = get_object_or_404(SavedBrief, id=brief_id, board=board, user=request.user)
+
+    import re as _re
+    safe_name = _re.sub(r'[^A-Za-z0-9_-]', '_', board.name)
+
+    return render(request, 'kanban/prizmbrief_saved_detail.html', {
+        'board':          board,
+        'brief':          brief,
+        'slides':         brief.slides_json,
+        'full_text':      brief.full_text,
+        'download_name':  f"{safe_name}_AI_Presentation_Brief.txt",
+        'audience_label': brief.audience_label,
+        'purpose_label':  brief.purpose_label,
+        'mode_label':     brief.mode_label,
+    })
+
+
+@login_required
+@require_POST
+def rename_brief(request, board_id, brief_id):
+    """AJAX: Rename a saved brief."""
+    import json
+
+    board, err = _check_board_access(request, board_id, require_edit=True)
+    if err:
+        return err
+
+    brief = get_object_or_404(SavedBrief, id=brief_id, board=board, user=request.user)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid request body.'}, status=400)
+
+    new_name = (data.get('name') or '').strip()[:120]
+    if not new_name:
+        return JsonResponse({'error': 'Name is required.'}, status=400)
+
+    brief.name = new_name
+    brief.save(update_fields=['name'])
+    return JsonResponse({'ok': True, 'name': brief.name})
+
+
+@login_required
+@require_POST
+def delete_brief(request, board_id, brief_id):
+    """AJAX: Delete a saved brief."""
+    board, err = _check_board_access(request, board_id, require_edit=True)
+    if err:
+        return err
+
+    brief = get_object_or_404(SavedBrief, id=brief_id, board=board, user=request.user)
+    brief.delete()
+    return JsonResponse({
+        'ok': True,
+        'saved_count': _saved_brief_count(request.user, board),
+        'max_saved': SavedBrief.MAX_PER_USER_BOARD,
     })

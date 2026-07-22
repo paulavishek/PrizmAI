@@ -8,7 +8,7 @@
     .dependency-tree {
         font-family: 'Arial', sans-serif;
         padding: 20px;
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-radius: 8px;
         margin: 20px 0;
     }
@@ -18,7 +18,7 @@
         flex-direction: column;
         margin: 10px 0;
         padding: 15px;
-        background: white;
+        background: var(--card-bg);
         border-left: 4px solid #007bff;
         border-radius: 4px;
         position: relative;
@@ -46,7 +46,7 @@
 
     .tree-node-title {
         font-weight: bold;
-        color: #333;
+        color: var(--text-primary);
         font-size: 16px;
     }
 
@@ -59,8 +59,8 @@
     }
 
     .tree-node-status.todo {
-        background: #e9ecef;
-        color: #495057;
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
     }
 
     .tree-node-status.inprogress {
@@ -75,7 +75,7 @@
 
     .tree-node-meta {
         font-size: 12px;
-        color: #6c757d;
+        color: var(--text-muted);
         display: flex;
         gap: 20px;
         margin-top: 8px;
@@ -92,12 +92,12 @@
         font-size: 12px;
         cursor: pointer;
         border: 1px solid #ddd;
-        background: white;
+        background: var(--card-bg);
         border-radius: 3px;
     }
 
     .tree-node-actions button:hover {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
     }
 
     .tree-children {
@@ -113,7 +113,7 @@
     .tree-section-title {
         font-size: 14px;
         font-weight: bold;
-        color: #495057;
+        color: var(--text-secondary);
         text-transform: uppercase;
         letter-spacing: 0.5px;
         margin: 15px 0 10px 0;
@@ -166,7 +166,7 @@
     }
 
     .suggestion-item {
-        background: white;
+        background: var(--card-bg);
         padding: 10px;
         margin: 8px 0;
         border-radius: 3px;
@@ -199,7 +199,7 @@
     }
 
     .graph-container {
-        background: white;
+        background: var(--card-bg);
         border-radius: 4px;
         padding: 15px;
         margin: 15px 0;
@@ -208,7 +208,7 @@
 
     .placeholder {
         text-align: center;
-        color: #6c757d;
+        color: var(--text-muted);
         padding: 20px;
         font-style: italic;
     }
@@ -220,7 +220,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Dependency Tree: {{ task.title }}</h1>
         <div>
-            <a href="{% url 'task_detail' task.id %}" class="btn btn-outline-secondary me-2">
+            <a href="{% url 'task_detail' task.id %}" class="btn-prizm-back me-2">
                 <i class="bi bi-arrow-left"></i> Back to Task
             </a>
             <a href="{% if task.board.is_demo_board %}{% url 'demo_board_detail' task.board.id %}{% else %}{% url 'board_detail' task.board.id %}{% endif %}" class="btn btn-outline-primary">
@@ -256,9 +256,9 @@
         <button class="analyze-btn" onclick="analyzeDependencies({{ task.id }})">
             <i class="bi bi-lightning"></i> Analyze Dependencies
         </button>
-        <span id="analyze-status" class="ms-3" style="display: none;">
+        <span id="analyze-status" class="ms-3" style="display: none;" data-prizm-container>
             <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-            Analyzing...
+            <span class="prizm-loading-message-inline" data-prizm-messages="dependency">Analyzing dependencies…</span>
         </span>
     </div>
 
@@ -312,7 +312,7 @@
                 </div>
                 {% if subtask.subtasks.all %}
                 <div class="tree-children">
-                    <div style="font-size: 12px; color: #6c757d; margin-bottom: 10px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
                         <strong>Has {{ subtask.subtasks.count }} child task{{ subtask.subtasks.count|pluralize }}</strong>
                     </div>
                     {% for grandchild in subtask.subtasks.all %}
@@ -419,7 +419,7 @@ function displaySuggestions(analysis) {
                 <div class="suggestion-item">
                     <div>
                         <strong>${suggestion.task_title}</strong>
-                        <div style="font-size: 12px; color: #6c757d;">${suggestion.reason}</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">${suggestion.reason}</div>
                     </div>
                     <div>
                         <span class="confidence-badge ${confidenceClass}">${(confidence).toFixed(1)}%</span>
@@ -444,7 +444,7 @@ function displaySuggestions(analysis) {
                 <div class="suggestion-item">
                     <div>
                         <strong>${suggestion.task_title}</strong>
-                        <div style="font-size: 12px; color: #6c757d;">${suggestion.reason}</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">${suggestion.reason}</div>
                     </div>
                     <div>
                         <span class="confidence-badge ${confidenceClass}">${(confidence).toFixed(1)}%</span>
@@ -521,16 +521,6 @@ async function linkAsRelated(relatedId) {
     }
 }
 
-// Handle back navigation to previous page
-function goBack() {
-    // Check if there's a previous page in history
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        // Fallback to task detail if no history
-        window.location.href = '{% url "task_detail" task.id %}';
-    }
-}
 </script>
 
 {% endblock %}

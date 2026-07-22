@@ -788,8 +788,113 @@
     
     <!-- Back Button -->
     <div style="margin-top: 30px; text-align: center;">
-        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
-            ← Back to Main Dashboard
+        <a href="{% url 'dashboard' %}" class="btn-prizm-back">
+            <i class="fas fa-arrow-left"></i> Back to Main Dashboard
+        </a>
+    </div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     Phase 5 — Feature Adoption, AI Quota, BYOK & Tier Analytics
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<!-- Feature Adoption Matrix -->
+<div class="analytics-section mt-4">
+    <h3 class="section-title">🔬 Feature Adoption Matrix (Top 15, last {{ days }} days)</h3>
+    <p class="text-muted small mb-3">Feature Depth Score: <strong>{{ feature_depth_score }}</strong> avg distinct features per active user</p>
+    {% if feature_adoption_matrix %}
+    <div class="table-responsive">
+        <table class="table table-sm table-hover">
+            <thead>
+                <tr>
+                    <th>Feature</th>
+                    <th>Unique Users</th>
+                    <th>% of All Users</th>
+                    <th>Adoption Bar</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in feature_adoption_matrix %}
+                <tr>
+                    <td><code>{{ row.feature }}</code></td>
+                    <td>{{ row.unique_users }}</td>
+                    <td>{{ row.pct }}%</td>
+                    <td>
+                        <div class="progress" style="height:10px;min-width:80px;">
+                            <div class="progress-bar bg-primary" style="width:{{ row.pct }}%"></div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-muted">No feature adoption data yet — events will appear once users interact with features.</p>
+    {% endif %}
+</div>
+
+<!-- AI Quota Funnel -->
+<div class="analytics-section mt-4">
+    <h3 class="section-title">🤖 AI Quota Funnel (last {{ days }} days)</h3>
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <div class="metric-label">Quota-Enabled Users</div>
+            <div class="metric-value">{{ ai_quota_funnel.total_quota_users }}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Hit Limit (100%)</div>
+            <div class="metric-value">{{ ai_quota_funnel.hit_limit }}</div>
+            <div class="metric-change">{{ ai_quota_funnel.hit_limit_pct }}% of quota users</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Configured BYOK After</div>
+            <div class="metric-value">{{ ai_quota_funnel.configured_byok_after }}</div>
+            <div class="metric-change">{{ ai_quota_funnel.byok_conversion_pct }}% of those who hit limit</div>
+        </div>
+    </div>
+</div>
+
+<!-- BYOK Stats -->
+<div class="analytics-section mt-4">
+    <h3 class="section-title">🔑 BYOK Key Configuration</h3>
+    <p><strong>{{ byok_stats.total_byok_users }}</strong> users have ever configured their own AI key.</p>
+    {% if byok_stats.by_provider %}
+    <ul class="list-unstyled">
+        {% for row in byok_stats.by_provider %}
+        <li>
+            <span class="badge bg-secondary me-1">{{ row.provider_configured }}</span>
+            {{ row.users }} user{{ row.users|pluralize }}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted small">No BYOK providers recorded yet.</p>
+    {% endif %}
+</div>
+
+<!-- Workspace Tier Distribution -->
+<div class="analytics-section mt-4">
+    <h3 class="section-title">🏢 Workspace Tier Distribution</h3>
+    <p class="text-muted small mb-2">Tier upgrades/downgrades in last {{ days }} days: <strong>{{ tier_upgrades }}</strong></p>
+    {% if tier_distribution %}
+    <div class="d-flex flex-wrap gap-3">
+        {% for row in tier_distribution %}
+        <div class="metric-card text-center" style="min-width:130px;">
+            <div class="metric-label text-capitalize">{{ row.global_preset }}</div>
+            <div class="metric-value">{{ row.count }}</div>
+            <div class="metric-change">org{{ row.count|pluralize }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted">No workspace preset data yet.</p>
+    {% endif %}
+</div>
+
+    <!-- Back Button (end) -->
+    <div style="margin-top: 30px; text-align: center;">
+        <a href="{% url 'dashboard' %}" class="btn-prizm-back">
+            <i class="fas fa-arrow-left"></i> Back to Main Dashboard
         </a>
     </div>
 </div>

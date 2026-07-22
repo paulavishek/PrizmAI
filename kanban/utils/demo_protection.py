@@ -1,0 +1,421 @@
+"""
+Demo Data Utilities — identification helpers for demo objects.
+
+The pre_save/pre_delete signal-based immutability layer has been removed
+as part of the single-tier personal demo refactor.  Each user now gets
+their own private copy of demo data (sandbox), so server-side write
+blocking is no longer needed.
+
+Retained:
+  - ``is_demo_object()`` — Used by various views to identify template data.
+  - ``allow_demo_writes()`` — Context manager still used by sandbox
+    provisioning code that creates copies of demo templates.
+"""
+
+import threading
+import logging
+from contextlib import contextmanager
+
+from django.db.models import Q
+
+logger = logging.getLogger(__name__)
+
+# ── Thread-local state (kept for allow_demo_writes) ──────────────────────────
+
+_local = threading.local()
+
+
+def _bypass_active():
+    return getattr(_local, 'demo_bypass', False)
+
+
+@contextmanager
+def allow_demo_writes():
+    """Temporarily mark that we are performing a legitimate demo-data operation."""
+    prev = getattr(_local, 'demo_bypass', False)
+    _local.demo_bypass = True
+    try:
+        yield
+    finally:
+        _local.demo_bypass = prev
+
+
+def calendar_sync_suppressed():
+    """Return True when Google Calendar sync should be skipped (e.g. during demo reset)."""
+    return getattr(_local, 'suppress_calendar_sync', False)
+
+
+@contextmanager
+def suppress_calendar_sync():
+    """
+    Temporarily disable Google Calendar sync signals.
+
+    Used during demo-data repopulation so that creating dozens of seed tasks
+    does not flood the connected user's Google Calendar with events.
+    """
+    prev = getattr(_local, 'suppress_calendar_sync', False)
+    _local.suppress_calendar_sync = True
+    try:
+        yield
+    finally:
+        _local.suppress_calendar_sync = prev
+
+
+# ── Centralised board queryset for demo / real workspace ─────────────────────
+
+def user_is_demo(user):
+    """Return True when the user is currently viewing the demo workspace.
+
+    Single source of truth for the demo-vs-real discriminator used to scope
+    per-user (non-board) data such as the Decision Center briefing, so a
+    briefing generated for the demo workspace never leaks into the real one
+    (and vice-versa).
+    """
+    profile = getattr(user, 'profile', None)
+    return bool(getattr(profile, 'is_viewing_demo', False))
+
+
+def is_demo_persona(user):
+    """Return True for shared demo-persona login accounts.
+
+    Personas (priya.sharma / marcus.chen / elena.vasquez, and the separate
+    alex_chen_demo / sam_rivera_demo / jordan_taylor_demo team) are shared
+    test credentials printed on-screen so any real user can log in as them to
+    test cross-account flows (e.g. Messaging). They must never be treated as
+    an independent tenant with their own sandbox: provisioning one for a
+    persona triggers ``_duplicate_board``'s membership-cap logic, which
+    silently steals that persona's guest membership away from whichever real
+    user's sandbox they were actually being used to test. See
+    [[project_persona_membership_bleed]].
+    """
+    email = (getattr(user, 'email', '') or '').lower()
+    return '@demo.prizmai.local' in email
+
+
+def get_user_boards(user):
+    """Return a Board queryset scoped to the user's current workspace mode.
+
+    * **Workspace mode** (when ``profile.active_workspace`` is set):
+      returns boards belonging to that workspace.  Demo workspaces
+      additionally include the user's sandbox copies.
+    * **Demo mode** (``profile.is_viewing_demo == True``):
+      returns the user's personal sandbox copies; falls back to official
+      demo boards if no sandbox exists yet.
+    * **Real mode**: returns only the user's own boards (created or member),
+      explicitly excluding demo boards, sandbox copies, and Spectra-generated
+      demo boards.
+
+    Every view that aggregates data across boards (dashboard, calendar,
+    messaging hub, conflicts, knowledge graph, etc.) should call this helper
+    instead of building its own queryset — this is the single source of truth
+    for demo-vs-real separation.
+    """
+    from kanban.models import Board  # late import to avoid circular deps
+
+    profile = getattr(user, 'profile', None)
+    is_demo = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(profile, 'active_workspace', None)
+
+    if is_demo:
+        # Demo personas (priya/marcus/elena, alex/sam/jordan — identified by
+        # @demo.prizmai.local email) are shared login credentials meant only
+        # to be a GUEST member on a real user's sandbox for testing
+        # cross-account flows like Messaging. They must never appear to own
+        # a board themselves: the official template board's `owner` field is
+        # seed-data flavor (e.g. priya.sharma is narratively the "Backend
+        # Lead" owner of the template), and a persona can also end up owning
+        # a stray personal sandbox if someone logs in directly as them and
+        # provisions. Either would otherwise leak into their own dashboard
+        # as a bogus "extra" board. Scope personas to sandbox-copy boards
+        # where they're a genuine guest member (never the owner).
+        if is_demo_persona(user):
+            if active_ws:
+                demo_boards = Board.objects.filter(
+                    workspace=active_ws,
+                    is_sandbox_copy=True,
+                    memberships__user=user,
+                ).exclude(owner=user).distinct()
+            else:
+                demo_boards = Board.objects.none()
+            if demo_boards.exists():
+                return demo_boards
+            return Board.objects.filter(is_official_demo_board=True).distinct()
+
+        # The user's sandbox copies (the cloned demo boards) ...
+        sandbox_q = Q(owner=user, is_sandbox_copy=True)
+        if active_ws:
+            # ... plus any board the user created/joined *inside this demo
+            # workspace* (e.g. a board they made in the demo). Scoping the extra
+            # clause to active_ws keeps the demo isolated from the user's real
+            # workspaces — a real-workspace board is neither a sandbox copy nor
+            # in active_ws, so it never leaks in.
+            demo_boards = Board.objects.filter(
+                sandbox_q
+                | (
+                    Q(workspace=active_ws)
+                    & (Q(owner=user) | Q(created_by=user) | Q(memberships__user=user))
+                )
+            ).distinct()
+        else:
+            demo_boards = Board.objects.filter(sandbox_q).distinct()
+        if demo_boards.exists():
+            return demo_boards
+        # Fallback: official demo boards (read-only)
+        return Board.objects.filter(is_official_demo_board=True).distinct()
+
+    # Real workspace — boards in the active workspace, plus any board shared *to*
+    # the user as a non-owner member/viewer (BoardMembership), regardless of its
+    # workspace. Owned boards stay workspace-scoped so switching workspaces still
+    # filters your own boards; only boards invited to you cross over. (Board.owner
+    # is a legacy nullable field — ownership is tracked by membership role.)
+    if active_ws and not active_ws.is_demo:
+        return Board.objects.filter(
+            Q(workspace=active_ws)
+            | Q(memberships__user=user, memberships__role__in=['member', 'viewer']),
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
+        ).exclude(
+            # A board in a soft-deleted (inactive) workspace is gone — never
+            # surface it, even if a stale BoardMembership still points at it.
+            Q(workspace__isnull=False) & Q(workspace__is_active=False)
+        ).distinct()
+
+    # Fallback (no active workspace): boards the user created or was invited to.
+    return Board.objects.filter(
+        Q(created_by=user) | Q(memberships__user=user),
+        is_official_demo_board=False,
+        is_sandbox_copy=False,
+    ).exclude(
+        created_by_session__startswith='spectra_demo_'
+    ).exclude(
+        Q(workspace__isnull=False) & Q(workspace__is_active=False)
+    ).distinct()
+
+
+# ── Centralised mission / goal querysets ─────────────────────────────────────
+
+def get_user_missions(user):
+    """Return a Mission queryset scoped to the user's current workspace mode.
+
+    Mirrors the logic of ``get_user_boards()`` for the mission layer:
+
+    * **Demo mode**: only demo/seed missions, plus any linked to the user's
+      sandbox boards.
+    * **Workspace mode**: missions belonging to the active workspace.
+    * **Real mode fallback**: user-created or board-linked missions,
+      explicitly excluding demo data.
+    """
+    from kanban.models import Mission, Board  # late imports
+
+    profile = getattr(user, 'profile', None)
+    is_demo = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(profile, 'active_workspace', None)
+
+    if is_demo:
+        user_board_ids = list(
+            get_user_boards(user).values_list('id', flat=True)
+        )
+        return Mission.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True) |
+            Q(strategies__boards__id__in=user_board_ids)
+        ).distinct()
+
+    if active_ws and not active_ws.is_demo:
+        return Mission.objects.filter(
+            workspace=active_ws,
+        ).distinct()
+
+    return Mission.objects.filter(
+        Q(created_by=user) |
+        Q(strategies__boards__id__in=list(
+            get_user_boards(user).values_list('id', flat=True)
+        )),
+        is_demo=False,
+        is_seed_demo_data=False,
+    ).distinct()
+
+
+def get_user_goals(user):
+    """Return an OrganizationGoal queryset scoped to the user's workspace mode.
+
+    * **Demo mode**: only demo/seed goals.
+    * **Workspace mode**: goals in the active workspace.
+    * **Real mode fallback**: user-created goals, excluding demo data.
+    """
+    from kanban.models import OrganizationGoal  # late import
+
+    profile = getattr(user, 'profile', None)
+    is_demo = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(profile, 'active_workspace', None)
+
+    if is_demo:
+        return OrganizationGoal.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
+        ).distinct()
+
+    if active_ws and not active_ws.is_demo:
+        return OrganizationGoal.objects.filter(
+            workspace=active_ws,
+        ).distinct()
+
+    return OrganizationGoal.objects.filter(
+        Q(created_by=user) |
+        Q(missions__strategies__boards__memberships__user=user),
+        is_demo=False,
+        is_seed_demo_data=False,
+    ).distinct()
+
+
+def get_user_strategies(user):
+    """Return a Strategy queryset scoped to the user's current workspace mode.
+
+    Mirrors the logic of ``get_user_missions()`` for the strategy layer:
+
+    * **Demo mode**: only seed demo strategies, plus any linked to the user's
+      sandbox boards.
+    * **Workspace mode**: strategies belonging to the active workspace.
+    * **Real mode fallback**: user-created or board-linked strategies,
+      explicitly excluding demo/seed data.
+    """
+    from kanban.models import Strategy  # late import
+
+    profile = getattr(user, 'profile', None)
+    is_demo = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(profile, 'active_workspace', None)
+
+    if is_demo:
+        user_board_ids = list(
+            get_user_boards(user).values_list('id', flat=True)
+        )
+        return Strategy.objects.filter(
+            Q(is_seed_demo_data=True) |
+            Q(boards__id__in=user_board_ids)
+        ).distinct()
+
+    if active_ws and not active_ws.is_demo:
+        return Strategy.objects.filter(
+            workspace=active_ws,
+        ).distinct()
+
+    return Strategy.objects.filter(
+        Q(created_by=user) |
+        Q(boards__id__in=list(
+            get_user_boards(user).values_list('id', flat=True)
+        )),
+        is_seed_demo_data=False,
+    ).distinct()
+
+
+def get_demo_workspace():
+    """Return the demo Workspace instance (or None).
+
+    Always resolves from the demo Organization — never depends on
+    ``profile.organization`` which may be the user's real org.
+    """
+    from accounts.models import Organization
+    from kanban.models import Workspace
+
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    if not demo_org:
+        return None
+    return Workspace.objects.filter(
+        organization=demo_org, is_demo=True, is_active=True,
+    ).first()
+
+
+# ── Demo-object detection ────────────────────────────────────────────────────
+
+def _safe_fk(instance, attr_name):
+    """Safely dereference a FK attribute — returns None on any failure."""
+    try:
+        val = getattr(instance, attr_name, None)
+        return val
+    except Exception:
+        return None
+
+
+def _board_is_demo(board):
+    """Return True if a Board instance is flagged as demo data."""
+    return (
+        getattr(board, 'is_seed_demo_data', False)
+        or getattr(board, 'is_official_demo_board', False)
+    )
+
+
+def is_demo_object(instance):
+    """
+    Return True if *instance* is demo data (an official template object).
+
+    Checks direct flags first, then walks up FK chains for child models
+    that inherit demo status from their parent Board / Task / Org.
+    """
+    # ── 1. Direct flags ──────────────────────────────────────────────────
+    if getattr(instance, 'is_seed_demo_data', None) is True:
+        return True
+    if getattr(instance, 'is_official_demo_board', None) is True:
+        return True
+    if getattr(instance, 'is_demo', None) is True:
+        return True
+
+    # ── 2. Parent Board (Column, TaskLabel, CalendarEvent, ChatRoom …) ───
+    board = _safe_fk(instance, 'board')
+    if board is not None and _board_is_demo(board):
+        return True
+
+    # ── 3. Parent Column → Board (Task) ─────────────────────────────────
+    column = _safe_fk(instance, 'column')
+    if column is not None:
+        board = _safe_fk(column, 'board')
+        if board is not None and _board_is_demo(board):
+            return True
+
+    # ── 4. Parent Task (Comment, TaskActivity, TaskFile) ────────────────
+    task = _safe_fk(instance, 'task')
+    if task is not None:
+        if getattr(task, 'is_seed_demo_data', False):
+            return True
+        col = _safe_fk(task, 'column')
+        if col is not None:
+            board = _safe_fk(col, 'board')
+            if board is not None and _board_is_demo(board):
+                return True
+
+    # ── 5. Parent ChatRoom → Board (ChatMessage) ────────────────────────
+    chat_room = _safe_fk(instance, 'chat_room')
+    if chat_room is not None:
+        board = _safe_fk(chat_room, 'board')
+        if board is not None and _board_is_demo(board):
+            return True
+
+    # ── 6. Parent Organization (WikiPage, WikiCategory) ─────────────────
+    org = _safe_fk(instance, 'organization')
+    if org is not None and getattr(org, 'is_demo', False):
+        return True
+
+    # ── 7. Upward strategic chain ────────────────────────────────────────
+    mission = _safe_fk(instance, 'mission')
+    if mission is not None:
+        if getattr(mission, 'is_demo', False) or getattr(mission, 'is_seed_demo_data', False):
+            return True
+
+    org_goal = _safe_fk(instance, 'organization_goal')
+    if org_goal is not None:
+        if getattr(org_goal, 'is_demo', False) or getattr(org_goal, 'is_seed_demo_data', False):
+            return True
+
+    strategy = _safe_fk(instance, 'strategy')
+    if strategy is not None and getattr(strategy, 'is_seed_demo_data', False):
+        return True
+
+    # ── 8. Exit-protocol chain: HospiceSession → Board ──────────────────
+    hospice = _safe_fk(instance, 'hospice_session')
+    if hospice is not None:
+        board = _safe_fk(hospice, 'board')
+        if board is not None and _board_is_demo(board):
+            return True
+
+    source_board = _safe_fk(instance, 'source_board')
+    if source_board is not None and _board_is_demo(source_board):
+        return True
+
+    return False

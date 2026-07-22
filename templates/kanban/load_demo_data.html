@@ -11,7 +11,7 @@
 }
 
 .demo-feature-card {
-    background: white;
+    background: var(--card-bg);
     border-radius: 12px;
     padding: 1.5rem;
     margin-bottom: 1rem;
@@ -191,9 +191,9 @@
     </div>
     {% else %}
     <div class="text-center mt-5">
-        <button onclick="goBack()" class="btn btn-outline-secondary">
+        <a href="{% url 'dashboard' %}" class="btn-prizm-back">
             <i class="fas fa-arrow-left me-1"></i> Back
-        </button>
+        </a>
     </div>
     {% endif %}
 </div>

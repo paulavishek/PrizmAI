@@ -10,6 +10,9 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
+from knowledge_graph.demo_guard import is_demo_board
+
+
 def _node_exists(source_type, source_id, extra_tag=None):
     """Check if a MemoryNode already exists for this source object."""
     from knowledge_graph.models import MemoryNode
@@ -58,22 +61,24 @@ def capture_task_completed(sender, instance, created, **kwargs):
 
     from knowledge_graph.models import MemoryNode
     board = instance.column.board if instance.column else None
+    if is_demo_board(board):
+        return  # demo memory is curated/deterministic — no live auto-capture
     is_high_priority = instance.priority in ('high', 'urgent')
 
     MemoryNode.objects.create(
         board=board,
         mission=board.strategy.mission if board and board.strategy else None,
         node_type='milestone' if is_high_priority else 'outcome',
-        title=f"Task completed: {instance.name[:150]}",
+        title=f"Task completed: {instance.title[:150]}",
         content=(
-            f"Task '{instance.name}' was completed"
+            f"Task '{instance.title}' was completed"
             f"{' by ' + instance.assigned_to.get_full_name() if instance.assigned_to else ''}. "
             f"Priority: {instance.get_priority_display()}. "
             f"Board: {board.name if board else 'Unknown'}."
         ),
         context_data={
             'task_id': instance.pk,
-            'task_name': instance.name,
+            'task_name': instance.title,
             'priority': instance.priority,
             'assigned_to': instance.assigned_to_id,
             'board_name': board.name if board else None,
@@ -85,7 +90,7 @@ def capture_task_completed(sender, instance, created, **kwargs):
         source_object_id=instance.pk,
         importance_score=0.7 if is_high_priority else 0.4,
     )
-    logger.info("Memory node created for task completion: %s", instance.name)
+    logger.info("Memory node created for task completion: %s", instance.title)
 
 
 # ── Signal 3: Board Archived ────────────────────────────────────────────────
@@ -110,6 +115,8 @@ def capture_board_archived(sender, instance, created, **kwargs):
         return
     if not getattr(instance, '_kg_just_archived', False):
         return
+    if is_demo_board(instance):
+        return  # demo memory is curated/deterministic — no live auto-capture
     if _node_exists('Board', instance.pk):
         return
 
@@ -184,6 +191,8 @@ def capture_conflict_resolved(sender, instance, created, **kwargs):
         return
     if not getattr(instance, '_kg_just_resolved', False):
         return
+    if is_demo_board(instance.board):
+        return  # demo memory is curated/deterministic — no live auto-capture
     if _node_exists('ConflictDetection', instance.pk):
         return
 
@@ -241,6 +250,8 @@ def capture_ai_recommendation_acted(sender, instance, created, **kwargs):
         return
     if not getattr(instance, '_kg_just_acted', False):
         return
+    if is_demo_board(instance.board):
+        return  # demo memory is curated/deterministic — no live auto-capture
     if _node_exists('CoachingSuggestion', instance.pk):
         return
 
@@ -280,6 +291,8 @@ def capture_scope_change(sender, instance, created, **kwargs):
     """Capture a memory node when a scope creep alert is created."""
     if not created:
         return
+    if is_demo_board(instance.board):
+        return  # demo memory is curated/deterministic — no live auto-capture
     if _node_exists('ScopeCreepAlert', instance.pk):
         return
 
@@ -337,6 +350,8 @@ def capture_retrospective_finalized(sender, instance, created, **kwargs):
         return
     if not getattr(instance, '_kg_just_finalized', False):
         return
+    if is_demo_board(instance.board):
+        return  # demo memory is curated/deterministic — no live auto-capture
     if _node_exists('ProjectRetrospective', instance.pk):
         return
 
@@ -416,6 +431,9 @@ def capture_meeting_analysis(sender, instance, created, **kwargs):
             mission = board.strategy.mission if board.strategy else None
     except Exception:
         pass
+
+    if is_demo_board(board):
+        return  # demo memory is curated/deterministic — no live auto-capture
 
     page_title = instance.wiki_page.title if instance.wiki_page else 'Unknown'
 

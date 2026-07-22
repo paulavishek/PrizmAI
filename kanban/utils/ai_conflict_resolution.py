@@ -1,32 +1,24 @@
 """
-AI-Powered Conflict Resolution using Google Gemini
+AI-Powered Conflict Resolution using AI Router
 Provides intelligent, context-aware resolution suggestions with reasoning.
 """
-import google.generativeai as genai
+from ai_assistant.utils.ai_router import AIRouter
 from django.conf import settings
 from typing import List, Dict
 import json
 import time
+from kanban_board.ai_cache import ai_cache_manager
 
 
 class AIConflictResolutionEngine:
     """
-    Uses Google Gemini AI to generate intelligent conflict resolution suggestions.
+    Uses AI Router to generate intelligent conflict resolution suggestions.
     Provides context-aware, reasoning-backed recommendations.
     """
     
     def __init__(self):
-        """Initialize Gemini AI client."""
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
-        
-        # Generation config for conflict resolution - needs detailed JSON responses
-        self.generation_config = {
-            'temperature': 0.4,  # Lower for consistent analytical output
-            'top_p': 0.8,
-            'top_k': 40,
-            'max_output_tokens': 4096,  # Generous for resolution suggestions + deep analysis with full explainability
-        }
+        """Initialize AI router client."""
+        self.router = AIRouter()
     
     def generate_advanced_resolutions(self, conflict, user=None):
         """
@@ -48,11 +40,36 @@ class AIConflictResolutionEngine:
         prompt = self._build_conflict_resolution_prompt(conflict)
         
         try:
+            # Check cache first
+            cache_context = f"conflict_{conflict.id}"
+            cached = ai_cache_manager.get(prompt, 'conflict_suggestion', cache_context)
+            if cached is not None:
+                suggestions = self._parse_ai_suggestions(cached, conflict)
+                if user:
+                    response_time_ms = int((time.time() - start_time) * 1000)
+                    track_ai_request(
+                        user=user,
+                        feature='conflict_resolution',
+                        request_type='suggest',
+                        board_id=conflict.board.id if conflict.board else None,
+                        success=True,
+                        response_time_ms=response_time_ms
+                    )
+                return suggestions
+
             # Generate AI response with proper config
-            response = self.model.generate_content(prompt, generation_config=self.generation_config)
+            response = self.router.complete(
+                prompt=prompt,
+                user=user,
+                complexity='complex',
+            )
+            ai_text = response.get('text', '')
+            
+            # Cache the raw response text
+            ai_cache_manager.set(prompt, ai_text, 'conflict_suggestion', cache_context)
             
             # Parse suggestions
-            suggestions = self._parse_ai_suggestions(response.text, conflict)
+            suggestions = self._parse_ai_suggestions(ai_text, conflict)
             
             # Track successful AI request
             if user:
@@ -207,7 +224,7 @@ FORMAT YOUR RESPONSE AS JSON WITH FULL EXPLAINABILITY:
       "impact_timeline": "immediate|short_term|medium_term",
       "steps": ["Step 1", "Step 2", "Step 3"],
       "step_rationale": ["Why step 1 is needed", "Why step 2", "Why step 3"],
-      "reasoning": "Detailed explanation of why this resolution is recommended based on conflict analysis",
+      "reasoning": "2-3 sentences written as a single clean paragraph: (a) why this specific action directly addresses the root cause of this conflict type — explain the causal mechanism, not just the action; (b) what the expected outcome is once applied, including any measurable improvement to the team or timeline; and (c) any important caveats or conditions required for this resolution to work effectively (e.g. team capacity, stakeholder approval, dependency on another task). Do not use bullet points or labeled sections — write as flowing prose.",
       "risks": ["Risk of implementing this resolution"],
       "risk_mitigation": ["How to mitigate the risks"],
       "success_indicators": ["How to know if resolution worked"],
@@ -227,7 +244,7 @@ FORMAT YOUR RESPONSE AS JSON WITH FULL EXPLAINABILITY:
 }
 
 Provide practical, actionable suggestions that a project manager can implement immediately.
-Be transparent about your reasoning so the PM understands why each resolution is recommended.
+For the "reasoning" field, write 2-3 sentences of flowing prose explaining: (a) why this specific action addresses the root cause of this conflict type, (b) the expected outcome if applied, and (c) any key caveats or conditions for it to work. Avoid generic statements — be specific to the conflict and the tasks involved.
 """
         
         return prompt
@@ -235,51 +252,85 @@ Be transparent about your reasoning so the PM understands why each resolution is
     def _parse_ai_suggestions(self, ai_response: str, conflict) -> List[Dict]:
         """Parse AI response and create ConflictResolution objects."""
         from kanban.conflict_models import ConflictResolution
-        
+        import logging
+        _logger = logging.getLogger(__name__)
+
         suggestions = []
-        
+
         try:
+            # Strip markdown code fences if the AI wrapped the response (e.g. ```json ... ```)
+            clean_response = ai_response.strip()
+            if clean_response.startswith('```'):
+                # Remove the opening fence line (e.g. "```json\n")
+                clean_response = clean_response.split('\n', 1)[-1]
+            if clean_response.endswith('```'):
+                clean_response = clean_response.rsplit('```', 1)[0]
+
             # Try to extract JSON from response
-            json_start = ai_response.find('{')
-            json_end = ai_response.rfind('}') + 1
-            
+            json_start = clean_response.find('{')
+            json_end = clean_response.rfind('}') + 1
+
             if json_start >= 0 and json_end > json_start:
-                json_str = ai_response[json_start:json_end]
+                json_str = clean_response[json_start:json_end]
                 data = json.loads(json_str)
-                
+
+                # Track seen (type, normalised_title) pairs to deduplicate within this AI response
+                seen_suggestions = set()
+                # Pre-populate with suggestions already persisted for this conflict
+                for existing in ConflictResolution.objects.filter(conflict=conflict).values('resolution_type', 'title'):
+                    seen_suggestions.add((existing['resolution_type'], existing['title'].strip().lower()))
+
                 for res_data in data.get('resolutions', []):
-                    # Map AI type to model type
-                    resolution_type = self._map_resolution_type(res_data.get('type', 'custom'))
-                    
-                    # Create resolution
-                    resolution = ConflictResolution.objects.create(
-                        conflict=conflict,
-                        resolution_type=resolution_type,
-                        title=res_data.get('title', 'AI Suggested Resolution')[:255],
-                        description=res_data.get('description', ''),
-                        ai_confidence=min(100, max(0, int(res_data.get('confidence', 70)))),
-                        ai_reasoning=res_data.get('reasoning', ''),
-                        estimated_impact=res_data.get('impact', '')[:255],
-                        action_steps=res_data.get('steps', []),
-                        auto_applicable=False  # AI suggestions require review
-                    )
-                    
-                    suggestions.append(resolution)
-            
+                    try:
+                        # Map AI type to model type
+                        resolution_type = self._map_resolution_type(res_data.get('type', 'custom'))
+                        title = res_data.get('title', 'AI Suggested Resolution')[:255]
+
+                        # Deduplicate: skip if same resolution_type + title (case-insensitive)
+                        # was already seen in this batch OR already exists in the DB.
+                        dedup_key = (resolution_type, title.strip().lower())
+                        if dedup_key in seen_suggestions:
+                            continue
+                        seen_suggestions.add(dedup_key)
+
+                        # Safely convert confidence — AI may return None, floats, or strings
+                        try:
+                            confidence = int(float(res_data.get('confidence') or 70))
+                        except (TypeError, ValueError):
+                            confidence = 70
+
+                        # Create resolution
+                        resolution = ConflictResolution.objects.create(
+                            conflict=conflict,
+                            resolution_type=resolution_type,
+                            title=title,
+                            description=res_data.get('description', ''),
+                            ai_confidence=min(100, max(0, confidence)),
+                            ai_reasoning=res_data.get('reasoning', ''),
+                            estimated_impact=res_data.get('impact', '')[:255],
+                            action_steps=res_data.get('steps', []),
+                            auto_applicable=False  # AI suggestions require review
+                        )
+
+                        suggestions.append(resolution)
+
+                    except Exception as item_error:
+                        # Log the bad item but continue processing remaining resolutions
+                        _logger.warning(
+                            f"Skipping one AI resolution for conflict {conflict.id} due to error: {item_error}"
+                        )
+                        continue
+
         except Exception as e:
-            print(f"Error parsing AI suggestions: {e}")
-            # Fallback: create a generic suggestion
-            resolution = ConflictResolution.objects.create(
-                conflict=conflict,
-                resolution_type='custom',
-                title='AI Analysis Completed',
-                description=ai_response[:500],  # Use raw response
-                ai_confidence=60,
-                ai_reasoning='Generated from AI analysis',
-                auto_applicable=False
+            # JSON parsing failed — log it and return whatever was successfully created.
+            # Do NOT create a placeholder "AI Analysis Completed" record; the rule-based
+            # suggestions generated by ConflictResolutionSuggester already provide
+            # meaningful fallback content and a dummy record only pollutes the UI.
+            _logger.error(
+                f"Error parsing AI suggestions for conflict {conflict.id}: {e}",
+                exc_info=True,
             )
-            suggestions.append(resolution)
-        
+
         return suggestions
     
     def _map_resolution_type(self, ai_type: str) -> str:
@@ -366,6 +417,7 @@ FORMAT AS JSON WITH FULL EXPLAINABILITY:
       "prerequisites": ["What needs to be in place first"],
       "revised_confidence": 85,
       "confidence_reasoning": "Why this confidence level after analysis",
+      "reasoning": "2-3 sentences as flowing prose for the 'Why this works' summary card: (a) why this specific action addresses the root cause of this conflict type — explain the causal mechanism; (b) the expected outcome once applied; and (c) any important caveats or conditions required. Synthesise the assessment, improvements, and considerations into this concise paragraph — do not use bullet points or labeled sections.",
       "implementation_tips": ["Practical tip 1", "Practical tip 2"],
       "warning_signs": ["Signs that this isn't working"]
     }
@@ -377,14 +429,20 @@ FORMAT AS JSON WITH FULL EXPLAINABILITY:
 """
         
         try:
-            response = self.model.generate_content(prompt, generation_config=self.generation_config)
+            # Check cache first
+            cache_context = f"enhance_conflict_{conflict.id}"
+            cached_text = ai_cache_manager.get(prompt, 'conflict_suggestion', cache_context)
+            if cached_text is None:
+                response = self.router.complete(prompt=prompt, user=None, complexity='complex')
+                cached_text = response.get('text', '')
+                ai_cache_manager.set(prompt, cached_text, 'conflict_suggestion', cache_context)
             
             # Parse and apply enhancements
-            json_start = response.text.find('{')
-            json_end = response.text.rfind('}') + 1
+            json_start = cached_text.find('{')
+            json_end = cached_text.rfind('}') + 1
             
             if json_start >= 0 and json_end > json_start:
-                json_str = response.text[json_start:json_end]
+                json_str = cached_text[json_start:json_end]
                 data = json.loads(json_str)
                 
                 for enhancement in data.get('enhancements', []):
@@ -392,12 +450,23 @@ FORMAT AS JSON WITH FULL EXPLAINABILITY:
                     if 0 <= idx < len(basic_suggestions):
                         suggestion = basic_suggestions[idx]
                         
-                        # Update with AI insights
-                        suggestion.ai_reasoning = (
-                            f"Assessment: {enhancement.get('assessment', '')}\n\n"
-                            f"Improvements: {enhancement.get('improvements', '')}\n\n"
-                            f"Considerations: {enhancement.get('considerations', '')}"
-                        )
+                        # Update with AI insights — use the reasoning field for the card
+                        # summary and fall back to synthesising from the detailed fields.
+                        reasoning = enhancement.get('reasoning', '').strip()
+                        if not reasoning:
+                            # Build a clean paragraph from the detailed fields as fallback
+                            parts = []
+                            assessment = enhancement.get('assessment', '').strip()
+                            improvements = enhancement.get('improvements', '').strip()
+                            considerations = enhancement.get('considerations', '').strip()
+                            if assessment:
+                                parts.append(assessment)
+                            if improvements:
+                                parts.append(improvements)
+                            if considerations:
+                                parts.append(considerations)
+                            reasoning = ' '.join(parts)
+                        suggestion.ai_reasoning = reasoning
                         
                         # Adjust confidence
                         revised_conf = enhancement.get('revised_confidence')

@@ -9,7 +9,7 @@
         border: 1px solid #e3e6f0;
         border-radius: 0.35rem;
         transition: all 0.3s;
-        background: white;
+        background: var(--card-bg);
     }
     
     .task-card:hover {
@@ -19,7 +19,7 @@
     
     .task-card.selected {
         border-color: #4e73df;
-        background: #f8f9fc;
+        background: var(--bg-tertiary);
     }
     
     .priority-badge {
@@ -28,7 +28,7 @@
     }
     
     .source-context {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-left: 4px solid #6c757d;
         padding: 0.75rem;
         margin: 0.5rem 0;
@@ -67,7 +67,7 @@
     
     .file-upload-zone:hover {
         border-color: #4e73df;
-        background-color: #f8f9fc;
+        background-color: var(--bg-tertiary);
     }
     
     .file-upload-zone.dragover {
@@ -94,9 +94,9 @@
             <i class="fas fa-microphone-alt me-2"></i>Extract Tasks from Meeting
         </h1>
         <div class="d-sm-flex">
-            <button onclick="goBack()" class="btn btn-outline-primary btn-sm">
+            <a href="{% url 'dashboard' %}" class="btn-prizm-back btn-sm">
                 <i class="fas fa-arrow-left me-1"></i>Back
-            </button>
+            </a>
         </div>
     </div>
 
@@ -210,11 +210,9 @@
         <div class="col-12">
             <div class="card shadow border-left-info">
                 <div class="card-body text-center processing-animation">
-                    <div class="spinner-border text-info mb-3" role="status">
-                        <span class="visually-hidden">Processing...</span>
-                    </div>
-                    <h5>AI is analyzing your meeting transcript...</h5>
-                    <p class="text-muted">This may take a few moments as we extract actionable tasks and context.</p>
+                    <div class="prizm-spinner"></div>
+                    <h5 class="mt-3 prizm-loading-message-inline" data-prizm-messages="meetingTranscript">AI is analyzing your meeting transcript…</h5>
+                    <p class="prizm-loading-message-inline" style="font-size:0.85rem;">This may take a few moments as we extract actionable tasks and context.</p>
                     <div class="progress mt-3" style="height: 6px;">
                         <div class="progress-bar progress-bar-striped progress-bar-animated" 
                              role="progressbar" style="width: 100%"></div>

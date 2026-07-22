@@ -23,7 +23,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Organization
-from kanban.models import Board, Column, Task
+from kanban.models import Board, Column, Task, BoardMembership
 from kanban.budget_models import TimeEntry
 from kanban.budget_forms import TimeEntryForm
 from kanban.time_tracking_ai import TimeTrackingAIService
@@ -281,14 +281,29 @@ class TimeTrackingAIServiceTests(TestCase):
         high_hours_alerts = [a for a in anomalies if a['type'] in ['high_hours_critical', 'high_hours_warning']]
         self.assertEqual(len(high_hours_alerts), 0)
     
-    def test_suggest_tasks_returns_in_progress(self):
-        """Test that task suggestions include in-progress tasks"""
+    def test_suggest_tasks_returns_unassigned_in_progress(self):
+        """AI suggestions surface UNASSIGNED in-progress tasks the user could pick up.
+
+        The 'AI Suggested' section is intentionally distinct from 'My Assigned
+        Tasks': it should not echo tasks already assigned to the user (unless the
+        user recently logged time on them — see test_suggest_tasks_prioritizes_recent).
+        """
+        unassigned_task = Task.objects.create(
+            title='Unassigned In Progress Task',
+            column=self.column,  # column name 'In Progress'
+            created_by=self.user,
+            assigned_to=None,
+            progress=30,
+        )
+
         ai_service = TimeTrackingAIService(self.user)
         suggestions = ai_service.suggest_tasks()
-        
-        # Should suggest the in-progress task
         suggested_task_ids = [s['task'].id for s in suggestions]
-        self.assertIn(self.task.id, suggested_task_ids)
+
+        # Unassigned in-progress task should be suggested
+        self.assertIn(unassigned_task.id, suggested_task_ids)
+        # The task assigned to the user (with no recent time logged) should NOT be
+        self.assertNotIn(self.task.id, suggested_task_ids)
     
     def test_suggest_tasks_prioritizes_recent(self):
         """Test that recently logged tasks are suggested first"""
@@ -340,7 +355,7 @@ class QuickTimeEntryViewTests(TestCase):
             organization=self.org,
             created_by=self.user
         )
-        self.board.members.add(self.user)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user, defaults={'role': 'member'})
         self.column = Column.objects.create(
             name='To Do',
             board=self.board,

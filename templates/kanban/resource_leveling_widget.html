@@ -1,21 +1,33 @@
 {% load static %}
-<!-- Resource Leveling Widget for Board/Task Pages -->
-<div class="resource-leveling-widget card shadow-sm mb-4">
-    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center" 
-         style="cursor: pointer;" 
-         onclick="toggleAIOptimization()"
-         id="ai-optimization-header">
-        <h5 class="mb-0">
-            <i class="fas fa-users-cog"></i> AI Resource Optimization
-            <small class="ms-2" style="font-size: 0.75rem; opacity: 0.9;">(Click to expand)</small>
-            <i class="fas fa-chevron-up ms-2 toggle-icon" id="ai-optimization-toggle"></i>
-        </h5>
-        <button class="btn btn-sm btn-light" onclick="event.stopPropagation(); refreshSuggestions()">
+<!-- Resource Leveling Widget (shown inside modal from AI Tools) -->
+<div class="resource-leveling-widget">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <a href="#" class="small text-muted" onclick="event.preventDefault(); var el=document.getElementById('ai-scoring-info'); el.classList.toggle('d-none');">
+            <i class="fas fa-info-circle"></i> How does AI decide?
+        </a>
+        <button class="btn btn-sm btn-outline-secondary" onclick="refreshSuggestions()">
             <i class="fas fa-sync-alt"></i> Refresh
         </button>
     </div>
     
-    <div class="card-body" id="ai-optimization-content" style="display: none;">
+    <!-- Scoring methodology info banner -->
+    <div id="ai-scoring-info" class="alert alert-light border small d-none mb-3" style="font-size:0.82rem;">
+        <strong><i class="fas fa-brain"></i> AI Scoring Methodology</strong>
+        <p class="mb-2 mt-1">Each team member is scored on 5 factors for every task, and the highest-scoring member is recommended. When someone is overloaded (&gt;90% capacity), relieving that bottleneck takes priority — so a less-loaded teammate may be suggested even if another would score marginally higher.</p>
+        <table class="table table-sm table-borderless mb-2" style="font-size:0.8rem;">
+            <thead><tr><th>Factor</th><th>Weight</th><th>What it measures</th></tr></thead>
+            <tbody>
+                <tr><td><i class="fas fa-cogs text-primary"></i> Skill Match</td><td>30%</td><td>Overlap between member's skills and task keywords</td></tr>
+                <tr><td><i class="fas fa-battery-half text-success"></i> Availability</td><td>25%</td><td>Remaining capacity (100% minus current utilization)</td></tr>
+                <tr><td><i class="fas fa-tachometer-alt text-info"></i> Velocity</td><td>20%</td><td>Historical task completion speed</td></tr>
+                <tr><td><i class="fas fa-clock text-warning"></i> Reliability</td><td>15%</td><td>On-time completion rate from past tasks</td></tr>
+                <tr><td><i class="fas fa-star text-secondary"></i> Quality</td><td>10%</td><td>Quality rating of completed work</td></tr>
+            </tbody>
+        </table>
+        <p class="mb-0 text-muted"><i class="fas fa-lightbulb"></i> Members without task history receive a confidence discount. Add skills to team profiles and complete tasks to improve AI accuracy.</p>
+    </div>
+    
+    <div id="ai-optimization-content">
         <!-- Workload Summary -->
         <div id="workload-summary" class="mb-3">
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -27,6 +39,14 @@
         </div>
         
         <!-- Suggestions List with Scrollable Container -->
+        <div id="suggestions-header" class="d-none mb-2">
+            <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted"><i class="fas fa-lightbulb"></i> <span id="suggestions-count"></span></small>
+                <button class="btn btn-sm btn-success" id="accept-all-btn" onclick="acceptAllSuggestions()">
+                    <i class="fas fa-check-double"></i> Accept All
+                </button>
+            </div>
+        </div>
         <div id="suggestions-container" class="suggestions-scrollable">
             <!-- Suggestions will be loaded here -->
         </div>
@@ -49,7 +69,13 @@
                         <a href="#" class="task-link text-dark"></a>
                     </h6>
                     <p class="reassign-line text-muted small mb-1"></p>
-                    <p class="clean-reason small mb-1"></p>
+                    <p class="clean-reason small mb-1" style="color:var(--text-secondary);"></p>
+                    <div class="speed-regression-warning d-none mt-1 mb-1">
+                        <small class="text-warning"><i class="fas fa-exclamation-triangle"></i> <strong>Note:</strong> This reassignment prioritizes workload balance, not speed. The suggested person may take longer to complete this task.</small>
+                    </div>
+                    <div class="limited-data-warning d-none mt-1 mb-1">
+                        <small class="text-warning"><i class="fas fa-info-circle"></i> <strong>Limited data:</strong> <span class="limited-data-detail"></span> Add due dates and time logs for more accurate recommendations.</small>
+                    </div>
                     <div class="reasoning-collapse">
                         <a href="#" class="see-reasoning-link small text-info" onclick="toggleReasoning(this); return false;">
                             <i class="fas fa-chevron-right reasoning-chevron" style="font-size:0.7em;"></i> See reasoning
@@ -60,11 +86,14 @@
                 <div class="col-md-3 text-center">
                     <div class="metrics">
                         <div class="metric mb-2">
-                            <div class="h4 mb-0 time-savings text-success"></div>
-                            <small class="text-muted">Time Savings</small>
+                            <div class="h4 mb-0 time-savings"></div>
+                            <small class="text-muted time-savings-label">Time Savings</small>
                         </div>
                         <div class="metric">
                             <div class="confidence-badge"></div>
+                            <div class="low-confidence-indicator d-none mt-1">
+                                <small class="text-muted" style="font-size:0.72rem;"><i class="fas fa-exclamation-circle"></i> Lower confidence</small>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -75,8 +104,14 @@
                     <button class="btn btn-outline-secondary btn-sm reject-btn" onclick="rejectSuggestion(this)">
                         <i class="fas fa-times"></i> Dismiss
                     </button>
-                    <div class="expires-info text-muted small mt-2">
-                        <i class="far fa-clock"></i> <span class="expires-text"></span>
+                    <div class="expires-info text-muted small mt-2" data-expires-at="">
+                        <i class="far fa-clock expires-icon"></i> <span class="expires-text"></span>
+                        <span
+                            class="expires-tooltip ml-1"
+                            title="Suggestions expire 48h after generation. The label updates every minute and turns yellow at 12h, orange at 6h, and red within the final hour."
+                            style="cursor:help;">
+                            <i class="fas fa-info-circle" style="font-size:0.72em;"></i>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -104,29 +139,8 @@
     border-radius: 8px;
 }
 
-.resource-leveling-widget .card-header {
-    transition: opacity 0.2s ease;
-}
-
-.resource-leveling-widget .card-header:hover {
-    opacity: 0.95;
-}
-
-.resource-leveling-widget .toggle-icon {
-    transition: transform 0.3s ease;
-    font-size: 0.9rem;
-}
-
-.resource-leveling-widget .toggle-icon.expanded {
-    transform: rotate(180deg);
-}
-
-#ai-optimization-content {
-    transition: all 0.3s ease;
-}
-
 .suggestions-scrollable {
-    max-height: 500px;
+    max-height: 480px;
     overflow-y: auto;
     overflow-x: hidden;
     padding-right: 5px;
@@ -183,6 +197,21 @@
     color: #721c24;
 }
 
+[data-bs-theme="dark"] .confidence-high {
+    background-color: rgba(40, 167, 69, 0.25);
+    color: #75dd8f;
+}
+
+[data-bs-theme="dark"] .confidence-medium {
+    background-color: rgba(255, 193, 7, 0.25);
+    color: #ffd873;
+}
+
+[data-bs-theme="dark"] .confidence-low {
+    background-color: rgba(220, 53, 69, 0.25);
+    color: #ff8f9c;
+}
+
 .workload-member .progress-bar {
     transition: width 0.6s ease;
 }
@@ -202,52 +231,138 @@
 .utilization-low .progress-bar {
     background-color: #17a2b8;
 }
+
+.suggestion-card-low-confidence {
+    border-color: #adb5bd !important;
+    border-left-color: #adb5bd !important;
+    opacity: 0.88;
+}
+
+/* Expires-time milestone styling. The label ticks every minute via JS;
+   colors escalate as expiry approaches so users can scan urgency at a glance. */
+.expires-info.expires-soft { color: var(--text-muted); }                                          /* >12h, normal muted */
+.expires-info.expires-warn { color: #b45309; font-weight: 600; }                        /* ≤12h */
+.expires-info.expires-orange { color: #c2410c; font-weight: 600; }                      /* ≤6h */
+.expires-info.expires-urgent { color: #b91c1c; font-weight: 700; }                      /* ≤1h */
+.expires-info.expires-expired { color: var(--text-muted); text-decoration: line-through; }        /* past expiry */
+.expires-info.expires-urgent .expires-icon { animation: pulse-expires 1.5s ease-in-out infinite; }
+@keyframes pulse-expires {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
 </style>
 
 <script>
 let currentBoardId = {{ board.id|default:"null" }};
 let aiOptimizationLoaded = false;
-const AI_OPT_STORAGE_KEY = 'aiOptimizationExpanded_board_' + currentBoardId;
 
-// Toggle AI Optimization section
-function toggleAIOptimization() {
-    const content = document.getElementById('ai-optimization-content');
-    const toggleIcon = document.getElementById('ai-optimization-toggle');
-    
-    if (content.style.display === 'none') {
-        content.style.display = 'block';
-        toggleIcon.classList.add('expanded');
-        // Update header text
-        const headerSmall = document.querySelector('#ai-optimization-header small');
-        if (headerSmall) headerSmall.textContent = '(Click to collapse)';
-        localStorage.setItem(AI_OPT_STORAGE_KEY, 'expanded');
-        
-        // Load data only on first expand
-        if (!aiOptimizationLoaded) {
-            console.log('Resource Leveling Widget: Initializing with board ID:', currentBoardId);
-            if (currentBoardId && currentBoardId !== null) {
-                loadWorkloadReport();
-                loadSuggestions();
-                aiOptimizationLoaded = true;
-            } else {
-                console.error('Resource Leveling Widget: No board ID available');
-                showError('Board ID not found');
-            }
-        }
+// Load resource optimization data (called when modal opens)
+function loadResourceOptimization() {
+    if (aiOptimizationLoaded) return;
+    console.log('Resource Leveling Widget: Initializing with board ID:', currentBoardId);
+    if (currentBoardId && currentBoardId !== null) {
+        loadWorkloadReport();
+        loadSuggestions();
+        aiOptimizationLoaded = true;
     } else {
-        content.style.display = 'none';
-        toggleIcon.classList.remove('expanded');
-        // Update header text
-        const headerSmall = document.querySelector('#ai-optimization-header small');
-        if (headerSmall) headerSmall.textContent = '(Click to expand)';
-        localStorage.setItem(AI_OPT_STORAGE_KEY, 'collapsed');
+        console.error('Resource Leveling Widget: No board ID available');
+        showError('Board ID not found');
     }
 }
 
-// Always start collapsed on page load
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('Resource Leveling Widget: Ready (state: collapsed)');
-});
+// Re-fetch workload + suggestions from the database. Called after any accept/dismiss
+// so the team workload bars and remaining suggestions reflect the current DB state
+// (including the projected effects of suggestions accepted earlier in this session).
+function reloadResourceOptimization() {
+    if (!currentBoardId) return;
+    loadWorkloadReport();
+    loadSuggestions();
+}
+
+// ───────── Expires-timer logic ─────────
+// Updates every visible suggestion card's "Expires in …" label and color state.
+// Runs at render time and then once per minute so the timer ticks live without
+// any further fetch. Color escalates at 12h / 6h / 1h thresholds so the label
+// stops looking like a frozen "48h" string and conveys real urgency.
+function updateExpiresLabel(infoEl) {
+    if (!infoEl) return;
+    const expiresAt = infoEl.dataset.expiresAt;
+    if (!expiresAt) return;
+    const expiresDate = new Date(expiresAt);
+    const ms = expiresDate - new Date();
+    const textEl = infoEl.querySelector('.expires-text');
+    if (!textEl) return;
+
+    // Clear all state classes before re-applying.
+    infoEl.classList.remove(
+        'expires-soft', 'expires-warn', 'expires-orange',
+        'expires-urgent', 'expires-expired'
+    );
+
+    if (ms <= 0) {
+        textEl.textContent = 'Expired';
+        infoEl.classList.add('expires-expired');
+        return;
+    }
+
+    const totalSec = Math.floor(ms / 1000);
+    const totalMin = Math.floor(totalSec / 60);
+    const totalHr  = Math.floor(totalMin / 60);
+    const days     = Math.floor(totalHr / 24);
+    const hrs      = totalHr % 24;
+    const mins     = totalMin % 60;
+
+    let label;
+    if (totalMin < 60) {
+        // Final hour — show minutes (and seconds when very close) so the
+        // urgency is unmistakable.
+        if (totalMin < 5) {
+            const secs = totalSec % 60;
+            label = `Expires in ${totalMin}m ${secs.toString().padStart(2, '0')}s`;
+        } else {
+            label = `Expires in ${totalMin}m`;
+        }
+        infoEl.classList.add('expires-urgent');
+    } else if (totalHr < 6) {
+        label = `Expires in ${hrs}h ${mins}m`;
+        infoEl.classList.add('expires-orange');
+    } else if (totalHr < 12) {
+        label = `Expires in ${hrs}h ${mins}m`;
+        infoEl.classList.add('expires-warn');
+    } else if (days >= 1) {
+        // 1d+ remaining — coarse label, no need to show minutes.
+        const remHrs = totalHr - (days * 24);
+        label = remHrs > 0
+            ? `Expires in ${days}d ${remHrs}h`
+            : `Expires in ${days}d`;
+        infoEl.classList.add('expires-soft');
+    } else {
+        label = `Expires in ${hrs}h ${mins}m`;
+        infoEl.classList.add('expires-soft');
+    }
+    textEl.textContent = label;
+}
+
+function tickAllExpiresLabels() {
+    document.querySelectorAll('.expires-info[data-expires-at]').forEach(updateExpiresLabel);
+}
+
+// Tick once per minute. <1h cards switch to a 10-second cadence so the
+// minute counter visibly moves in the final stretch.
+let _expiresInterval = null;
+let _expiresFastInterval = null;
+function ensureExpiresTimerRunning() {
+    if (!_expiresInterval) {
+        _expiresInterval = setInterval(tickAllExpiresLabels, 60 * 1000);
+    }
+    if (!_expiresFastInterval) {
+        _expiresFastInterval = setInterval(() => {
+            // Only re-render the urgent (<1h) cards on the fast cadence so
+            // we don't thrash the DOM for cards days away from expiring.
+            document.querySelectorAll('.expires-info.expires-urgent').forEach(updateExpiresLabel);
+        }, 10 * 1000);
+    }
+}
 
 function showError(message) {
     const container = document.getElementById('workload-summary');
@@ -290,7 +405,23 @@ function loadWorkloadReport() {
 
 function displayWorkloadSummary(data) {
     const container = document.getElementById('workload-summary');
-    container.innerHTML = '<h6 class="text-muted mb-3">Team Workload</h6>';
+    // Show a refresh timestamp so users have visible confirmation the bars and
+    // the team-capacity alert below them were just recomputed from the database.
+    // Without this, an unchanged number after an accept can look like cached
+    // data — even when the value is genuinely the same (e.g. when a task moves
+    // within the team, total utilization stays constant by construction).
+    const now = new Date();
+    const updatedLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    container.innerHTML = `
+        <div class="d-flex justify-content-between align-items-baseline mb-3">
+            <h6 class="text-muted mb-0">Team Workload
+                <i class="fas fa-info-circle" style="font-size:0.72rem;" title="Workload for this board only, weighted by task complexity (load points, not hours) — used to generate reassignment suggestions. Not capped at 100%, so true overload is visible."></i>
+            </h6>
+            <small class="text-muted" style="font-size:0.72rem;" title="Workload bars and capacity alert recalculated from live database state. Total team utilization is invariant under task reassignment — it changes only when work is added or removed.">
+                <i class="fas fa-sync-alt"></i> Updated ${updatedLabel}
+            </small>
+        </div>
+    `;
     
     const template = document.getElementById('workload-member-template');
     
@@ -298,8 +429,16 @@ function displayWorkloadSummary(data) {
         const clone = template.content.cloneNode(true);
         
         clone.querySelector('.member-name').textContent = member.name;
-        clone.querySelector('.member-stats').textContent = 
-            `${member.active_tasks} tasks • ${member.workload_hours}h`;
+        // "load pts", not hours: this figure is the sum of each active task's
+        // complexity score (1–10), measured against a 40-point weekly capacity —
+        // it is NOT tracked time. Labelling it "h" implied real hours and made the
+        // per-task estimates look like literal multi-day efforts.
+        const memberStats = clone.querySelector('.member-stats');
+        memberStats.textContent =
+            `${member.active_tasks} tasks • ${member.workload_hours} load pts`;
+        memberStats.title =
+            'Load points = sum of active task complexity (1–10 each) vs a 40-point weekly capacity. ' +
+            'This is a relative effort estimate, not tracked hours.';
         
         const progressBar = clone.querySelector('.progress-bar');
         // Cap the visual bar at 100% but show actual percentage in text
@@ -367,7 +506,7 @@ function loadSuggestions() {
         })
         .then(data => {
             console.log('Suggestions data:', data);
-            displaySuggestions(data.suggestions, data.insufficient_team_data);
+            displaySuggestions(data.suggestions, data.insufficient_team_data, data.overloaded_members);
         })
         .catch(error => {
             console.error('Error loading suggestions:', error);
@@ -378,13 +517,29 @@ function loadSuggestions() {
         });
 }
 
-function displaySuggestions(suggestions, insufficientData) {
+function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
     const container = document.getElementById('suggestions-container');
     const noSuggestions = document.getElementById('no-suggestions');
     const template = document.getElementById('suggestion-card-template');
     
     container.innerHTML = '';
-    
+
+    // Hide the suggestions header by default — re-shown below only when we have
+    // suggestions to render. Without this, a re-render that produces zero
+    // suggestions (e.g. after accepting the last one) leaves a stale "N
+    // suggestions found" header and Accept-All button on screen.
+    const suggestionsHeader = document.getElementById('suggestions-header');
+    if (suggestionsHeader) suggestionsHeader.classList.add('d-none');
+
+    // Reset the Accept-All button — it persists across in-place refreshes (it lives
+    // in the static header, not the regenerated cards), so without this it would stay
+    // stuck in the disabled "Accepting…" spinner state after an Accept-All refresh.
+    const acceptAllBtn = document.getElementById('accept-all-btn');
+    if (acceptAllBtn) {
+        acceptAllBtn.disabled = false;
+        acceptAllBtn.innerHTML = '<i class="fas fa-check-double"></i> Accept All';
+    }
+
     if (suggestions.length === 0) {
         noSuggestions.classList.remove('d-none');
         const icon = document.getElementById('no-suggestions-icon');
@@ -392,6 +547,14 @@ function displaySuggestions(suggestions, insufficientData) {
         if (insufficientData) {
             icon.className = 'fas fa-info-circle fa-3x text-muted mb-3';
             text.innerHTML = 'No reallocation suggestions &mdash; insufficient team data for other members.<br><small>Team members need at least 1 completed task, 1 skill tag, or 1 hour logged to be considered for reassignment.</small>';
+        } else if (overloadedMembers && overloadedMembers.length > 0) {
+            // Members ARE overloaded but no actionable suggestions could be generated.
+            // With the workload-relief override in place this should be rare — it
+            // happens when every other team member is also at/near overload, so
+            // there's nowhere to move tasks to without creating a new bottleneck.
+            const names = overloadedMembers.map(m => `<strong>${m.name}</strong> (${m.utilization}%)`).join(', ');
+            icon.className = 'fas fa-exclamation-triangle fa-3x text-warning mb-3';
+            text.innerHTML = `${overloadedMembers.length} team member(s) overloaded: ${names}.<br><small>No safe reassignment found — every other team member is also at or near capacity, so moving work would just shift the bottleneck. Consider adding resources or extending deadlines.</small>`;
         } else {
             icon.className = 'fas fa-check-circle fa-3x text-success mb-3';
             text.innerHTML = 'No optimization suggestions at this time.<br>Your team workload is well balanced!';
@@ -400,12 +563,61 @@ function displaySuggestions(suggestions, insufficientData) {
     }
     
     noSuggestions.classList.add('d-none');
-    
-    suggestions.forEach(suggestion => {
+
+    // Group suggestions by type so a quick scanner doesn't accept a "Slower"
+    // card thinking it speeds the task up. Genuine time-savers come first
+    // (sorted by confidence desc); pure workload-balance / speed-regression
+    // suggestions follow under a clear divider.
+    const isBalanceOnly = (s) =>
+        s.is_workload_balance_only ?? (s.is_speed_regression || s.time_savings === '0%');
+    const timeSavers = suggestions.filter(s => !isBalanceOnly(s)).sort((a, b) => b.confidence - a.confidence);
+    const balanceOnly = suggestions.filter(isBalanceOnly).sort((a, b) => b.confidence - a.confidence);
+    const orderedSuggestions = [...timeSavers, ...balanceOnly];
+
+    // Show suggestion count + accept-all button (header was hidden above)
+    const suggestionsCount = document.getElementById('suggestions-count');
+    if (suggestionsHeader) suggestionsHeader.classList.remove('d-none');
+    suggestionsCount.textContent = `${suggestions.length} optimization suggestion${suggestions.length !== 1 ? 's' : ''} found`;
+
+    let dividerInserted = false;
+    orderedSuggestions.forEach((suggestion, index) => {
+        // Insert a clearly labelled divider before the first balance-only card
+        // so users see the category change before scanning the card itself.
+        if (!dividerInserted && isBalanceOnly(suggestion) && index > 0) {
+            const divider = document.createElement('div');
+            divider.className = 'balance-only-divider mt-3 mb-2';
+            divider.innerHTML = `
+                <div class="d-flex align-items-center" style="gap:8px;">
+                    <hr class="flex-grow-1" style="border-color:#cbd5e1; margin:0;">
+                    <small class="text-muted" style="white-space:nowrap; font-size:0.78rem;">
+                        <i class="fas fa-balance-scale"></i> Workload-balance only · these reassignments do NOT speed up the task
+                    </small>
+                    <hr class="flex-grow-1" style="border-color:#cbd5e1; margin:0;">
+                </div>
+            `;
+            container.appendChild(divider);
+            dividerInserted = true;
+        }
+        renderSuggestionCard(suggestion, template, container);
+    });
+
+    // Kick off the per-minute timer (idempotent — only starts once per session)
+    // so every newly-rendered card stays live.
+    ensureExpiresTimerRunning();
+    return;
+}
+
+function renderSuggestionCard(suggestion, template, container) {
         const clone = template.content.cloneNode(true);
         const card = clone.querySelector('.suggestion-card');
         
         card.dataset.suggestionId = suggestion.id;
+        
+        // Low-confidence card styling (< 70%)
+        const isLowConfidence = suggestion.confidence < 70;
+        if (isLowConfidence) {
+            card.classList.add('suggestion-card-low-confidence');
+        }
         
         // Task title header (bold link)
         const taskLink = clone.querySelector('.task-link');
@@ -420,7 +632,7 @@ function displaySuggestions(suggestions, insufficientData) {
         // Clean one-sentence reason + collapsible full reasoning
         const fullReasoning = suggestion.reasoning || '';
         // Split off the "The X% time savings is calculated…" details
-        const calcMatch = fullReasoning.match(/ The \d+% time savings is calculated/);
+        const calcMatch = fullReasoning.match(/ The -?\d+% time savings is calculated/);
         const primaryPart = calcMatch
             ? fullReasoning.substring(0, fullReasoning.indexOf(calcMatch[0]))
             : fullReasoning;
@@ -433,8 +645,33 @@ function displaySuggestions(suggestions, insufficientData) {
         clone.querySelector('.clean-reason').textContent = cleanSentence;
         clone.querySelector('.full-reasoning').textContent = fullReasoning;
         
-        // Metrics
-        clone.querySelector('.time-savings').textContent = suggestion.time_savings;
+        // Speed regression warning
+        if (suggestion.is_speed_regression) {
+            clone.querySelector('.speed-regression-warning').classList.remove('d-none');
+        }
+        
+        // Headline metric. A "% Time Savings" claim is only honest when the
+        // estimate is anchored by real time-tracking data. For workload-balance /
+        // limited-data suggestions the "% savings" is purely the context-switching
+        // model — the footer already tells the user these do NOT speed up the task —
+        // so we lead with the workload framing instead of a contradicting number.
+        const timeSavingsEl = clone.querySelector('.time-savings');
+        const timeSavingsLabel = clone.querySelector('.time-savings-label');
+        if (suggestion.is_speed_regression) {
+            timeSavingsEl.textContent = '⚠️ Slower';
+            timeSavingsEl.classList.add('text-warning');
+            timeSavingsEl.style.fontSize = '1.1rem';
+            timeSavingsLabel.textContent = 'Speed Impact';
+        } else if (suggestion.is_workload_balance_only) {
+            timeSavingsEl.textContent = 'Workload';
+            timeSavingsEl.classList.add('text-info');
+            timeSavingsEl.style.fontSize = '1.1rem';
+            timeSavingsLabel.textContent = 'Balance';
+        } else {
+            timeSavingsEl.textContent = suggestion.time_savings;
+            timeSavingsEl.classList.add('text-success');
+            timeSavingsLabel.textContent = 'Time Savings';
+        }
         
         // Confidence badge
         const confidenceBadge = clone.querySelector('.confidence-badge');
@@ -448,27 +685,105 @@ function displaySuggestions(suggestions, insufficientData) {
             confidenceBadge.classList.add('confidence-low');
         }
         
-        // Expires
-        const expiresDate = new Date(suggestion.expires_at);
-        const hoursUntilExpiry = Math.round((expiresDate - new Date()) / 1000 / 60 / 60);
-        clone.querySelector('.expires-text').textContent = 
-            `Expires in ${hoursUntilExpiry}h`;
+        // Low-confidence indicator label
+        if (isLowConfidence) {
+            clone.querySelector('.low-confidence-indicator').classList.remove('d-none');
+        }
         
+        // Expires-info: stash the raw timestamp on the element, render the initial
+        // label/color, and let tickAllExpiresLabels() keep it fresh from now on.
+        const expiresInfo = clone.querySelector('.expires-info');
+        if (expiresInfo) {
+            expiresInfo.dataset.expiresAt = suggestion.expires_at;
+            updateExpiresLabel(expiresInfo);
+        }
+        const expiresDate = new Date(suggestion.expires_at);
+        const expiresTooltip = clone.querySelector('.expires-tooltip');
+        if (expiresTooltip) {
+            expiresTooltip.title =
+                `Suggestion expires ${expiresDate.toLocaleString()} ` +
+                `(48h after generation). Label updates live every minute; ` +
+                `colors escalate at 12h, 6h, and 1h remaining. ` +
+                `Expired suggestions are removed automatically and regenerated against the latest workload.`;
+        }
+
+        // Limited-data warning. Render the banner when the API reports missing
+        // inputs so the user understands why confidence dropped and what to add.
+        const limitedFlags = suggestion.limited_data_flags || [];
+        if (limitedFlags.length > 0) {
+            const warningEl = clone.querySelector('.limited-data-warning');
+            const detailEl = clone.querySelector('.limited-data-detail');
+            if (warningEl && detailEl) {
+                const fragments = [];
+                if (limitedFlags.includes('time_log')) fragments.push('no time log');
+                if (limitedFlags.includes('due_date')) fragments.push('no due date');
+                if (limitedFlags.includes('peer_history')) fragments.push('no peer with completed-task history');
+                detailEl.textContent = fragments.join(', ') + '.';
+                warningEl.classList.remove('d-none');
+            }
+        }
+
         container.appendChild(clone);
+}
+
+function acceptAllSuggestions() {
+    const cards = document.querySelectorAll('.suggestion-card');
+    if (cards.length === 0) return;
+
+    if (!confirm(`Accept all ${cards.length} optimization suggestion(s)? This will reassign tasks immediately.`)) {
+        return;
+    }
+
+    const btn = document.getElementById('accept-all-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Accepting...';
+
+    fetch(`/api/resource-leveling/boards/${currentBoardId}/accept-all/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const container = document.getElementById('suggestions-container');
+            container.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i>
+                    ${data.accepted} task(s) reassigned successfully. Updating workload…
+                </div>
+            `;
+            // Refresh the modal IN PLACE (re-fetch workload + suggestions) rather than
+            // reloading the whole page. A full reload closed the modal and forced the
+            // user to re-open the feature — and was inconsistent with single-Accept,
+            // which already refreshes in place via reloadResourceOptimization().
+            setTimeout(() => reloadResourceOptimization(), 800);
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check-double"></i> Accept All';
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check-double"></i> Accept All';
     });
 }
 
 function acceptSuggestion(button) {
     const card = button.closest('.suggestion-card');
     const suggestionId = card.dataset.suggestionId;
-    
+
     if (!confirm('Accept this resource optimization suggestion?')) {
         return;
     }
-    
+
     button.disabled = true;
     button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Accepting...';
-    
+
     fetch(`/api/resource-leveling/suggestions/${suggestionId}/accept/`, {
         method: 'POST',
         headers: {
@@ -479,20 +794,22 @@ function acceptSuggestion(button) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Show success message
+            // Brief inline acknowledgement, then re-fetch workload + suggestions
+            // so the bars at the top update and the remaining suggestions are
+            // regenerated against the new database state. No full page reload —
+            // that closes the modal and forces the user to re-open it.
             card.classList.remove('border-info');
             card.classList.add('border-success');
             card.querySelector('.card-body').innerHTML = `
                 <div class="alert alert-success mb-0">
-                    <i class="fas fa-check-circle"></i> 
-                    Task successfully reassigned to ${data.new_assignee}. Refreshing page...
+                    <i class="fas fa-check-circle"></i>
+                    Task reassigned to ${data.new_assignee}. Updating workload…
                 </div>
             `;
-            
-            // Reload the page to show updated task assignment on board and widget
+
             setTimeout(() => {
-                window.location.reload();
-            }, 1500);
+                reloadResourceOptimization();
+            }, 600);
         } else {
             alert('Error accepting suggestion: ' + (data.error || 'Unknown error'));
             button.disabled = false;
@@ -531,16 +848,14 @@ function rejectSuggestion(button) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Fade out and remove
+            // Fade out, then refresh workload + suggestions. Dismissing doesn't
+            // change DB workload, but it lets the engine regenerate suggestions
+            // (which can pick a different person for the same task next time)
+            // and keeps the modal in sync with backend state.
             card.style.opacity = '0';
             setTimeout(() => {
                 card.remove();
-                
-                // Check if there are any remaining suggestions
-                const container = document.getElementById('suggestions-container');
-                if (container.children.length === 0) {
-                    document.getElementById('no-suggestions').classList.remove('d-none');
-                }
+                reloadResourceOptimization();
             }, 300);
         } else {
             alert('Error rejecting suggestion: ' + (data.error || 'Unknown error'));

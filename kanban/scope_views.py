@@ -14,6 +14,7 @@ from django.utils import timezone
 from django.db.models import Sum, Avg, Count, Q
 
 from kanban.models import Board, Task, ScopeChangeSnapshot, ScopeCreepAlert
+from kanban.scope_autopsy_models import ScopeAutopsyReport
 from kanban.utils.scope_analysis import (
     get_scope_trend_data, 
     calculate_scope_velocity,
@@ -21,6 +22,8 @@ from kanban.utils.scope_analysis import (
     create_scope_alert_if_needed,
     refresh_active_alerts,
 )
+from kanban.decorators import demo_write_guard, demo_ai_guard
+from kanban.simple_access import check_access_or_403, check_modify_or_403
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +35,8 @@ def scope_dashboard(request, board_id):
     Shows baseline status, current scope, trends, alerts, and allows management
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     # Get current scope status
     scope_status = board.get_current_scope_status()
     has_baseline = scope_status is not None
@@ -76,6 +80,9 @@ def scope_dashboard(request, board_id):
         'in_progress_tasks': tasks.filter(
             Q(column__name__icontains='in progress') | Q(column__name__icontains='doing')
         ).count(),
+        'in_review_tasks': tasks.filter(
+            Q(column__name__icontains='review') | Q(column__name__icontains='testing') | Q(column__name__icontains='QA')
+        ).count(),
         'completed_tasks': tasks.filter(
             Q(column__name__icontains='done') | Q(column__name__icontains='complete')
         ).count(),
@@ -88,7 +95,11 @@ def scope_dashboard(request, board_id):
         'complexity': [item['complexity'] for item in trend_data],
         'scope_change': [item.get('scope_change_pct', 0) for item in trend_data],
     }
-    
+
+    latest_autopsy = ScopeAutopsyReport.objects.filter(
+        board=board, status='complete'
+    ).first()
+
     context = {
         'board': board,
         'has_baseline': has_baseline,
@@ -106,6 +117,7 @@ def scope_dashboard(request, board_id):
         'critical_count': critical_count,
         'warning_count': warning_count,
         'info_count': info_count,
+        'latest_autopsy': latest_autopsy,
     }
     
     return render(request, 'kanban/scope_dashboard.html', context)
@@ -113,6 +125,7 @@ def scope_dashboard(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def set_scope_baseline(request, board_id):
     """
     Set or reset the scope baseline for a board.
@@ -123,6 +136,7 @@ def set_scope_baseline(request, board_id):
       - 'reset'  : Clear the baseline entirely (kept for backwards-compat)
     """
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
 
     # De-flag any existing baseline snapshot
     existing_baseline = ScopeChangeSnapshot.objects.filter(
@@ -255,13 +269,15 @@ def set_scope_baseline(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def create_scope_snapshot(request, board_id):
     """
     Create a manual scope snapshot for tracking
     Useful for milestone tracking or periodic reviews
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_modify_or_403(request.user, board)
+
     snapshot_type = request.POST.get('snapshot_type', 'manual')
     notes = request.POST.get('notes', '')
     run_ai_analysis = request.POST.get('ai_analysis', 'false') == 'true'
@@ -318,8 +334,9 @@ def scope_snapshot_detail(request, board_id, snapshot_id):
     View detailed information about a specific scope snapshot
     """
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     snapshot = get_object_or_404(ScopeChangeSnapshot, id=snapshot_id, board=board)
-    
+
     # Get comparison with baseline
     comparison = None
     if snapshot.baseline_snapshot:
@@ -343,13 +360,15 @@ def scope_snapshot_detail(request, board_id, snapshot_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def acknowledge_scope_alert(request, board_id, alert_id):
     """
     Acknowledge a scope creep alert
     """
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     alert = get_object_or_404(ScopeCreepAlert, id=alert_id, board=board)
-    
+
     alert.acknowledge(request.user)
     messages.success(request, 'Alert acknowledged.')
     
@@ -361,13 +380,15 @@ def acknowledge_scope_alert(request, board_id, alert_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def resolve_scope_alert(request, board_id, alert_id):
     """
     Resolve a scope creep alert with optional notes
     """
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     alert = get_object_or_404(ScopeCreepAlert, id=alert_id, board=board)
-    
+
     notes = request.POST.get('notes', '')
     alert.resolve(request.user, notes=notes)
     messages.success(request, 'Alert resolved.')
@@ -380,13 +401,15 @@ def resolve_scope_alert(request, board_id, alert_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def dismiss_scope_alert(request, board_id, alert_id):
     """
     Dismiss a scope creep alert (mark as not applicable)
     """
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     alert = get_object_or_404(ScopeCreepAlert, id=alert_id, board=board)
-    
+
     alert.status = 'dismissed'
     alert.resolved_at = timezone.now()
     alert.resolved_by = request.user
@@ -403,13 +426,15 @@ def dismiss_scope_alert(request, board_id, alert_id):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def run_scope_analysis(request, board_id):
     """
     Run AI analysis on current scope vs baseline
     Creates a new snapshot with AI-powered insights
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_modify_or_403(request.user, board)
+
     # Check if baseline exists
     if not board.baseline_task_count:
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -422,8 +447,9 @@ def run_scope_analysis(request, board_id):
     
     # Deduplication check: reuse a recent snapshot if it matches current metrics
     dedupe_cutoff = timezone.now() - timedelta(minutes=30)
-    current_task_count = board.tasks.count()
-    current_complexity = board.tasks.aggregate(
+    board_tasks = Task.objects.filter(column__board=board)
+    current_task_count = board_tasks.count()
+    current_complexity = board_tasks.aggregate(
         total=Sum('complexity_score')
     )['total'] or 0
 
@@ -499,10 +525,11 @@ def scope_api_metrics(request, board_id):
     API endpoint for scope metrics - used for dashboard widgets
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     # Get current status
     scope_status = board.get_current_scope_status()
-    
+
     # Get active alerts count
     active_alerts_count = ScopeCreepAlert.objects.filter(
         board=board,
@@ -534,7 +561,8 @@ def scope_comparison(request, board_id):
     Compare two scope snapshots side by side
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     snapshot1_id = request.GET.get('snapshot1')
     snapshot2_id = request.GET.get('snapshot2')
     
@@ -547,6 +575,10 @@ def scope_comparison(request, board_id):
     if snapshot1_id and snapshot2_id:
         snapshot1 = get_object_or_404(ScopeChangeSnapshot, id=snapshot1_id, board=board)
         snapshot2 = get_object_or_404(ScopeChangeSnapshot, id=snapshot2_id, board=board)
+        
+        # Auto-swap if dates are in wrong order (SCP-03)
+        if snapshot1.snapshot_date > snapshot2.snapshot_date:
+            snapshot1, snapshot2 = snapshot2, snapshot1
         
         comparison = {
             'tasks_diff': snapshot2.total_tasks - snapshot1.total_tasks,

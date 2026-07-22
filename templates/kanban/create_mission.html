@@ -11,6 +11,12 @@
     </ol>
 </nav>
 
+<div class="mb-3">
+    <a href="{% url 'mission_list' %}" class="btn-prizm-back">
+        <i class="fas fa-arrow-left"></i> Back to Missions
+    </a>
+</div>
+
 <div class="row justify-content-center">
     <div class="col-md-7">
         <div class="card shadow-sm">
@@ -24,11 +30,13 @@
                 </p>
                 <form method="post">
                     {% csrf_token %}
+                    <p class="required-fields-hint">* indicates a required field</p>
                     <div class="mb-3">
-                        <label for="name" class="form-label fw-semibold">Mission Name <span class="text-danger">*</span></label>
+                        <label for="name" class="form-label fw-semibold">Mission Name <span class="required-asterisk">*</span></label>
                         <input type="text" class="form-control" id="name" name="name"
                                placeholder="e.g., Prevent AI Security Threats"
                                value="{{ post.name|default:'' }}" required>
+                        <div class="field-validation-msg">Mission name is required.</div>
                         <div class="form-text">Give your mission a short, memorable name.</div>
                     </div>
                     <div class="mb-3">
@@ -44,6 +52,18 @@
                             <option value="completed" {% if post.status == 'completed' %}selected{% endif %}>Completed</option>
                         </select>
                     </div>
+                    {% if all_goals %}
+                    <div class="mb-4">
+                        <label for="organization_goal_id" class="form-label fw-semibold">Link to Goal <span class="text-muted small fw-normal">(optional)</span></label>
+                        <select class="form-select" id="organization_goal_id" name="organization_goal_id">
+                            <option value="">— No goal yet —</option>
+                            {% for goal in all_goals %}
+                            <option value="{{ goal.id }}" {% if post.organization_goal_id == goal.id|stringformat:"s" %}selected{% endif %}>{{ goal.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Attach this mission to an existing organizational goal. A Mission belongs to one Goal &mdash; it can be moved later, but not shared across goals.</div>
+                    </div>
+                    {% endif %}
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-check me-1"></i>Create Mission

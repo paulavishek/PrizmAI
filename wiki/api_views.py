@@ -18,8 +18,14 @@ from django.db import models
 from django.db.models import Q
 
 from kanban.models import Board, Task, Column
+from kanban.decorators import demo_ai_guard
+from kanban.utils.demo_protection import get_user_boards
 from accounts.models import Organization
-from .models import WikiPage, WikiMeetingAnalysis, WikiMeetingTask
+from .models import (
+    WikiPage, WikiMeetingAnalysis, WikiMeetingTask,
+    WikiDocumentationAnalysis, WikiDocumentationTask,
+)
+from .scoping import wiki_scope_q
 from .ai_utils import analyze_meeting_notes_from_wiki, analyze_wiki_documentation, parse_due_date
 from api.ai_usage_utils import track_ai_request, check_ai_quota
 
@@ -28,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def analyze_wiki_documentation_page(request, wiki_page_id):
     """
     API endpoint to analyze a general wiki documentation page using AI
@@ -50,19 +57,45 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
         else:
             org = Organization.objects.filter(name='Demo - Acme Corporation').first()
         
-        # Get the wiki page - allow access to any published page
-        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
-        
-        # Access restriction removed - all authenticated users can access
-        
+        # Fetch the page scoped to the user's active WORKSPACE (the tenant
+        # boundary). A page outside the active workspace 404s.
+        wiki_page = get_object_or_404(WikiPage, wiki_scope_q(request), id=wiki_page_id)
+
+        # Reuse a recent analysis for identical content (mirrors the meeting flow),
+        # so re-opening the assistant on an unchanged page is free and returns a
+        # stable analysis_id the promote endpoint can use.
+        content_hash = hashlib.sha256(wiki_page.content.encode()).hexdigest()
+        existing_analysis = WikiDocumentationAnalysis.objects.filter(
+            wiki_page=wiki_page,
+            content_hash=content_hash,
+            processing_status='completed'
+        ).first()
+
+        if existing_analysis:
+            return JsonResponse({
+                'success': True,
+                'is_cached': True,
+                'analysis_id': existing_analysis.id,
+                'wiki_page_id': wiki_page.id,
+                'wiki_page_title': wiki_page.title,
+                'analysis_results': existing_analysis.analysis_results,
+                'analysis_type': 'documentation',
+                'processed_at': existing_analysis.processed_at.isoformat()
+            })
+
+        # Create the analysis record up front so a promote can reference it
+        analysis = WikiDocumentationAnalysis.objects.create(
+            wiki_page=wiki_page,
+            organization=org,
+            processed_by=request.user,
+            processing_status='processing',
+            content_hash=content_hash
+        )
+
         try:
-            # MVP Mode: Get all accessible boards (demo boards + user's boards)
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            )
-            available_boards = (demo_boards | user_boards).distinct()
-            
+            # Get boards scoped to user's current workspace (demo-aware)
+            available_boards = get_user_boards(request.user)
+
             # Prepare wiki page context
             wiki_context = {
                 'title': wiki_page.title,
@@ -71,7 +104,7 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
                 'created_by': wiki_page.created_by.username,
                 'tags': wiki_page.tags if wiki_page.tags else []
             }
-            
+
             # Run AI analysis for documentation
             analysis_results = analyze_wiki_documentation(
                 wiki_content=wiki_page.content,
@@ -79,7 +112,7 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
                 organization=org,
                 available_boards=available_boards
             )
-            
+
             if not analysis_results:
                 response_time_ms = int((time.time() - start_time) * 1000)
                 track_ai_request(
@@ -90,8 +123,11 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
                     error_message='Failed to analyze documentation',
                     response_time_ms=response_time_ms
                 )
+                analysis.processing_status = 'failed'
+                analysis.processing_error = 'AI analysis returned no results'
+                analysis.save()
                 return JsonResponse({'error': 'Failed to analyze documentation'}, status=500)
-            
+
             # Track successful request
             response_time_ms = int((time.time() - start_time) * 1000)
             track_ai_request(
@@ -101,16 +137,24 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
                 success=True,
                 response_time_ms=response_time_ms
             )
-            
+
+            # Store results
+            analysis.analysis_results = analysis_results
+            analysis.processing_status = 'completed'
+            analysis.update_counts()
+            analysis.save()
+
             return JsonResponse({
                 'success': True,
+                'is_cached': False,
+                'analysis_id': analysis.id,
                 'wiki_page_id': wiki_page.id,
                 'wiki_page_title': wiki_page.title,
                 'analysis_results': analysis_results,
                 'analysis_type': 'documentation',
-                'processed_at': timezone.now().isoformat()
+                'processed_at': analysis.processed_at.isoformat()
             })
-            
+
         except Exception as e:
             response_time_ms = int((time.time() - start_time) * 1000)
             track_ai_request(
@@ -122,6 +166,9 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
                 response_time_ms=response_time_ms
             )
             logger.error(f"Error during documentation AI analysis: {str(e)}")
+            analysis.processing_status = 'failed'
+            analysis.processing_error = str(e)
+            analysis.save()
             return JsonResponse({'error': f'Analysis failed: {str(e)}'}, status=500)
         
     except Exception as e:
@@ -140,6 +187,7 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def analyze_wiki_meeting_page(request, wiki_page_id):
     """
     API endpoint to analyze a wiki page as meeting notes using AI
@@ -162,11 +210,10 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
         else:
             org = Organization.objects.filter(name='Demo - Acme Corporation').first()
         
-        # Get the wiki page - allow access to any published page
-        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
-        
-        # Access restriction removed - all authenticated users can access
-        
+        # Fetch the page scoped to the user's active WORKSPACE (the tenant
+        # boundary). A page outside the active workspace 404s.
+        wiki_page = get_object_or_404(WikiPage, wiki_scope_q(request), id=wiki_page_id)
+
         # Check if there's already a recent analysis for this content
         content_hash = hashlib.sha256(wiki_page.content.encode()).hexdigest()
         existing_analysis = WikiMeetingAnalysis.objects.filter(
@@ -195,12 +242,8 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
         )
         
         try:
-            # MVP Mode: Get all accessible boards (demo boards + user's boards)
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            )
-            available_boards = (demo_boards | user_boards).distinct()
+            # Get boards scoped to user's current workspace (demo-aware)
+            available_boards = get_user_boards(request.user)
             
             # Prepare wiki page context
             wiki_context = {
@@ -291,8 +334,102 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+def _resolve_target_column(board, column_id):
+    """Resolve the column to drop promoted tasks into.
+
+    Uses an explicit column_id if given (scoped to the board), else prefers a
+    To Do-type column via column_semantics, else the first column. Returns None
+    if the board has no columns.
+    """
+    if column_id:
+        return get_object_or_404(Column, id=column_id, board=board)
+    from kanban.column_semantics import column_type_q
+    return (
+        board.columns.filter(column_type_q('todo', field='')).order_by('position').first()
+        or board.columns.first()
+    )
+
+
+def _resolve_board_assignee(board, assignee_name, ws_user_ids):
+    """Resolve an AI-suggested / user-chosen assignee name to a User.
+
+    Restricted to board members (members + creator) via a 5-tier match, with a
+    final workspace-wide fallback so a task can never be auto-assigned to someone
+    outside the workspace. Returns a User or None.
+    """
+    if not assignee_name:
+        return None
+    try:
+        board_member_ids = list(board.memberships.values_list('user_id', flat=True))
+        board_member_ids.append(board.created_by_id)
+        board_qs = User.objects.filter(id__in=board_member_ids)
+
+        name_lower = assignee_name.lower().strip()
+
+        # 1. Exact username match within board
+        assignee = board_qs.filter(username__iexact=assignee_name).first()
+        # 2. Exact first-name match
+        if not assignee:
+            assignee = board_qs.filter(first_name__iexact=assignee_name).first()
+        # 3. Full name match (iterate — small list)
+        if not assignee:
+            for u in board_qs:
+                if u.get_full_name().lower() == name_lower:
+                    assignee = u
+                    break
+        # 4. Partial username / first-name match
+        if not assignee:
+            assignee = board_qs.filter(
+                Q(username__icontains=assignee_name)
+                | Q(first_name__icontains=assignee_name)
+            ).first()
+        # 5. Workspace-wide fallback (exact matches only), restricted to collaborators.
+        if not assignee and ws_user_ids:
+            assignee = User.objects.filter(
+                Q(username__iexact=assignee_name)
+                | Q(first_name__iexact=assignee_name),
+                id__in=ws_user_ids,
+            ).first()
+
+        return assignee
+    except Exception as e:
+        logger.warning(f"Could not resolve assignee '{assignee_name}': {str(e)}")
+        return None
+
+
+def _build_origin_footer(description, wiki_page, source_snippet):
+    """Append a traceability footer linking a promoted task back to its source.
+
+    Lets a developer looking at the card trace it to the exact wiki page (and the
+    snippet the AI extracted it from). Kept as a description footer — no schema
+    change — per the "keep it simple" goal.
+    """
+    footer_lines = [f'📄 From wiki page: {wiki_page.title} ({wiki_page.get_absolute_url()})']
+    snippet = (source_snippet or '').strip()
+    if snippet:
+        footer_lines.append(f'"{snippet}"')
+    footer = '\n'.join(footer_lines)
+    base = (description or '').strip()
+    if base:
+        return f'{base}\n\n---\n{footer}'
+    return footer
+
+
+def _workspace_collaborator_ids(board):
+    """User ids of collaborators across all boards in this board's workspace."""
+    if not board.workspace_id:
+        return set()
+    from kanban.models import BoardMembership
+    return set(
+        BoardMembership.objects
+        .filter(board__workspace_id=board.workspace_id)
+        .values_list('user_id', flat=True)
+    )
+
+
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def create_tasks_from_meeting_analysis(request, analysis_id):
     """
     API endpoint to create tasks from wiki meeting analysis
@@ -322,31 +459,35 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
         analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id)
         board = get_object_or_404(Board, id=board_id)
         
-        # Access restriction removed - all authenticated users can access
+        # Check user has permission to create tasks on this board
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get target column
-        if column_id:
-            target_column = get_object_or_404(Column, id=column_id, board=board)
-        else:
-            # Get default column (usually "To Do" or first column)
-            target_column = board.columns.filter(name__icontains='todo').first() or board.columns.first()
-        
+        target_column = _resolve_target_column(board, column_id)
         if not target_column:
             return JsonResponse({'error': 'No columns found in board'}, status=400)
-        
+
+        wiki_page = analysis.wiki_page
         action_items = analysis.get_action_items()
         created_tasks = []
         failed_items = []
-        
-        with transaction.atomic():
-            for idx in selected_indices:
-                try:
-                    if idx >= len(action_items):
-                        failed_items.append({'index': idx, 'error': 'Index out of range'})
-                        continue
-                    
-                    action_item = action_items[idx]
-                    
+
+        # Workspace collaborators — assignee fallback restricted to this workspace.
+        _ws_user_ids = _workspace_collaborator_ids(board)
+
+        for idx in selected_indices:
+            try:
+                if idx >= len(action_items):
+                    failed_items.append({'index': idx, 'error': 'Index out of range'})
+                    continue
+
+                action_item = action_items[idx]
+
+                # Per-item savepoint: a failing item (e.g. a unique_together
+                # violation from re-promoting) rolls back only itself instead of
+                # poisoning the whole batch.
+                with transaction.atomic():
                     # Map priority
                     priority_map = {
                         'urgent': 'urgent',
@@ -355,80 +496,47 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                         'low': 'low'
                     }
                     priority = priority_map.get(action_item.get('priority', 'medium'), 'medium')
-                    
+
                     task_title = action_item.get('text') or action_item.get('title', '')
+                    # Traceability footer back to the origin meeting page + snippet
+                    description = _build_origin_footer(
+                        action_item.get('description', ''),
+                        wiki_page,
+                        action_item.get('source_quote') or action_item.get('source_context'),
+                    )
                     task = Task.objects.create(
                         title=task_title[:200],  # Limit title length
-                        description=action_item.get('description', ''),
+                        description=description,
                         column=target_column,
                         priority=priority,
                         created_by=request.user,
                         is_seed_demo_data=False,
                         phase=phase  # Set phase if provided (None if not)
                     )
-                    
+
                     # Resolve assignee: user override takes priority over AI suggestion
                     assignee_name = (
                         assignee_overrides.get(str(idx))
                         or action_item.get('assignee')
                         or action_item.get('suggested_assignee')
                     )
-                    if assignee_name:
-                        try:
-                            # Restrict lookup to board members (creator + members)
-                            board_member_ids = list(board.members.values_list('id', flat=True))
-                            board_member_ids.append(board.created_by_id)
-                            board_qs = User.objects.filter(id__in=board_member_ids)
+                    assignee = _resolve_board_assignee(board, assignee_name, _ws_user_ids)
+                    if assignee:
+                        task.assigned_to = assignee
 
-                            name_lower = assignee_name.lower().strip()
-
-                            # 1. Exact username match within board
-                            assignee = board_qs.filter(username__iexact=assignee_name).first()
-
-                            # 2. Exact first-name match
-                            if not assignee:
-                                assignee = board_qs.filter(first_name__iexact=assignee_name).first()
-
-                            # 3. Full name match (iterate — small list)
-                            if not assignee:
-                                for u in board_qs:
-                                    if u.get_full_name().lower() == name_lower:
-                                        assignee = u
-                                        break
-
-                            # 4. Partial username / first-name match
-                            if not assignee:
-                                assignee = board_qs.filter(
-                                    Q(username__icontains=assignee_name)
-                                    | Q(first_name__icontains=assignee_name)
-                                ).first()
-
-                            # 5. Org-wide fallback (exact matches only)
-                            if not assignee and org:
-                                assignee = User.objects.filter(
-                                    Q(username__iexact=assignee_name)
-                                    | Q(first_name__iexact=assignee_name),
-                                    profile__organization=org,
-                                ).first()
-
-                            if assignee:
-                                task.assigned_to = assignee
-                        except Exception as e:
-                            logger.warning(f"Could not assign task to {assignee_name}: {str(e)}")
-                    
                     # Set due date if suggested
                     due_date_str = action_item.get('due_date_suggestion')
                     if due_date_str:
                         due_date = parse_due_date(due_date_str)
                         if due_date:
                             task.due_date = due_date
-                    
+
                     # Add tags from action item
                     if action_item.get('tags'):
                         task.tags = action_item['tags']
-                    
+
                     task.save()
-                    
+
                     # Create WikiMeetingTask link
                     WikiMeetingTask.objects.create(
                         meeting_analysis=analysis,
@@ -437,7 +545,7 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                         action_item_data=action_item,
                         created_by=request.user
                     )
-                    
+
                     created_tasks.append({
                         'id': task.id,
                         'title': task.title,
@@ -446,15 +554,15 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                         'due_date': task.due_date.isoformat() if task.due_date else None,
                         'url': f'/tasks/{task.id}/'
                     })
-                    
-                except Exception as e:
-                    logger.error(f"Error creating task from action item {idx}: {str(e)}")
-                    failed_items.append({'index': idx, 'error': str(e)})
-            
-            # Update analysis with task count
-            analysis.tasks_created_count = len(created_tasks)
-            analysis.save(update_fields=['tasks_created_count'])
-        
+
+            except Exception as e:
+                logger.error(f"Error creating task from action item {idx}: {str(e)}")
+                failed_items.append({'index': idx, 'error': str(e)})
+
+        # Update analysis with task count
+        analysis.tasks_created_count = len(created_tasks)
+        analysis.save(update_fields=['tasks_created_count'])
+
         return JsonResponse({
             'success': True,
             'created_tasks': created_tasks,
@@ -462,9 +570,138 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
             'total_created': len(created_tasks),
             'total_failed': len(failed_items)
         })
-        
+
     except Exception as e:
         logger.error(f"Error in create_tasks_from_meeting_analysis: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+@demo_ai_guard
+def create_tasks_from_documentation_analysis(request, analysis_id):
+    """
+    API endpoint to create tasks from a wiki documentation analysis.
+
+    Mirrors create_tasks_from_meeting_analysis. The documentation action-item
+    schema differs: title lives in 'title' (no 'text'), priority is low|medium|high
+    (no 'urgent'), the origin snippet is 'source_context' (no 'source_quote'), and
+    the AI does not suggest an assignee or due date — so assignees come only from
+    user-supplied assignee_overrides.
+    """
+    try:
+        data = json.loads(request.body)
+
+        board_id = data.get('board_id')
+        selected_indices = data.get('selected_action_items', [])
+        column_id = data.get('column_id')  # Optional: specific column
+        phase = data.get('phase')  # Optional: phase assignment
+        # {str(idx): username_or_name} — user-selected assignee per action item
+        assignee_overrides = data.get('assignee_overrides', {})
+
+        if not board_id:
+            return JsonResponse({'error': 'board_id is required'}, status=400)
+
+        analysis = get_object_or_404(WikiDocumentationAnalysis, id=analysis_id)
+        board = get_object_or_404(Board, id=board_id)
+
+        # Check user has permission to create tasks on this board
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        # Get target column
+        target_column = _resolve_target_column(board, column_id)
+        if not target_column:
+            return JsonResponse({'error': 'No columns found in board'}, status=400)
+
+        wiki_page = analysis.wiki_page
+        action_items = analysis.get_action_items()
+        created_tasks = []
+        failed_items = []
+
+        # Valid priorities (documentation prompt emits low/medium/high only).
+        valid_priorities = {choice[0] for choice in Task.PRIORITY_CHOICES}
+
+        # Workspace collaborators — assignee fallback restricted to this workspace.
+        _ws_user_ids = _workspace_collaborator_ids(board)
+
+        for idx in selected_indices:
+            try:
+                if idx >= len(action_items):
+                    failed_items.append({'index': idx, 'error': 'Index out of range'})
+                    continue
+
+                action_item = action_items[idx]
+
+                # Per-item savepoint: a failing item (e.g. a unique_together
+                # violation from re-promoting) rolls back only itself instead of
+                # poisoning the whole batch.
+                with transaction.atomic():
+                    priority = action_item.get('priority', 'medium')
+                    if priority not in valid_priorities:
+                        priority = 'medium'
+
+                    task_title = action_item.get('title') or action_item.get('text', '')
+                    # Traceability footer back to the origin documentation page + snippet
+                    description = _build_origin_footer(
+                        action_item.get('description', ''),
+                        wiki_page,
+                        action_item.get('source_context') or action_item.get('source_quote'),
+                    )
+                    task = Task.objects.create(
+                        title=task_title[:200],
+                        description=description,
+                        column=target_column,
+                        priority=priority,
+                        created_by=request.user,
+                        is_seed_demo_data=False,
+                        phase=phase
+                    )
+
+                    # Documentation AI does not suggest assignees — user override only.
+                    assignee = _resolve_board_assignee(
+                        board, assignee_overrides.get(str(idx)), _ws_user_ids
+                    )
+                    if assignee:
+                        task.assigned_to = assignee
+                        task.save(update_fields=['assigned_to'])
+
+                    # Create WikiDocumentationTask link (unique_together blocks re-promote)
+                    WikiDocumentationTask.objects.create(
+                        documentation_analysis=analysis,
+                        task=task,
+                        action_item_index=idx,
+                        action_item_data=action_item,
+                        created_by=request.user
+                    )
+
+                    created_tasks.append({
+                        'id': task.id,
+                        'title': task.title,
+                        'priority': task.priority,
+                        'assigned_to': task.assigned_to.username if task.assigned_to else None,
+                        'due_date': task.due_date.isoformat() if task.due_date else None,
+                        'url': f'/tasks/{task.id}/'
+                    })
+
+            except Exception as e:
+                logger.error(f"Error creating task from doc action item {idx}: {str(e)}")
+                failed_items.append({'index': idx, 'error': str(e)})
+
+        # Update analysis with task count
+        analysis.tasks_created_count = len(created_tasks)
+        analysis.save(update_fields=['tasks_created_count'])
+
+        return JsonResponse({
+            'success': True,
+            'created_tasks': created_tasks,
+            'failed_items': failed_items,
+            'total_created': len(created_tasks),
+            'total_failed': len(failed_items)
+        })
+
+    except Exception as e:
+        logger.error(f"Error in create_tasks_from_documentation_analysis: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
 
@@ -475,8 +712,14 @@ def get_meeting_analysis_details(request, analysis_id):
     API endpoint to get detailed meeting analysis information
     """
     try:
-        # Get analysis - allow access without org restriction
+        # Get analysis and verify org access
         analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id)
+        
+        # RBAC: Verify user belongs to the same org as the wiki page
+        user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+        page_org = getattr(analysis.wiki_page, 'organization', None)
+        if user_org and page_org and user_org != page_org:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get created tasks
         created_tasks = []
@@ -519,13 +762,20 @@ def get_meeting_analysis_details(request, analysis_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def mark_analysis_reviewed(request, analysis_id):
     """
     Mark an analysis as reviewed by user, optionally with notes
     """
     try:
-        # Get analysis - allow access without org restriction
+        # Get analysis and verify org access
         analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id)
+        
+        # RBAC: Verify user belongs to the same org as the wiki page
+        user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+        page_org = getattr(analysis.wiki_page, 'organization', None)
+        if user_org and page_org and user_org != page_org:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         data = json.loads(request.body)
         user_notes = data.get('user_notes', '')
@@ -554,12 +804,8 @@ def get_boards_for_organization(request):
     Used for board selection when creating tasks
     """
     try:
-        # MVP Mode: Get all accessible boards (demo boards + user's boards)
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user)
-        )
-        boards = (demo_boards | user_boards).distinct()
+        # Get boards scoped to user's current workspace (demo-aware)
+        boards = get_user_boards(request.user)
         
         boards_data = []
         for board in boards:
@@ -574,7 +820,7 @@ def get_boards_for_organization(request):
             # Collect board members (creator + members, deduplicated)
             seen_ids = set()
             members_data = []
-            for member in [board.created_by] + list(board.members.all()):
+            for member in [board.created_by] + list(User.objects.filter(board_memberships__board=board)):
                 if member.id not in seen_ids:
                     seen_ids.add(member.id)
                     members_data.append({
@@ -604,6 +850,7 @@ def get_boards_for_organization(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def import_transcript_to_wiki_page(request, wiki_page_id):
     """
     Import a meeting transcript into a wiki page
@@ -618,9 +865,11 @@ def import_transcript_to_wiki_page(request, wiki_page_id):
         else:
             org = Organization.objects.filter(name='Demo - Acme Corporation').first()
         
-        # Get the wiki page - allow access without org restriction
-        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
-        
+        # Fetch the page scoped to the user's active WORKSPACE — this is a write
+        # endpoint (imports a transcript into the page), so it must not accept an
+        # arbitrary page id from another workspace.
+        wiki_page = get_object_or_404(WikiPage, wiki_scope_q(request), id=wiki_page_id)
+
         # Parse request body
         data = json.loads(request.body)
         transcript_content = data.get('transcript_content', '').strip()
@@ -680,12 +929,8 @@ def import_transcript_to_wiki_page(request, wiki_page_id):
                 # Check AI quota
                 has_quota, quota, remaining = check_ai_quota(request.user)
                 if has_quota:
-                    # MVP Mode: Get all accessible boards
-                    demo_boards = Board.objects.filter(is_official_demo_board=True)
-                    user_boards = Board.objects.filter(
-                        Q(created_by=request.user) | Q(members=request.user)
-                    )
-                    available_boards = (demo_boards | user_boards).distinct()[:10]
+                    # Get boards scoped to user's current workspace (demo-aware)
+                    available_boards = get_user_boards(request.user)[:10]
                     
                     # Build wiki page context
                     wiki_page_context = {
@@ -747,6 +992,7 @@ def import_transcript_to_wiki_page(request, wiki_page_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def extract_text_from_uploaded_file(request):
     """
     Extract text from uploaded Word (.docx, .doc) or PDF files

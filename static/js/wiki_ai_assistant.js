@@ -25,7 +25,7 @@ function detectPageTypeAndShowButton() {
     if (categoryAiType === 'meeting') {
         aiBtn.style.display = 'inline-block';
         aiBtn.className = 'btn btn-outline-success btn-sm me-2';
-        if (aiButtonText) aiButtonText.textContent = 'Meeting Analysis';
+        if (aiButtonText) aiButtonText.textContent = 'Meeting Assistant';
         if (importTranscriptBtn) importTranscriptBtn.style.display = 'inline-block';
     } else if (categoryAiType === 'documentation') {
         aiBtn.style.display = 'inline-block';
@@ -64,13 +64,12 @@ async function processMeetingNotes() {
     // Show processing state
     modalBody.innerHTML = `
         <div class="text-center py-5">
-            <div class="spinner-border text-success mb-3" role="status" style="width: 3rem; height: 3rem;">
-                <span class="visually-hidden">Processing...</span>
-            </div>
+            <div class="prizm-spinner prizm-spinner--lg mb-3"></div>
             <h5>Analyzing meeting notes with AI...</h5>
-            <p class="text-muted">Extracting action items, decisions, blockers, and risks...</p>
+            <p class="prizm-loading-message-inline" id="wiki-meeting-msg">Extracting action items, decisions, blockers, and risks...</p>
         </div>
     `;
+    if (typeof PrizmLoading !== 'undefined') PrizmLoading.rotateMessages(document.getElementById('wiki-meeting-msg'), PrizmLoading.messages.wikiAnalysis);
     
     try {
         const response = await fetch(`/wiki/api/wiki-page/${wikiPageId}/analyze/`, {
@@ -110,13 +109,12 @@ async function processDocumentation() {
     // Show processing state
     modalBody.innerHTML = `
         <div class="text-center py-5">
-            <div class="spinner-border text-info mb-3" role="status" style="width: 3rem; height: 3rem;">
-                <span class="visually-hidden">Processing...</span>
-            </div>
+            <div class="prizm-spinner prizm-spinner--lg mb-3"></div>
             <h5>Analyzing documentation with AI...</h5>
-            <p class="text-muted">Extracting key information and suggestions...</p>
+            <p class="prizm-loading-message-inline" id="wiki-docs-msg">Extracting key information and suggestions...</p>
         </div>
     `;
+    if (typeof PrizmLoading !== 'undefined') PrizmLoading.rotateMessages(document.getElementById('wiki-docs-msg'), PrizmLoading.messages.wikiGenerate);
     
     try {
         const response = await fetch(`/wiki/api/wiki-page/${wikiPageId}/analyze-documentation/`, {
@@ -130,6 +128,7 @@ async function processDocumentation() {
         const data = await response.json();
         
         if (data.success) {
+            currentAnalysisId = data.analysis_id;
             currentAnalysisResults = data.analysis_results;
             displayDocumentationAnalysisResults(data.analysis_results);
             
@@ -542,21 +541,23 @@ async function confirmTaskCreation() {
             }
         });
         
-        if (currentAnalysisType === 'meeting' && currentAnalysisId) {
-            // Meeting analysis has its own task creation endpoint
-            endpoint = `/wiki/api/meeting-analysis/${currentAnalysisId}/create-tasks/`;
-            requestBody = {
-                board_id: boardId,
-                column_id: columnId || null,
-                phase: phase,
-                selected_action_items: Array.from(selectedActionItems),
-                assignee_overrides: assigneeOverrides
-            };
-        } else {
-            // Documentation analysis - create tasks directly (we'll need to add this endpoint)
-            // For now, show error
-            throw new Error('Task creation from documentation analysis not yet implemented');
+        if (!currentAnalysisId) {
+            throw new Error('No analysis available. Please re-run the assistant.');
         }
+
+        if (currentAnalysisType === 'documentation') {
+            endpoint = `/wiki/api/documentation-analysis/${currentAnalysisId}/create-tasks/`;
+        } else {
+            // Meeting analysis (default)
+            endpoint = `/wiki/api/meeting-analysis/${currentAnalysisId}/create-tasks/`;
+        }
+        requestBody = {
+            board_id: boardId,
+            column_id: columnId || null,
+            phase: phase,
+            selected_action_items: Array.from(selectedActionItems),
+            assignee_overrides: assigneeOverrides
+        };
         
         const response = await fetch(endpoint, {
             method: 'POST',
@@ -767,14 +768,6 @@ function getProbabilityColor(probability) {
     return colors[probability] || 'secondary';
 }
 
-// Handle back navigation to previous page
-function goBack() {
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        window.location.href = wikiListUrl;
-    }
-}
 
 // Import transcript functionality
 async function importTranscript() {

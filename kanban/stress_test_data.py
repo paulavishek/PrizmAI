@@ -32,7 +32,7 @@ def build_board_stress_test_data(board, user):
     high_priority_tasks = tasks.filter(priority__in=['high', 'urgent']).count()
 
     # Team members
-    member_ids = set(board.members.values_list('id', flat=True))
+    member_ids = set(board.memberships.values_list('user_id', flat=True))
     assignee_ids = set(
         tasks.filter(assigned_to__isnull=False)
         .values_list('assigned_to_id', flat=True)
@@ -85,13 +85,27 @@ def build_board_stress_test_data(board, user):
                 'blocked_by': dep.title,
             })
 
-    # Conflicts
+    # Conflicts, broken down by type (resource/schedule/dependency) so the AI
+    # can reference real categories instead of guessing at them (mirrors the
+    # same fix in premortem_views._collect_board_snapshot).
     conflict_count = 0
+    conflict_type_breakdown = {}
+    conflicts_on_critical_path = 0
     try:
         from kanban.conflict_models import ConflictDetection
-        conflict_count = ConflictDetection.objects.filter(
-            board=board, status='active'
-        ).count()
+        active_conflicts = ConflictDetection.objects.filter(board=board, status='active')
+        conflict_count = active_conflicts.count()
+        if conflict_count:
+            for row in active_conflicts.values('conflict_type').annotate(n=Count('id')):
+                conflict_type_breakdown[row['conflict_type']] = row['n']
+
+            critical_path_ids = _estimate_critical_path_task_ids(tasks)
+            if critical_path_ids:
+                conflicts_on_critical_path = (
+                    active_conflicts.filter(tasks__id__in=critical_path_ids)
+                    .distinct()
+                    .count()
+                )
     except Exception:
         pass
 
@@ -108,7 +122,7 @@ def build_board_stress_test_data(board, user):
     except Exception:
         pass
 
-    # Previously applied vaccines (with descriptions for AI context)
+    # Previously applied vaccines (with descriptions and projected improvements for AI context)
     from kanban.stress_test_models import Vaccine, StressTestSession, StressTestScenario
     applied_vaccines = list(
         Vaccine.objects.filter(board=board, is_applied=True)
@@ -116,7 +130,11 @@ def build_board_stress_test_data(board, user):
     )
     applied_vaccines_detail = list(
         Vaccine.objects.filter(board=board, is_applied=True)
-        .values('name', 'description', 'effort_level')
+        .values('name', 'description', 'effort_level', 'projected_score_improvement')
+    )
+    total_vaccine_improvement = sum(
+        v.get('projected_score_improvement', 0) or 0
+        for v in applied_vaccines_detail
     )
 
     # Previously addressed scenarios from all sessions
@@ -126,12 +144,15 @@ def build_board_stress_test_data(board, user):
         ).values('title', 'attack_type', 'severity')
     )
 
-    # Previous session immunity scores (most recent first, up to 5)
+    # Previous session immunity scores — fetch most recent 5 then reverse to
+    # present them in chronological (oldest-first) order so the AI sees an
+    # improving trend rather than reading the most-recent score as "Session 1".
     previous_scores = list(
         StressTestSession.objects.filter(board=board)
         .select_related('immunity_score')
         .order_by('-created_at')[:5]
     )
+    previous_scores.reverse()  # chronological order for AI context
     score_history = []
     for sess in previous_scores:
         try:
@@ -167,13 +188,85 @@ def build_board_stress_test_data(board, user):
         'start_date': str(start_date) if start_date else 'Not set',
         'project_deadline': str(project_deadline) if project_deadline else 'Not set',
         'conflict_count': conflict_count,
+        'conflict_type_breakdown': conflict_type_breakdown,
+        'conflicts_on_critical_path': conflicts_on_critical_path,
         'dependency_count': dependency_count,
         'column_names': column_names,
         'premortem_scenario_count': premortem_scenario_count,
         'applied_vaccines': applied_vaccines,
         'applied_vaccines_detail': applied_vaccines_detail,
+        'total_vaccine_improvement': total_vaccine_improvement,
+        'last_immunity_score': score_history[-1]['score'] if score_history else None,
+        'last_immunity_band': score_history[-1]['band'] if score_history else None,
         'addressed_scenarios': addressed_scenarios,
         'score_history': score_history,
         'assignee_breakdown': assignee_breakdown,
         'blocking_dependencies': blocking_deps,
     }
+
+
+def _estimate_critical_path_task_ids(tasks):
+    """
+    Deterministically estimate the critical path as the longest chain of
+    dependent tasks by duration (not an LLM call — this only exists to check
+    whether existing conflicts actually sit on that chain, since the AI has
+    no other way to verify a "critical path" claim about them).
+
+    Duration per task is (due_date - start_date) in days when both are set,
+    else a 1-day default. Ties are broken by hop count. Returns the set of
+    task IDs on the longest chain, or an empty set if there are no
+    dependency edges to walk.
+    """
+    task_list = list(tasks.only('id', 'start_date', 'due_date').prefetch_related('dependencies'))
+    if not task_list:
+        return set()
+
+    duration_by_id = {}
+    deps_by_id = {}
+    for t in task_list:
+        if t.start_date and t.due_date:
+            due = t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date
+            duration_by_id[t.id] = max((due - t.start_date).days, 1)
+        else:
+            duration_by_id[t.id] = 1
+        deps_by_id[t.id] = [d.id for d in t.dependencies.all()]
+
+    # Longest path ending at each task (memoized DFS), guarding against cycles.
+    longest_end_at = {}
+    in_progress = set()
+
+    def longest_ending_at(task_id):
+        if task_id in longest_end_at:
+            return longest_end_at[task_id]
+        if task_id in in_progress or task_id not in duration_by_id:
+            return 0  # cycle guard / dangling dependency reference
+        in_progress.add(task_id)
+        best_prefix = 0
+        for dep_id in deps_by_id.get(task_id, []):
+            best_prefix = max(best_prefix, longest_ending_at(dep_id))
+        in_progress.discard(task_id)
+        result = best_prefix + duration_by_id[task_id]
+        longest_end_at[task_id] = result
+        return result
+
+    for t in task_list:
+        longest_ending_at(t.id)
+
+    if not longest_end_at:
+        return set()
+
+    end_task_id = max(longest_end_at, key=longest_end_at.get)
+    if longest_end_at[end_task_id] <= 1 and all(not v for v in deps_by_id.values()):
+        return set()  # no real dependency chain — every task is isolated
+
+    # Walk back from the chosen end task following the highest-scoring dependency each step.
+    path_ids = set()
+    current = end_task_id
+    while current is not None:
+        path_ids.add(current)
+        deps = deps_by_id.get(current, [])
+        if not deps:
+            break
+        current = max(deps, key=lambda d: longest_end_at.get(d, 0))
+
+    return path_ids

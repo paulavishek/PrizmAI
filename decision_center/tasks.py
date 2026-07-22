@@ -2,14 +2,17 @@
 Celery tasks for the Decision Center.
 - collect_decision_items: morning scan that creates DecisionItem records
 - generate_decision_briefing: AI summary of the day's decision queue
+- send_daily_digest_emails: send digest emails at each user's preferred time
 """
 import json
 import logging
+from collections import Counter
 from datetime import timedelta
 
 from celery import shared_task
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
@@ -25,31 +28,43 @@ def _get_or_create_settings(user):
 
 
 def _user_boards(user):
-    """Return the queryset of boards a user can access.
-    
-    Includes demo boards if the user is a demo account or is viewing demo.
+    """Return the queryset of boards for the user's *current* workspace mode.
+
+    Delegates to the canonical ``get_user_boards()`` helper so that demo
+    users see only their personal sandbox copies (never the immutable
+    official-demo template board).  Used by briefing generation and views
+    where results must match the active workspace.
+    """
+    from kanban.utils.demo_protection import get_user_boards
+    return get_user_boards(user)
+
+
+def _all_user_boards(user):
+    """Return ALL boards the user can access across *both* workspace modes.
+
+    This includes real boards AND the user's own sandbox copies but never
+    immutable demo templates or other users' sandbox copies.  Used by
+    ``collect_for_user`` so that DecisionItems are pre-generated for every
+    board — the view filtering (which uses ``get_user_boards``) then shows
+    only the active workspace's items.
     """
     from kanban.models import Board
-    from accounts.models import UserProfile
+    from django.db.models import Q
 
-    # Check if this is a demo account or user is viewing demo
-    is_demo_user = '_demo' in user.username
-    try:
-        profile = UserProfile.objects.get(user=user)
-        is_viewing_demo = getattr(profile, 'is_viewing_demo', False)
-    except UserProfile.DoesNotExist:
-        is_viewing_demo = False
-
-    if is_demo_user or is_viewing_demo:
-        # Include demo boards
-        return Board.objects.filter(
-            Q(created_by=user) | Q(members=user) | Q(is_official_demo_board=True),
-        ).distinct()
-
-    return Board.objects.filter(
-        Q(created_by=user) | Q(members=user),
+    # Real boards: own or member, exclude demo/sandbox/spectra-generated
+    real_boards = Board.objects.filter(
+        Q(created_by=user) | Q(owner=user) | Q(memberships__user=user),
         is_official_demo_board=False,
-    ).distinct()
+        is_sandbox_copy=False,
+    ).exclude(created_by_session__startswith='spectra_demo_')
+
+    # Sandbox boards: only the user's own copies
+    sandbox_boards = Board.objects.filter(
+        owner=user,
+        is_sandbox_copy=True,
+    )
+
+    return (real_boards | sandbox_boards).distinct()
 
 
 def _ensure_item(*, user, board, item_type, priority_level, title,
@@ -58,13 +73,18 @@ def _ensure_item(*, user, board, item_type, priority_level, title,
     """
     Create or update a DecisionItem, avoiding duplicates.
 
-    For board-grouped items (overdue_task, unassigned_task, stale_task)
-    the source object is the Board itself — we use update_or_create so
-    context_data is refreshed on each run.
+    Looks up items WITHOUT filtering on status so that snoozed or archived
+    items are found and never duplicated back into the inbox.
+
+    Behaviour by status of the found item:
+    - pending:  update content fields (title, description, etc.)
+    - snoozed:  leave it alone — it will wake up naturally
+    - resolved/dismissed: do nothing — the user already actioned it
+    - no item:  create a new pending item
     """
     from decision_center.models import DecisionItem
 
-    defaults = {
+    content_fields = {
         'priority_level': priority_level,
         'title': title,
         'description': description,
@@ -72,23 +92,448 @@ def _ensure_item(*, user, board, item_type, priority_level, title,
         'estimated_minutes': estimated_minutes,
         'context_data': context_data or {},
     }
+    # Uniqueness lookup — intentionally excludes 'status' so we find items
+    # regardless of whether they are pending, snoozed, resolved, or dismissed.
     lookup = {
         'created_for': user,
         'item_type': item_type,
-        'status': 'pending',
     }
 
     if source_obj is not None:
         ct = ContentType.objects.get_for_model(source_obj)
         lookup['source_content_type'] = ct
         lookup['source_object_id'] = source_obj.pk
-        defaults['board'] = board
+        content_fields['board'] = board
     else:
         lookup['board'] = board
         lookup['source_content_type'] = None
         lookup['source_object_id'] = None
 
-    DecisionItem.objects.update_or_create(defaults=defaults, **lookup)
+    # Prioritise active items (pending > snoozed) when duplicates exist from
+    # the old code, then fall back to the most recent record.
+    existing = (
+        DecisionItem.objects.filter(**lookup)
+        .order_by(
+            # pending=0, snoozed=1, resolved=2, dismissed=3
+            models.Case(
+                models.When(status='pending', then=0),
+                models.When(status='snoozed', then=1),
+                models.When(status='resolved', then=2),
+                models.When(status='dismissed', then=3),
+                default=4,
+                output_field=models.IntegerField(),
+            ),
+            '-id',
+        )
+        .first()
+    )
+
+    if existing is None:
+        # No item exists at all — create a fresh pending one.
+        DecisionItem.objects.create(**lookup, **content_fields, status='pending')
+    elif existing.status == 'pending':
+        # Update content fields to reflect the latest scan; leave status alone.
+        for key, val in content_fields.items():
+            setattr(existing, key, val)
+        existing.save(update_fields=list(content_fields.keys()))
+    # snoozed / resolved / dismissed → leave the item exactly as-is.
+
+
+def collect_for_user(user):
+    """
+    Scan all boards for a single user and create/update DecisionItem records.
+    Can be called synchronously (e.g. after demo reset) or from the batch task.
+    """
+    now = timezone.now()
+    today = now.date()
+
+    boards = _all_user_boards(user)
+    if not boards.exists():
+        return
+
+    settings = _get_or_create_settings(user)
+
+    # ACTION REQUIRED
+
+    # 1. Unresolved conflicts — deduplicate by (board, title) so that
+    #    duplicate ConflictDetection records don't spawn duplicate items.
+    try:
+        from kanban.conflict_models import ConflictDetection
+        seen_conflicts = set()  # (board_id, conflict_title)
+        for conflict in ConflictDetection.objects.filter(
+            status='active', board__in=boards,
+        ).select_related('board').order_by('-severity', '-detected_at'):
+            key = (conflict.board_id, conflict.title)
+            if key in seen_conflicts:
+                continue
+            seen_conflicts.add(key)
+            _ensure_item(
+                user=user,
+                board=conflict.board,
+                item_type='conflict',
+                priority_level='action_required',
+                title=f"Conflict on {conflict.board.name}: {conflict.title}",
+                description=conflict.description[:500],
+                suggested_action='Review conflict and select a resolution strategy',
+                estimated_minutes=3,
+                source_obj=conflict,
+            )
+    except Exception:
+        logger.exception("collect_for_user: conflicts failed for user %s", user.pk)
+
+    # 2. Unacknowledged high-risk Pre-Mortem analyses (latest per board only)
+    try:
+        from kanban.premortem_models import (
+            PreMortemAnalysis,
+            PreMortemScenarioAcknowledgment,
+        )
+        # Only consider the latest PreMortemAnalysis per board to avoid
+        # duplicate decision items when multiple analyses exist.
+        all_high_risk = (
+            PreMortemAnalysis.objects
+            .filter(overall_risk_level='high', board__in=boards)
+            .select_related('board')
+            .order_by('board_id', '-created_at')
+        )
+        seen_boards = set()
+        latest_per_board = []
+        for pm in all_high_risk:
+            if pm.board_id not in seen_boards:
+                seen_boards.add(pm.board_id)
+                latest_per_board.append(pm)
+
+        for pm in latest_per_board:
+            total_scenarios = 5
+            acked = PreMortemScenarioAcknowledgment.objects.filter(
+                pre_mortem=pm, acknowledged_by=user,
+            ).count()
+            if acked < total_scenarios:
+                _ensure_item(
+                    user=user,
+                    board=pm.board,
+                    item_type='premortem_risk',
+                    priority_level='action_required',
+                    title=f"High-risk Pre-Mortem unreviewed on {pm.board.name}",
+                    description=(
+                        f"{total_scenarios - acked} of {total_scenarios} "
+                        f"scenarios still need acknowledgement"
+                    ),
+                    suggested_action=(
+                        'Acknowledge or address high-risk scenarios '
+                        'before work continues'
+                    ),
+                    estimated_minutes=5,
+                    source_obj=pm,
+                )
+    except Exception:
+        logger.exception("collect_for_user: premortem failed for user %s", user.pk)
+
+    # 3. Overdue tasks (grouped by board)
+    try:
+        from kanban.models import Task
+        threshold = now - timedelta(days=settings.min_overdue_days)
+        for board in boards:
+            overdue_tasks = Task.objects.filter(
+                column__board=board,
+                due_date__lt=threshold,
+                item_type='task',
+            ).exclude(progress=100)
+            count = overdue_tasks.count()
+            if count > 0:
+                task_ids = list(overdue_tasks.values_list('id', flat=True)[:50])
+                most_overdue = (now - overdue_tasks.order_by('due_date').first().due_date).days
+                _ensure_item(
+                    user=user,
+                    board=board,
+                    item_type='overdue_task',
+                    priority_level='action_required',
+                    title=f"{count} overdue task{'s' if count != 1 else ''} on {board.name}",
+                    description=f"Most overdue: {most_overdue} days past deadline",
+                    suggested_action='Review and update overdue tasks or adjust deadlines',
+                    estimated_minutes=min(2 * count, 10),
+                    context_data={'task_ids': task_ids, 'most_overdue_days': most_overdue},
+                )
+    except Exception:
+        logger.exception("collect_for_user: overdue tasks failed for user %s", user.pk)
+
+    # 4. Over-allocated team members
+    try:
+        from kanban.models import TeamCapacityAlert
+        for alert in TeamCapacityAlert.objects.filter(
+            status='active', board__in=boards,
+        ).select_related('board', 'resource_user'):
+            member_name = (
+                alert.resource_user.get_full_name()
+                or alert.resource_user.username
+            ) if alert.resource_user else 'Team'
+            _ensure_item(
+                user=user,
+                board=alert.board,
+                item_type='overallocated',
+                priority_level='action_required',
+                title=f"{member_name} is over-allocated on {alert.board.name}",
+                description=alert.message[:500],
+                suggested_action='Review and reassign tasks to balance workload',
+                estimated_minutes=4,
+                source_obj=alert,
+                context_data={'workload_percentage': alert.workload_percentage},
+            )
+    except Exception:
+        logger.exception("collect_for_user: capacity alerts failed for user %s", user.pk)
+
+    # 5. Unacknowledged scope creep alerts
+    try:
+        from kanban.models import ScopeCreepAlert
+        for alert in ScopeCreepAlert.objects.filter(
+            status='active', board__in=boards,
+        ).select_related('board'):
+            _ensure_item(
+                user=user,
+                board=alert.board,
+                item_type='scope_change',
+                priority_level='action_required',
+                title=f"Scope change on {alert.board.name} (+{alert.scope_increase_percentage:.0f}%)",
+                description=alert.ai_summary[:500] if alert.ai_summary else '',
+                suggested_action='Acknowledge scope change or adjust timeline',
+                estimated_minutes=3,
+                source_obj=alert,
+            )
+    except Exception:
+        logger.exception("collect_for_user: scope alerts failed for user %s", user.pk)
+
+    # AWARENESS
+
+    # 6. Deadlines approaching
+    try:
+        deadline_threshold = today + timedelta(days=settings.deadline_warning_days)
+        for board in boards.filter(
+            project_deadline__isnull=False,
+            project_deadline__gt=today,
+            project_deadline__lte=deadline_threshold,
+        ):
+            days_left = (board.project_deadline - today).days
+            _ensure_item(
+                user=user,
+                board=board,
+                item_type='deadline_approaching',
+                priority_level='awareness',
+                title=f"{board.name} deadline in {days_left} day{'s' if days_left != 1 else ''}",
+                estimated_minutes=1,
+                context_data={'days_left': days_left},
+            )
+    except Exception:
+        logger.exception("collect_for_user: deadlines failed for user %s", user.pk)
+
+    # 7. Budget threshold crossed
+    try:
+        from kanban.budget_models import ProjectBudget
+        for budget in ProjectBudget.objects.filter(
+            board__in=boards,
+        ).select_related('board'):
+            pct = budget.get_budget_utilization_percent()
+            if pct >= settings.budget_alert_threshold:
+                _ensure_item(
+                    user=user,
+                    board=budget.board,
+                    item_type='budget_threshold',
+                    priority_level='awareness',
+                    title=f"{budget.board.name} budget at {pct:.0f}%",
+                    estimated_minutes=1,
+                    context_data={'utilization_percent': round(pct, 1)},
+                )
+    except Exception:
+        logger.exception("collect_for_user: budget failed for user %s", user.pk)
+
+    # 8. New auto-captured knowledge memories (since yesterday)
+    try:
+        from knowledge_graph.models import MemoryNode
+        yesterday = now - timedelta(days=1)
+        for board in boards:
+            new_count = MemoryNode.objects.filter(
+                board=board,
+                is_auto_captured=True,
+                created_at__gte=yesterday,
+            ).count()
+            if new_count > 0:
+                _ensure_item(
+                    user=user,
+                    board=board,
+                    item_type='memory_captured',
+                    priority_level='awareness',
+                    title=f"{new_count} new memor{'ies' if new_count != 1 else 'y'} captured on {board.name}",
+                    estimated_minutes=1,
+                    context_data={'count': new_count},
+                )
+    except Exception:
+        logger.exception("collect_for_user: memory nodes failed for user %s", user.pk)
+
+    # QUICK WINS
+
+    # 9. Tasks with no assignee (grouped by board)
+    try:
+        from kanban.models import Task
+        for board in boards:
+            unassigned = Task.objects.filter(
+                column__board=board,
+                assigned_to__isnull=True,
+                item_type='task',
+            ).exclude(progress=100)
+            count = unassigned.count()
+            if count > 0:
+                task_ids = list(unassigned.values_list('id', flat=True)[:50])
+                _ensure_item(
+                    user=user,
+                    board=board,
+                    item_type='unassigned_task',
+                    priority_level='quick_win',
+                    title=f"{count} unassigned task{'s' if count != 1 else ''} on {board.name}",
+                    suggested_action='Assign owners to these tasks',
+                    estimated_minutes=1,
+                    context_data={'task_ids': task_ids},
+                )
+    except Exception:
+        logger.exception("collect_for_user: unassigned tasks failed for user %s", user.pk)
+
+    # 10. Stale tasks (grouped by board)
+    # "Stale" = stuck in the SAME column for >= min_stale_days, measured via
+    # column_entered_at (the task-aging signal — see kanban/models.py aging_state).
+    # We deliberately use column dwell, not updated_at: a comment or metadata edit
+    # bumps updated_at and used to hide genuinely stuck work. Honors the user's
+    # min_stale_days setting (not the board's per-column badge thresholds).
+    try:
+        from kanban.models import Task
+        stale_threshold = now - timedelta(days=settings.min_stale_days)
+        for board in boards:
+            stale = Task.objects.filter(
+                column__board=board,
+                column_entered_at__lt=stale_threshold,
+                column_entered_at__isnull=False,
+                item_type='task',
+            ).exclude(progress=100).select_related('column')
+            count = stale.count()
+            if count > 0:
+                task_ids = list(stale.values_list('id', flat=True)[:50])
+                oldest = stale.order_by('column_entered_at').first()
+                days_stuck = (now - oldest.column_entered_at).days
+                _ensure_item(
+                    user=user,
+                    board=board,
+                    item_type='stale_task',
+                    priority_level='quick_win',
+                    title=(
+                        f"{count} stalled task{'s' if count != 1 else ''} on "
+                        f"{board.name} — stuck {days_stuck}+ days with no column movement"
+                    ),
+                    suggested_action='Unblock or reassign stalled work',
+                    estimated_minutes=2,
+                    context_data={'task_ids': task_ids, 'oldest_days': days_stuck},
+                )
+    except Exception:
+        logger.exception("collect_for_user: stale tasks failed for user %s", user.pk)
+
+    # ── Housekeeping: prune stale pending items ──────────────────────────
+    # Items left over from old sandbox boards, template boards, or deleted
+    # boards should not remain pending.  Remove any whose board is not in
+    # the user's current workspace.
+    try:
+        from decision_center.models import DecisionItem as DI
+        stale_qs = DI.objects.filter(
+            created_for=user, status='pending', board__isnull=False,
+        ).exclude(board__in=boards)
+        pruned = stale_qs.count()
+        if pruned:
+            stale_qs.delete()
+            logger.info(
+                "collect_for_user: pruned %d stale DecisionItems for user %s",
+                pruned, user.pk,
+            )
+    except Exception:
+        logger.exception("collect_for_user: prune failed for user %s", user.pk)
+
+
+def generate_briefing_for_user(user):
+    """
+    Generate (or refresh) today's AI briefing for a single user.
+    Can be called synchronously after demo reset.
+    """
+    from decision_center.models import DecisionCenterBriefing, DecisionItem
+    from kanban.utils.demo_protection import user_is_demo
+
+    today = timezone.localdate()
+    is_demo = user_is_demo(user)
+
+    # Delete any existing briefing for today *in this workspace mode* so we
+    # regenerate fresh — without touching the other mode's briefing.
+    DecisionCenterBriefing.objects.filter(
+        user=user, generated_at__date=today, is_demo=is_demo,
+    ).delete()
+
+    pending = DecisionItem.objects.filter(created_for=user, status='pending')
+
+    # Use the same canonical board set as the view and collect_for_user
+    user_boards = _user_boards(user)
+    pending = (
+        pending.filter(board__in=user_boards)
+        | DecisionItem.objects.filter(
+            created_for=user, status='pending', board__isnull=True
+        )
+    ).distinct()
+
+    if not pending.exists():
+        return
+
+    action_items = list(
+        pending.filter(priority_level='action_required')
+        .values_list('title', flat=True)
+    )
+    awareness_items = list(
+        pending.filter(priority_level='awareness')
+        .values_list('title', flat=True)
+    )
+    quick_items = list(
+        pending.filter(priority_level='quick_win')
+        .values_list('title', flat=True)
+    )
+    total_est = sum(pending.values_list('estimated_minutes', flat=True))
+    counts = {
+        'action_required': len(action_items),
+        'awareness': len(awareness_items),
+        'quick_win': len(quick_items),
+    }
+    category_counts = Counter(pending.values_list('item_type', flat=True))
+
+    headline, briefing_text, top_board = _generate_ai_briefing(
+        action_items, awareness_items, quick_items, total_est,
+        category_counts=category_counts,
+    )
+
+    DecisionCenterBriefing.objects.create(
+        user=user,
+        headline=headline,
+        briefing=briefing_text,
+        estimated_minutes=total_est,
+        top_priority_board=top_board,
+        item_counts=counts,
+        is_demo=is_demo,
+    )
+
+
+@shared_task(name='decision_center.generate_briefing_for_user')
+def generate_briefing_for_user_task(user_id):
+    """
+    Async wrapper around ``generate_briefing_for_user`` so callers can defer the
+    (blocking, Gemini-backed) briefing generation off a latency-sensitive worker.
+
+    Used after sandbox provisioning: the reset runs on the dedicated
+    'interactive' worker, and we must NOT hold that worker for the 30–60s the
+    Gemini call can take (it would delay a rapid second Reset Demo). Enqueueing
+    this task hands the AI work to the default worker instead.
+    """
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return
+    generate_briefing_for_user(user)
 
 
 # ── Task 1: Collect Decision Items ──────────────────────────────────────────
@@ -114,270 +559,12 @@ def collect_decision_items():
     stats = {'users': 0, 'items_created': 0}
 
     for user in active_users.iterator():
-        boards = _user_boards(user)
+        boards = _all_user_boards(user)
         if not boards.exists():
             continue
 
-        settings = _get_or_create_settings(user)
         stats['users'] += 1
-
-        # ------------------------------------------------------------------
-        # ACTION REQUIRED
-        # ------------------------------------------------------------------
-
-        # 1. Unresolved conflicts
-        try:
-            from kanban.conflict_models import ConflictDetection
-            for conflict in ConflictDetection.objects.filter(
-                status='active', board__in=boards,
-            ).select_related('board'):
-                _ensure_item(
-                    user=user,
-                    board=conflict.board,
-                    item_type='conflict',
-                    priority_level='action_required',
-                    title=f"Conflict on {conflict.board.name}: {conflict.title}",
-                    description=conflict.description[:500],
-                    suggested_action='Review conflict and select a resolution strategy',
-                    estimated_minutes=3,
-                    source_obj=conflict,
-                )
-        except Exception:
-            logger.exception("collect_decision_items: conflicts failed for user %s", user.pk)
-
-        # 2. Unacknowledged high-risk Pre-Mortem analyses
-        try:
-            from kanban.premortem_models import (
-                PreMortemAnalysis,
-                PreMortemScenarioAcknowledgment,
-            )
-            for pm in PreMortemAnalysis.objects.filter(
-                overall_risk_level='high', board__in=boards,
-            ).select_related('board'):
-                # Check if ALL scenarios are acknowledged by this user
-                total_scenarios = 5  # always 5 scenarios
-                acked = PreMortemScenarioAcknowledgment.objects.filter(
-                    pre_mortem=pm, acknowledged_by=user,
-                ).count()
-                if acked < total_scenarios:
-                    _ensure_item(
-                        user=user,
-                        board=pm.board,
-                        item_type='premortem_risk',
-                        priority_level='action_required',
-                        title=f"High-risk Pre-Mortem unreviewed on {pm.board.name}",
-                        description=(
-                            f"{total_scenarios - acked} of {total_scenarios} "
-                            f"scenarios still need acknowledgement"
-                        ),
-                        suggested_action=(
-                            'Acknowledge or address high-risk scenarios '
-                            'before work continues'
-                        ),
-                        estimated_minutes=5,
-                        source_obj=pm,
-                    )
-        except Exception:
-            logger.exception("collect_decision_items: premortem failed for user %s", user.pk)
-
-        # 3. Overdue tasks (grouped by board)
-        try:
-            from kanban.models import Task
-            threshold = now - timedelta(days=settings.min_overdue_days)
-            for board in boards:
-                overdue_tasks = Task.objects.filter(
-                    column__board=board,
-                    due_date__lt=threshold,
-                    item_type='task',
-                ).exclude(progress=100)
-                count = overdue_tasks.count()
-                if count > 0:
-                    task_ids = list(overdue_tasks.values_list('id', flat=True)[:50])
-                    most_overdue = (now - overdue_tasks.order_by('due_date').first().due_date).days
-                    _ensure_item(
-                        user=user,
-                        board=board,
-                        item_type='overdue_task',
-                        priority_level='action_required',
-                        title=f"{count} overdue task{'s' if count != 1 else ''} on {board.name}",
-                        description=f"Most overdue: {most_overdue} days past deadline",
-                        suggested_action='Review and update overdue tasks or adjust deadlines',
-                        estimated_minutes=min(2 * count, 10),
-                        context_data={'task_ids': task_ids, 'most_overdue_days': most_overdue},
-                    )
-        except Exception:
-            logger.exception("collect_decision_items: overdue tasks failed for user %s", user.pk)
-
-        # 4. Over-allocated team members
-        try:
-            from kanban.models import TeamCapacityAlert
-            for alert in TeamCapacityAlert.objects.filter(
-                status='active', board__in=boards,
-            ).select_related('board', 'resource_user'):
-                member_name = (
-                    alert.resource_user.get_full_name()
-                    or alert.resource_user.username
-                ) if alert.resource_user else 'Team'
-                _ensure_item(
-                    user=user,
-                    board=alert.board,
-                    item_type='overallocated',
-                    priority_level='action_required',
-                    title=f"{member_name} is over-allocated on {alert.board.name}",
-                    description=alert.message[:500],
-                    suggested_action='Review and reassign tasks to balance workload',
-                    estimated_minutes=4,
-                    source_obj=alert,
-                    context_data={'workload_percentage': alert.workload_percentage},
-                )
-        except Exception:
-            logger.exception("collect_decision_items: capacity alerts failed for user %s", user.pk)
-
-        # 5. Unacknowledged scope creep alerts
-        try:
-            from kanban.models import ScopeCreepAlert
-            for alert in ScopeCreepAlert.objects.filter(
-                status='active', board__in=boards,
-            ).select_related('board'):
-                _ensure_item(
-                    user=user,
-                    board=alert.board,
-                    item_type='scope_change',
-                    priority_level='action_required',
-                    title=f"Scope change on {alert.board.name} (+{alert.scope_increase_percentage:.0f}%)",
-                    description=alert.ai_summary[:500] if alert.ai_summary else '',
-                    suggested_action='Acknowledge scope change or adjust timeline',
-                    estimated_minutes=3,
-                    source_obj=alert,
-                )
-        except Exception:
-            logger.exception("collect_decision_items: scope alerts failed for user %s", user.pk)
-
-        # ------------------------------------------------------------------
-        # AWARENESS
-        # ------------------------------------------------------------------
-
-        # 6. Deadlines approaching
-        try:
-            deadline_threshold = today + timedelta(days=settings.deadline_warning_days)
-            for board in boards.filter(
-                project_deadline__isnull=False,
-                project_deadline__gt=today,
-                project_deadline__lte=deadline_threshold,
-            ):
-                days_left = (board.project_deadline - today).days
-                _ensure_item(
-                    user=user,
-                    board=board,
-                    item_type='deadline_approaching',
-                    priority_level='awareness',
-                    title=f"{board.name} deadline in {days_left} day{'s' if days_left != 1 else ''}",
-                    estimated_minutes=1,
-                    context_data={'days_left': days_left},
-                )
-        except Exception:
-            logger.exception("collect_decision_items: deadlines failed for user %s", user.pk)
-
-        # 7. Budget threshold crossed
-        try:
-            from kanban.budget_models import ProjectBudget
-            for budget in ProjectBudget.objects.filter(
-                board__in=boards,
-            ).select_related('board'):
-                pct = budget.get_budget_utilization_percent()
-                if pct >= settings.budget_alert_threshold:
-                    _ensure_item(
-                        user=user,
-                        board=budget.board,
-                        item_type='budget_threshold',
-                        priority_level='awareness',
-                        title=f"{budget.board.name} budget at {pct:.0f}%",
-                        estimated_minutes=1,
-                        context_data={'utilization_percent': round(pct, 1)},
-                    )
-        except Exception:
-            logger.exception("collect_decision_items: budget failed for user %s", user.pk)
-
-        # 8. New auto-captured knowledge memories (since yesterday)
-        try:
-            from knowledge_graph.models import MemoryNode
-            yesterday = now - timedelta(days=1)
-            for board in boards:
-                new_count = MemoryNode.objects.filter(
-                    board=board,
-                    is_auto_captured=True,
-                    created_at__gte=yesterday,
-                ).count()
-                if new_count > 0:
-                    _ensure_item(
-                        user=user,
-                        board=board,
-                        item_type='memory_captured',
-                        priority_level='awareness',
-                        title=f"{new_count} new memor{'ies' if new_count != 1 else 'y'} captured on {board.name}",
-                        estimated_minutes=1,
-                        context_data={'count': new_count},
-                    )
-        except Exception:
-            logger.exception("collect_decision_items: memory nodes failed for user %s", user.pk)
-
-        # ------------------------------------------------------------------
-        # QUICK WINS
-        # ------------------------------------------------------------------
-
-        # 9. Tasks with no assignee (grouped by board)
-        try:
-            from kanban.models import Task
-            for board in boards:
-                unassigned = Task.objects.filter(
-                    column__board=board,
-                    assigned_to__isnull=True,
-                    item_type='task',
-                ).exclude(progress=100)
-                count = unassigned.count()
-                if count > 0:
-                    task_ids = list(unassigned.values_list('id', flat=True)[:50])
-                    _ensure_item(
-                        user=user,
-                        board=board,
-                        item_type='unassigned_task',
-                        priority_level='quick_win',
-                        title=f"{count} unassigned task{'s' if count != 1 else ''} on {board.name}",
-                        suggested_action='Assign owners to these tasks',
-                        estimated_minutes=1,
-                        context_data={'task_ids': task_ids},
-                    )
-        except Exception:
-            logger.exception("collect_decision_items: unassigned tasks failed for user %s", user.pk)
-
-        # 10. Stale tasks (grouped by board)
-        try:
-            from kanban.models import Task
-            stale_threshold = now - timedelta(days=settings.min_stale_days)
-            for board in boards:
-                stale = Task.objects.filter(
-                    column__board=board,
-                    updated_at__lt=stale_threshold,
-                    item_type='task',
-                ).exclude(progress=100)
-                count = stale.count()
-                if count > 0:
-                    task_ids = list(stale.values_list('id', flat=True)[:50])
-                    _ensure_item(
-                        user=user,
-                        board=board,
-                        item_type='stale_task',
-                        priority_level='quick_win',
-                        title=(
-                            f"{count} stale task{'s' if count != 1 else ''} on "
-                            f"{board.name} — no updates in {settings.min_stale_days}+ days"
-                        ),
-                        suggested_action='Close completed tasks or reassign stalled work',
-                        estimated_minutes=2,
-                        context_data={'task_ids': task_ids},
-                    )
-        except Exception:
-            logger.exception("collect_decision_items: stale tasks failed for user %s", user.pk)
+        collect_for_user(user)
 
     logger.info(
         "collect_decision_items complete: %d users scanned",
@@ -404,17 +591,35 @@ def generate_decision_briefing():
         .distinct()
     )
 
+    from kanban.utils.demo_protection import user_is_demo
+
     generated = 0
     for user_id in users_with_items:
-        # Skip if briefing already exists for today
+        # Scope to demo or real boards — matching the view/widget logic
+        try:
+            user_obj = User.objects.get(pk=user_id)
+            user_boards = _user_boards(user_obj)
+        except User.DoesNotExist:
+            continue
+        is_demo = user_is_demo(user_obj)
+
+        # Skip if a briefing already exists for today *in this workspace mode*
         if DecisionCenterBriefing.objects.filter(
-            user_id=user_id, generated_at__date=today,
+            user_id=user_id, generated_at__date=today, is_demo=is_demo,
         ).exists():
             continue
 
         pending = DecisionItem.objects.filter(
             created_for_id=user_id, status='pending',
         )
+
+        pending = (
+            pending.filter(board__in=user_boards)
+            | DecisionItem.objects.filter(
+                created_for_id=user_id, status='pending', board__isnull=True
+            )
+        ).distinct()
+
         action_items = list(
             pending.filter(priority_level='action_required')
             .values_list('title', flat=True)
@@ -435,10 +640,12 @@ def generate_decision_briefing():
             'awareness': len(awareness_items),
             'quick_win': len(quick_items),
         }
+        category_counts = Counter(pending.values_list('item_type', flat=True))
 
         # Attempt AI generation
         headline, briefing_text, top_board = _generate_ai_briefing(
             action_items, awareness_items, quick_items, total_est,
+            category_counts=category_counts,
         )
 
         DecisionCenterBriefing.objects.create(
@@ -448,6 +655,7 @@ def generate_decision_briefing():
             estimated_minutes=total_est,
             top_priority_board=top_board,
             item_counts=counts,
+            is_demo=is_demo,
         )
         generated += 1
 
@@ -455,21 +663,67 @@ def generate_decision_briefing():
     return {'generated': generated}
 
 
-def _generate_ai_briefing(action_items, awareness_items, quick_items, total_est):
+# Human-readable plural labels for DecisionItem.item_type, used so the AI
+# briefing describes the queue with the correct category names instead of
+# guessing (e.g. calling a pile of resource conflicts "overdue items").
+_ITEM_TYPE_PLURAL = {
+    'conflict': 'resource conflicts',
+    'overdue_task': 'overdue tasks',
+    'stale_task': 'stale tasks',
+    'unassigned_task': 'unassigned tasks',
+    'premortem_risk': 'high-risk pre-mortem scenarios',
+    'overallocated': 'overallocated members',
+    'scope_change': 'scope changes',
+    'deadline_approaching': 'approaching deadlines',
+    'budget_threshold': 'budget alerts',
+    'memory_captured': 'captured memories',
+}
+
+
+def _format_composition(category_counts):
+    """Turn an {item_type: count} mapping into readable 'N <label>' lines."""
+    if not category_counts:
+        return []
+    out = []
+    for item_type, count in sorted(
+        category_counts.items(), key=lambda kv: kv[1], reverse=True
+    ):
+        if not count:
+            continue
+        label = _ITEM_TYPE_PLURAL.get(item_type, item_type.replace('_', ' '))
+        out.append(f"- {count} {label}")
+    return out
+
+
+def _generate_ai_briefing(action_items, awareness_items, quick_items, total_est,
+                          category_counts=None):
     """
     Call Gemini for a natural-language briefing.
     Returns (headline, briefing_text, top_priority_board).
     Falls back to deterministic summary on failure.
+
+    ``category_counts`` is an optional {item_type: count} mapping describing the
+    real composition of the queue. Supplying it keeps the AI from inventing a
+    category label for the total count (e.g. describing 32 mixed items — mostly
+    conflicts — as "32 overdue items").
     """
     try:
-        from ai_assistant.utils.ai_clients import GeminiClient
+        from ai_assistant.utils.ai_router import AIRouter
 
-        client = GeminiClient(default_model='gemini-2.5-flash-lite')
-        if client.models is None:
-            raise RuntimeError("Gemini API not initialised")
+        router = AIRouter()
+        if router is None:
+            raise RuntimeError("AIRouter not available")
 
         # Build prompt
         lines = []
+        composition = _format_composition(category_counts)
+        if composition:
+            lines.append(
+                "QUEUE COMPOSITION (exact counts — cite ONLY these categories "
+                "and numbers; do NOT relabel or merge them):"
+            )
+            lines.extend(composition)
+            lines.append("")
         if action_items:
             lines.append(f"ACTION REQUIRED ({len(action_items)} items):")
             for t in action_items[:10]:
@@ -494,27 +748,53 @@ def _generate_ai_briefing(action_items, awareness_items, quick_items, total_est)
         system_prompt = (
             "You are a calm, efficient chief of staff summarizing a project "
             "manager's morning decision queue. Be concise, prioritized, and "
-            "practical. Speak directly to the PM. No fluff. Return ONLY valid JSON."
+            "practical. Speak directly to the PM. No fluff. "
+            "Use ONLY the counts and category names given in QUEUE COMPOSITION; "
+            "never invent a number or call items 'overdue' unless they are "
+            "listed under overdue tasks. Return ONLY valid JSON."
         )
 
-        result = client.get_response(
+        result = router.complete(
             prompt=f"{system_prompt}\n\n{user_prompt}",
-            task_complexity='simple',
-            temperature=0.4,
-            use_cache=False,
+            user=None,  # Celery background task — no user context
+            complexity='simple',
         )
-        text = result if isinstance(result, str) else str(result)
+        text = result.get('text', '')
 
         # Parse JSON from response
         # Strip markdown code fences if present
         text = text.strip()
-        if text.startswith('```'):
-            text = text.split('\n', 1)[-1]
-        if text.endswith('```'):
-            text = text.rsplit('```', 1)[0]
-        text = text.strip()
+        if '```json' in text:
+            text = text.split('```json')[1].split('```')[0].strip()
+        elif '```' in text:
+            # Remove opening fence (with optional language hint)
+            text = text.split('```', 1)[1]
+            if text.startswith(('\n', 'json')):
+                text = text.split('\n', 1)[-1]
+            if '```' in text:
+                text = text.rsplit('```', 1)[0]
+            text = text.strip()
 
-        data = json.loads(text)
+        # Isolate JSON object if surrounded by extra text
+        if not text.startswith('{'):
+            start = text.find('{')
+            end = text.rfind('}')
+            if start != -1 and end != -1:
+                text = text[start:end + 1]
+
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            # Gemini sometimes returns JSON with literal backslash-n instead
+            # of actual newlines, or Python-style single-quoted dicts.
+            # Normalise common deviations before giving up.
+            import ast
+            try:
+                # Replace literal \n with actual newlines for JSON parsing
+                cleaned = text.replace('\\n', ' ').replace('\\\n', ' ')
+                data = json.loads(cleaned)
+            except (json.JSONDecodeError, ValueError):
+                data = ast.literal_eval(text)
         return (
             str(data.get('headline', ''))[:300],
             str(data.get('briefing', '')),
@@ -538,3 +818,176 @@ def _fallback_briefing(action_items, awareness_items, quick_items, total_est):
         parts.append(f"{len(quick_items)} quick win{'s' if len(quick_items) != 1 else ''}")
     briefing = ". ".join(parts) + f". Estimated review time: {total_est} minutes."
     return headline, briefing, ''
+
+
+# ── Task 3: Send Daily Digest Emails ────────────────────────────────────────
+
+@shared_task(name='decision_center.send_daily_digest_emails')
+def send_daily_digest_emails():
+    """
+    Send a daily digest email to every user who has opted in and whose
+    preferred digest_time has arrived.  Runs every 30 minutes so we can
+    honour per-user time preferences with ±30 min accuracy.
+    """
+    from datetime import time as dt_time
+
+    from django.core.mail import send_mail
+    from django.template.loader import render_to_string
+
+    from decision_center.models import (
+        DecisionCenterBriefing,
+        DecisionCenterSettings,
+        DecisionItem,
+    )
+
+    now = timezone.localtime()  # server-local time (Asia/Kolkata per settings)
+    current_time = now.time()
+    today = now.date()
+
+    # Build a 30-minute window: users whose digest_time falls within
+    # [current - 15 min, current + 15 min) will be emailed now.
+    window_start = _add_minutes_to_time(current_time, -15)
+    window_end = _add_minutes_to_time(current_time, 15)
+
+    settings_qs = DecisionCenterSettings.objects.filter(
+        daily_digest_enabled=True,
+    ).select_related('user')
+
+    # Filter by time window (handles midnight wraparound)
+    if window_start <= window_end:
+        settings_qs = settings_qs.filter(
+            digest_time__gte=window_start,
+            digest_time__lt=window_end,
+        )
+    else:
+        # Window wraps around midnight, e.g. 23:50 → 00:10
+        settings_qs = settings_qs.filter(
+            Q(digest_time__gte=window_start) | Q(digest_time__lt=window_end),
+        )
+
+    sent = 0
+    for dc_settings in settings_qs.iterator():
+        user = dc_settings.user
+        if not user.is_active or not user.email:
+            continue
+
+        # Skip if we already emailed this user today (idempotency guard)
+        cache_key = f'dc_digest_sent_{user.id}_{today.isoformat()}'
+        from django.core.cache import cache
+        if cache.get(cache_key):
+            continue
+
+        # Gather pending items
+        pending = DecisionItem.objects.filter(
+            created_for=user, status='pending',
+        )
+        action_items = list(
+            pending.filter(priority_level='action_required')
+            .only('title', 'description', 'suggested_action')[:15]
+        )
+        awareness_items = (
+            list(pending.filter(priority_level='awareness').only('title')[:10])
+            if dc_settings.show_awareness_items else []
+        )
+        quick_win_items = (
+            list(pending.filter(priority_level='quick_win').only('title')[:10])
+            if dc_settings.show_quick_wins else []
+        )
+
+        total_items = len(action_items) + len(awareness_items) + len(quick_win_items)
+        if total_items == 0:
+            continue  # Nothing to report
+
+        est_minutes = sum(
+            pending.values_list('estimated_minutes', flat=True)
+        )
+
+        # Today's AI briefing (if generated). Digests are about real work, so
+        # never surface a demo-workspace briefing in the email.
+        briefing = (
+            DecisionCenterBriefing.objects
+            .filter(user=user, generated_at__date=today, is_demo=False)
+            .first()
+        )
+
+        context = {
+            'user_name': user.get_full_name() or user.username,
+            'greeting': _get_time_greeting(now.hour),
+            'briefing_headline': briefing.headline if briefing else '',
+            'briefing_text': briefing.briefing if briefing else '',
+            'action_count': len(action_items),
+            'awareness_count': len(awareness_items),
+            'quick_win_count': len(quick_win_items),
+            'estimated_minutes': est_minutes,
+            'action_items': action_items,
+            'awareness_items': awareness_items,
+            'quick_win_items': quick_win_items,
+            'show_awareness': dc_settings.show_awareness_items,
+            'show_quick_wins': dc_settings.show_quick_wins,
+            'decision_center_url': _build_decision_center_url(),
+        }
+
+        subject = (
+            f'PrizmAI Focus Today: {len(action_items)} action'
+            f'{"s" if len(action_items) != 1 else ""} required'
+        )
+        body_text = render_to_string(
+            'decision_center/email/daily_digest.txt', context,
+        )
+        body_html = render_to_string(
+            'decision_center/email/daily_digest.html', context,
+        )
+
+        try:
+            import email.utils
+            from django.core.mail import EmailMultiAlternatives
+            msg = EmailMultiAlternatives(
+                subject=subject,
+                body=body_text,
+                from_email=None,  # uses DEFAULT_FROM_EMAIL
+                to=[user.email],
+                headers={'Date': email.utils.format_datetime(now)},
+            )
+            msg.attach_alternative(body_html, 'text/html')
+            msg.send(fail_silently=False)
+            cache.set(cache_key, True, 60 * 60 * 20)  # expires in 20 h
+            sent += 1
+            logger.info(
+                'Decision Center digest sent to %s (%s)',
+                user.email, user.pk,
+            )
+        except Exception:
+            logger.exception(
+                'Failed to send Decision Center digest to %s (%s)',
+                user.email, user.pk,
+            )
+
+    logger.info('send_daily_digest_emails: %d emails sent', sent)
+    return {'sent': sent}
+
+
+def _add_minutes_to_time(t, minutes):
+    """Return a datetime.time offset by *minutes* (may wrap around midnight)."""
+    from datetime import datetime as dt, timedelta as td
+    combined = dt.combine(dt.today(), t) + td(minutes=minutes)
+    return combined.time()
+
+
+def _build_decision_center_url():
+    """Best-effort absolute URL to the Decision Center page."""
+    try:
+        from django.conf import settings as django_settings
+        base = getattr(django_settings, 'SITE_URL', '') or 'http://127.0.0.1:8000'
+        return f'{base.rstrip("/")}/decision-center/'
+    except Exception:
+        return 'http://127.0.0.1:8000/decision-center/'
+
+
+def _get_time_greeting(hour: int) -> str:
+    """Return a time-appropriate greeting for the given hour (0-23)."""
+    if 5 <= hour < 12:
+        return 'Good morning'
+    elif 12 <= hour < 17:
+        return 'Good afternoon'
+    else:
+        return 'Good evening'

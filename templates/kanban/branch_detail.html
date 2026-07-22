@@ -5,6 +5,17 @@
 
 {% block extra_css %}
 <style>
+    .ai-recommendation-body p {
+        margin-bottom: 0.5rem;
+    }
+    .ai-recommendation-body p strong:only-child {
+        display: block;
+        font-size: 0.9rem;
+        margin-top: 0.75rem;
+        padding-bottom: 0.25rem;
+        border-bottom: 1px solid #dee2e6;
+        color: var(--text-secondary);
+    }
     .snapshot-timeline {
         position: relative;
         padding-left: 40px;
@@ -66,7 +77,7 @@
 <div class="container-fluid my-4">
     <!-- Back button & Header -->
     <div class="mb-4">
-        <a href="{% url 'shadow_board_list' board.id %}" class="btn btn-sm btn-outline-secondary mb-3">
+        <a href="{% url 'shadow_board_list' board.id %}" class="btn-prizm-back btn-sm mb-3">
             <i class="fas fa-arrow-left me-1"></i>Back to Shadow Board
         </a>
         <div class="d-flex justify-content-between align-items-start">
@@ -91,6 +102,11 @@
                     <i class="fas fa-link me-1"></i>From scenario: {{ branch.source_scenario.name }}
                 </div>
                 {% endif %}
+                {% if branch.status == 'active' %}
+                <button class="btn btn-sm btn-outline-secondary mt-2" data-bs-toggle="modal" data-bs-target="#linkScenarioModal">
+                    <i class="fas fa-link me-1"></i>{% if branch.source_scenario %}Change Scenario{% else %}Link Scenario{% endif %}
+                </button>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -100,8 +116,13 @@
     <div class="row mb-4">
         <div class="col-md-6">
             <div class="card">
-                <div class="card-header bg-light">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i>Current Projection</h6>
+                    {% if latest_snapshot %}
+                    <small class="text-muted" title="Scores update live as the real board changes">
+                        <i class="fas fa-clock me-1"></i>Updated {{ latest_snapshot.captured_at|timesince }} ago
+                    </small>
+                    {% endif %}
                 </div>
                 <div class="card-body">
                     <div class="row">
@@ -152,11 +173,20 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header bg-light">
-                    <h6 class="mb-0"><i class="fas fa-wand-magic-sparkles me-2"></i>AI Recommendation
+                    <h6 class="mb-0"><i class="fas fa-wand-magic-sparkles me-2"></i>AI Recommendation</h6>
                 </div>
-                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                <div class="card-body ai-recommendation-body" style="max-height: 300px; overflow-y: auto;">
                     {% if latest_snapshot.gemini_recommendation %}
-                        <p class="mb-0">{{ latest_snapshot.gemini_recommendation|linebreaks }}</p>
+                        <div class="mb-0">{{ latest_snapshot.gemini_recommendation|linebreaks }}</div>
+                    {% elif ai_pending %}
+                        <p class="text-muted mb-0 d-flex align-items-center" id="ai-pending">
+                            <span class="prizm-spinner prizm-spinner--sm me-2"></span>Generating AI analysis… this usually takes a few seconds.
+                        </p>
+                        <script>
+                            // The recommendation is backfilled by a background task.
+                            // Reload once shortly so it appears without a manual refresh.
+                            setTimeout(function () { window.location.reload(); }, 8000);
+                        </script>
                     {% else %}
                         <p class="text-muted mb-0"><em>No AI recommendation available for this snapshot.</em></p>
                     {% endif %}
@@ -167,13 +197,18 @@
     {% endif %}
 
     <!-- Feasibility Trend Chart -->
-    {% if feasibility_history|length > 1 %}
+    {% if feasibility_history|length >= 1 %}
     <div class="card mb-4">
         <div class="card-header bg-light">
             <h6 class="mb-0"><i class="fas fa-chart-area me-2"></i>Feasibility Trend</h6>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="position: relative;">
             <canvas id="feasibilityChart"></canvas>
+            {% if feasibility_history|length < 3 %}
+            <p class="text-center text-muted mb-0 mt-3" id="trend-placeholder" style="font-size: 0.85rem;">
+                <i class="fas fa-hourglass-half me-1"></i>This chart will fill in as your team makes real progress. Come back after tasks are completed to watch this branch's score evolve.
+            </p>
+            {% endif %}
         </div>
     </div>
     {% endif %}
@@ -186,23 +221,33 @@
         <div class="card-body">
             {% if snapshots|length > 0 %}
             <div class="snapshot-timeline">
-                {% for snapshot in snapshots %}
+                {% for entry in snapshots %}
                 <div class="snapshot-timeline-item">
                     <div class="timeline-dot"></div>
                     <div class="timeline-content">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div>
                                 <strong>Snapshot {{ forloop.revcounter }}</strong>
-                                <small class="text-muted d-block">{{ snapshot.captured_at|date:"M d, Y H:i" }}</small>
+                                {% if entry.repeat_count > 1 %}
+                                <span class="badge bg-light text-muted ms-1" title="No measurable change across these recalculations; consecutive duplicates have been collapsed.">
+                                    ×{{ entry.repeat_count }} unchanged
+                                </span>
+                                {% endif %}
+                                <small class="text-muted d-block">
+                                    {{ entry.snapshot.captured_at|date:"M d, Y H:i" }}
+                                    {% if entry.repeat_count > 1 %}
+                                        <span class="text-muted">(first seen {{ entry.first_captured_at|date:"M d, Y H:i" }})</span>
+                                    {% endif %}
+                                </small>
                             </div>
                             <span class="badge bg-primary">
-                                {{ snapshot.feasibility_score }}%
+                                {{ entry.snapshot.feasibility_score|floatformat:0 }}%
                             </span>
                         </div>
                         <p class="small text-muted mb-0">
-                            <i class="fas fa-tasks me-1"></i>Δ Scope: {{ snapshot.scope_delta|stringformat:"+d" }}
-                            <i class="fas fa-users ms-3 me-1"></i>Δ Team: {{ snapshot.team_delta|stringformat:"+d" }}
-                            <i class="fas fa-calendar ms-3 me-1"></i>Δ Deadline: {{ snapshot.deadline_delta_weeks|stringformat:"+d" }}w
+                            <i class="fas fa-tasks me-1"></i>Δ Scope: {{ entry.snapshot.scope_delta|stringformat:"+d" }}
+                            <i class="fas fa-users ms-3 me-1"></i>Δ Team: {{ entry.snapshot.team_delta|stringformat:"+d" }}
+                            <i class="fas fa-calendar ms-3 me-1"></i>Δ Deadline: {{ entry.snapshot.deadline_delta_weeks|stringformat:"+d" }}w
                         </p>
                     </div>
                 </div>
@@ -215,12 +260,19 @@
     </div>
 
     <!-- Divergence Log -->
-    {% if divergence_logs|length > 0 %}
     <div class="card">
         <div class="card-header bg-light">
-            <h6 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Divergence Events (> 5 point changes)</h6>
+            <h6 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Significant Score Changes</h6>
         </div>
         <div class="card-body">
+            {% if divergence_logs|length == 0 %}
+            <p class="text-muted small mb-0">
+                <i class="fas fa-info-circle me-2"></i>No significant score changes yet. This branch's
+                feasibility has moved only gradually so far — you can see that gentle trend in the
+                Feasibility Trend chart above. Larger shifts (from completing a batch of work, or
+                changing the deadline or team size) will be listed here as they happen.
+            </p>
+            {% else %}
             {% for log in divergence_logs %}
             <div class="divergence-log {% if log.score_delta > 0 %}increase{% elif log.score_delta < 0 %}decrease{% endif %}">
                 <div class="d-flex justify-content-between align-items-start mb-2">
@@ -237,7 +289,7 @@
                         <small class="text-muted d-block">{{ log.logged_at|date:"M d, Y H:i" }}</small>
                     </div>
                     <span class="badge {% if log.score_delta > 0 %}bg-success{% else %}bg-danger{% endif %}">
-                        {{ log.old_score }} → {{ log.new_score }} ({{ log.score_delta|stringformat:"+d" }})
+                        {{ log.old_score|floatformat:1 }} → {{ log.new_score|floatformat:1 }} ({{ log.score_delta|floatformat:"+1" }})
                     </span>
                 </div>
                 <p class="small mb-0">
@@ -245,13 +297,13 @@
                 </p>
             </div>
             {% endfor %}
+            {% endif %}
         </div>
     </div>
-    {% endif %}
 
     <!-- Actions -->
     <div class="mt-4 mb-4">
-        <a href="{% url 'shadow_board_list' board.id %}" class="btn btn-outline-secondary">
+        <a href="{% url 'shadow_board_list' board.id %}" class="btn-prizm-back">
             <i class="fas fa-arrow-left me-2"></i>Back to List
         </a>
         {% if branch.status == 'active' %}
@@ -289,6 +341,39 @@
     </div>
 </div>
 
+<!-- Link Scenario Modal -->
+<div class="modal fade" id="linkScenarioModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-link me-2"></i>Link What-If Scenario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">Linking a scenario will seed a new snapshot from its parameters and trigger a recalculation.</p>
+                <div class="mb-3">
+                    <label for="linkScenarioSelect" class="form-label">Select Scenario</label>
+                    <select class="form-select" id="linkScenarioSelect">
+                        <option value="">— None (unlink) —</option>
+                    </select>
+                    <div id="linkScenarioLoading" class="form-text text-muted" style="display:none;"><i class="fas fa-spinner fa-spin me-1"></i>Loading scenarios...</div>
+                </div>
+                {% if branch.source_scenario %}
+                <div class="alert alert-info py-2 small mb-0" id="currentScenarioInfo">
+                    <i class="fas fa-info-circle me-1"></i>Currently linked: <strong>{{ branch.source_scenario.name }}</strong>
+                </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmLinkScenarioBtn">
+                    <i class="fas fa-save me-1"></i>Apply
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Commit Confirmation Modal -->
 <div class="modal fade" id="commitModal" tabindex="-1">
     <div class="modal-dialog">
@@ -299,15 +384,17 @@
             </div>
             <div class="modal-body">
                 <p>Are you sure you want to commit <strong>{{ branch.name }}</strong>?</p>
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle me-2"></i>
-                    This will:
+                <div class="alert alert-warning">
+                    <strong><i class="fas fa-exclamation-triangle me-2"></i>This will:</strong>
                     <ul class="mb-0 mt-2">
                         <li>Mark this branch as the accepted reality</li>
-                        <li>Archive all other active branches</li>
+                        <li><strong>Archive all other active branches</strong> (they can be restored later)</li>
                         <li>Create an audit log entry</li>
                     </ul>
                 </div>
+                <p class="text-muted small mb-0">
+                    <i class="fas fa-info-circle me-1 text-info"></i>Don't worry — archived branches are never deleted. You can restore any of them at any time using the Restore All Archived button.
+                </p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -322,30 +409,111 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script src="{% static 'vendor/chart.min.3.9.1.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
+<script src="{% static 'vendor/chartjs-adapter-date-fns.bundle.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
     // Feasibility Trend Chart
     const ctx = document.getElementById('feasibilityChart');
     if (ctx) {
-        const data = {{ feasibility_history|safe }};
-        const labels = data.map(d => new Date(d.date).toLocaleDateString());
-        const scores = data.map(d => d.score);
-        
+        // feasibility_history_json is a json.dumps'd string from the view, so
+        // Decimal values are safely coerced to JS numbers (avoids the
+        // "Decimal is not defined" runtime error that previously blanked
+        // this chart).
+        const data = JSON.parse('{{ feasibility_history_json|escapejs }}');
+        // Time-scale points: Chart.js consumes {x: Date, y: number} when
+        // parsing is disabled.  Using a real time axis (vs. category
+        // labels) means two snapshots seconds apart cluster tightly
+        // instead of stretching across the full chart width.
+        let points = data.map(d => ({ x: new Date(d.date), y: d.score }));
+
+        // Adaptive window: anchored on the latest snapshot.  The window is
+        // sized to keep the line *visible* regardless of how clustered the
+        // snapshots are:
+        //   - Single snapshot (brand-new branch) → tight 1-hour window
+        //     centred on the snapshot, no extended flat line.  Older
+        //     behaviour stretched a flat segment across a 24h axis,
+        //     making a brand-new branch look "broken and empty".
+        //   - All snapshots within an hour → zoom in to ~3× the actual span
+        //     (30 min floor) so two snapshots a few minutes apart still draw
+        //     a recognisable curve instead of collapsing into a right-edge
+        //     sliver.
+        //   - Snapshots over half a day or more → use a 24-hour floor so the
+        //     visual scale stays familiar.
+        //   - Snapshots over multiple days → fit-to-data with 20% padding.
+        const xs = points.map(p => p.x.getTime());
+        const minX = xs.length ? Math.min(...xs) : Date.now();
+        const maxX = xs.length ? Math.max(...xs) : Date.now();
+        const actualSpan = maxX - minX;
+        const ONE_HOUR_MS = 60 * 60 * 1000;
+        const MIN_WINDOW_MS = 24 * ONE_HOUR_MS;
+        const isSinglePoint = points.length === 1 || actualSpan === 0;
+        let windowSpan;
+        let windowStart;
+        let latestTs;
+        if (isSinglePoint) {
+            // Anchor the window on the single snapshot — 45 min before to
+            // 15 min after — so the dot lands ~3/4 of the way across the
+            // axis and the user sees a meaningful timestamp scale around
+            // the branch creation time, not a 24h flat line.
+            windowSpan = ONE_HOUR_MS;
+            latestTs = new Date(maxX + 15 * 60 * 1000);
+            windowStart = new Date(maxX - 45 * 60 * 1000);
+        } else if (actualSpan < ONE_HOUR_MS) {
+            // Short span (≤1h, multi-snapshot): centre the data with a
+            // ~20% pad on each side, floored at 2 minutes.  The previous
+            // logic anchored the latest point at the right edge and
+            // stretched 3× to the left, which jammed every snapshot of a
+            // brand-new branch into the rightmost ~15% of the chart.
+            const padding = Math.max(actualSpan * 0.2, 2 * 60 * 1000);
+            windowSpan = actualSpan + 2 * padding;
+            latestTs = new Date(maxX + padding);
+            windowStart = new Date(minX - padding);
+        } else if (actualSpan < 12 * ONE_HOUR_MS) {
+            // Same centring approach for the multi-hour band so a
+            // sub-day branch doesn't lean entirely right either.
+            const padding = Math.max(actualSpan * 0.15, 30 * 60 * 1000);
+            windowSpan = actualSpan + 2 * padding;
+            latestTs = new Date(maxX + padding);
+            windowStart = new Date(minX - padding);
+        } else {
+            // Multi-day branches: keep anchoring on the latest point so
+            // the trend reads left→right with today on the right edge.
+            windowSpan = Math.max(actualSpan * 1.2, MIN_WINDOW_MS);
+            latestTs = new Date(maxX);
+            windowStart = new Date(maxX - windowSpan);
+        }
+
+        // For single-snapshot branches we DELIBERATELY leave `points` as a
+        // single {x, y} so Chart.js renders a single visible dot rather
+        // than a flat horizontal line stretched across the window.
+
+        const latestScore = points.length ? points[points.length - 1].y : 0;
+        const tierColor = latestScore >= 70
+            ? { border: '#198754', fill: 'rgba(25, 135, 84, 0.15)' }
+            : latestScore >= 50
+                ? { border: '#fd7e14', fill: 'rgba(253, 126, 20, 0.15)' }
+                : { border: '#dc3545', fill: 'rgba(220, 53, 69, 0.15)' };
+
         new Chart(ctx, {
             type: 'line',
             data: {
-                labels: labels,
                 datasets: [{
                     label: 'Feasibility Score',
-                    data: scores,
-                    borderColor: '#0d6efd',
-                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                    data: points,
+                    parsing: false,
+                    borderColor: tierColor.border,
+                    backgroundColor: tierColor.fill,
                     tension: 0.4,
-                    fill: true,
-                    pointRadius: 4,
-                    pointClassName: 'point',
+                    // Single-snapshot branches: enlarge the dot so it reads
+                    // as an intentional "current score marker" rather than
+                    // an empty chart.  Also drop the fill so there's no
+                    // ambiguous shaded region implying a trend that doesn't
+                    // exist yet.
+                    pointRadius: isSinglePoint ? 8 : 4,
+                    pointHoverRadius: isSinglePoint ? 10 : 6,
+                    fill: !isSinglePoint,
                     pointBackgroundColor: function(context) {
-                        const score = context.raw;
+                        const score = context.raw && context.raw.y;
                         if (score >= 70) return '#198754';
                         if (score >= 50) return '#fd7e14';
                         return '#dc3545';
@@ -356,9 +524,47 @@
                 responsive: true,
                 maintainAspectRatio: true,
                 plugins: {
-                    legend: { display: false }
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: function(items) {
+                                if (!items.length) return '';
+                                const d = items[0].raw && items[0].raw.x;
+                                return d ? new Date(d).toLocaleString() : '';
+                            },
+                            label: function(item) {
+                                const v = item.raw && item.raw.y;
+                                return v != null ? v.toFixed(2) + '%' : '';
+                            }
+                        }
+                    }
                 },
                 scales: {
+                    x: {
+                        type: 'time',
+                        min: windowStart,
+                        max: latestTs,
+                        time: {
+                            // Pick tick granularity based on the visible
+                            // window: minute-level under 2h, hour-level
+                            // under 48h, day-level beyond.  Without this,
+                            // forcing 'day' on a 24h chart produces a
+                            // single label ('May 25') with no sense of
+                            // intra-day position, and forcing 'hour' on a
+                            // 30-minute zoom produces only one or two
+                            // labels.
+                            unit: windowSpan <= 2 * ONE_HOUR_MS
+                                ? 'minute'
+                                : (windowSpan <= 2 * MIN_WINDOW_MS ? 'hour' : 'day'),
+                            tooltipFormat: 'MMM d, HH:mm',
+                            displayFormats: {
+                                minute: 'HH:mm',
+                                hour: 'HH:mm',
+                                day: 'MMM d'
+                            }
+                        },
+                        ticks: { maxRotation: 0, autoSkip: true }
+                    },
                     y: {
                         min: 0,
                         max: 100,
@@ -402,7 +608,7 @@
         fetch('{% url "commit_shadow_branch" board.id branch.id %}', {
             method: 'POST',
             headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value,
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken'),
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ confirm: true })
@@ -417,5 +623,65 @@
         })
         .catch(e => alert('Error: ' + e.message));
     });
+
+    // Link Scenario modal: load scenarios when modal opens
+    const linkScenarioModal = document.getElementById('linkScenarioModal');
+    if (linkScenarioModal) {
+        linkScenarioModal.addEventListener('show.bs.modal', function() {
+            const select = document.getElementById('linkScenarioSelect');
+            const loading = document.getElementById('linkScenarioLoading');
+            // Only populate once
+            if (select.options.length > 1) return;
+            loading.style.display = 'block';
+            fetch(`/boards/{{ board.id }}/what-if/history/`)
+                .then(r => r.json())
+                .then(data => {
+                    loading.style.display = 'none';
+                    if (data.scenarios) {
+                        data.scenarios.forEach(s => {
+                            const opt = document.createElement('option');
+                            opt.value = s.id;
+                            opt.textContent = `${s.name} (${s.scenario_type})`;
+                            if ({{ branch.source_scenario.id|default:"null" }} === s.id) {
+                                opt.selected = true;
+                            }
+                            select.appendChild(opt);
+                        });
+                    }
+                })
+                .catch(() => { loading.style.display = 'none'; });
+        });
+
+        document.getElementById('confirmLinkScenarioBtn')?.addEventListener('click', function() {
+            const scenarioId = document.getElementById('linkScenarioSelect').value || null;
+            const btn = this;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+
+            fetch(`/api/boards/{{ board.id }}/shadow/{{ branch.id }}/link-scenario/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken'),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ scenario_id: scenarioId ? parseInt(scenarioId) : null })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-save me-1"></i>Apply';
+                    alert('Error: ' + (data.error || 'Could not link scenario'));
+                }
+            })
+            .catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save me-1"></i>Apply';
+                alert('Error: ' + e.message);
+            });
+        });
+    }
 </script>
 {% endblock %}

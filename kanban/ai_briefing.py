@@ -9,11 +9,19 @@ Falls back to the rule-based logic if AI is unavailable or returns an
 unparseable response.
 """
 
+import hashlib
 import json
 import logging
+from django.core.cache import cache
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+# The action plan is identical across repeated dashboard loads until the
+# underlying tasks (or their risk/overdue context) change, so cache it to avoid
+# a synchronous Gemini call on every page view. TTL is a safety net; the cache
+# key already changes when any input task is edited (see _action_plan_cache_key).
+BRIEFING_CACHE_TTL = 6 * 60 * 60  # 6 hours
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +44,28 @@ def _rule_based_action_plan(tasks, action_type, overdue_count, now):
             if _t.assigned_to else None
         )
         _days = int((_t.due_date - now).days) if _t.due_date else None
+
+        # STALLED tasks are about column dwell, not deadlines — give them their
+        # own why/next_action grounded in days-in-column (set by the view from
+        # Task.aging_state) rather than the risk/overdue wording below.
+        if action_type == 'stalled':
+            _dic = getattr(_t, 'days_in_column', None)
+            _col = _t.column.name if _t.column_id else 'its column'
+            _dwell = f"{_dic} day{'s' if _dic != 1 else ''}" if _dic is not None else 'a long time'
+            if _unassigned:
+                _why = (f"Sat {_dwell} in \"{_col}\" with no owner and no movement — "
+                        "unowned work doesn't unstick itself.")
+                _next = "Assign an owner today and ask them for the single next step to move it."
+            elif _progress == 0:
+                _why = (f"Sat {_dwell} in \"{_col}\" at 0% — almost certainly blocked or "
+                        "never actually started.")
+                _next = f"Check with {_assignee} whether this is blocked or just not started, and clear the blocker."
+            else:
+                _why = (f"Sat {_dwell} in \"{_col}\" at {_progress}% with no recent movement — "
+                        "stalled mid-flight, a likely hidden blocker.")
+                _next = f"Ask {_assignee} what is blocking this and agree the next concrete step to move it forward."
+            plan.append({'task': _t, 'why': _why, 'next_action': _next})
+            continue
 
         # WHY
         if _is_critical and _progress == 0 and _unassigned:
@@ -100,6 +130,13 @@ def _rule_based_summary(plan, action_type, overdue_count, briefing_action):
             "Critical-risk items are your highest delivery threat. "
             "Address them in this order to protect your timeline:"
         )
+    elif action_type == 'stalled':
+        _n = len(plan)
+        return (
+            f"{_n} task{'s have' if _n != 1 else ' has'} stopped moving \u2014 sitting in the same "
+            "column past the aging threshold while everything else progresses. Stalled work is "
+            "usually blocked work. Here\u2019s where to push first:"
+        )
     elif action_type == 'overdue':
         return (
             f"{overdue_count} task{'s are' if overdue_count != 1 else ' is'} past the due date. "
@@ -124,6 +161,8 @@ def _build_ai_prompt(tasks, action_type, overdue_count, total_high_risk, now):
     """
     today_str = now.strftime('%B %d, %Y')
 
+    _is_stalled = action_type == 'stalled'
+
     task_lines = []
     for i, t in enumerate(tasks, 1):
         due_str = t.due_date.strftime('%b %d, %Y') if t.due_date else 'No due date'
@@ -143,7 +182,7 @@ def _build_ai_prompt(tasks, action_type, overdue_count, total_high_risk, now):
         )
         board_name = t.column.board.name if t.column and t.column.board else 'Unknown board'
 
-        task_lines.append(
+        line = (
             f"Task {i}:\n"
             f"  Title: {t.title}\n"
             f"  Board: {board_name}\n"
@@ -153,22 +192,49 @@ def _build_ai_prompt(tasks, action_type, overdue_count, total_high_risk, now):
             f"  Due date: {due_str} ({timing})\n"
             f"  Assigned to: {assignee}"
         )
+        if _is_stalled:
+            # The defining signal for a stalled task is how long it has sat in its
+            # current column with no movement — surface it so the AI reasons about
+            # unblocking, not deadlines.
+            _dic = getattr(t, 'days_in_column', None)
+            _col = t.column.name if t.column_id else 'its column'
+            _dwell = f"{_dic} day{'s' if _dic != 1 else ''}" if _dic is not None else 'a long time'
+            line += f"\n  STALLED: sitting {_dwell} in column \"{_col}\" with no movement"
+        task_lines.append(line)
 
     context_line = []
     if overdue_count:
         context_line.append(f"{overdue_count} overdue task{'s' if overdue_count != 1 else ''}")
     if total_high_risk:
         context_line.append(f"{total_high_risk} high-risk item{'s' if total_high_risk != 1 else ''}")
+    if _is_stalled and not context_line:
+        context_line.append(f"{len(tasks)} stalled task{'s' if len(tasks) != 1 else ''} (stuck in-column)")
     context_summary = ' and '.join(context_line) if context_line else 'several at-risk items'
+
+    if _is_stalled:
+        focus_directive = (
+            "These tasks are STALLED — they have stopped moving and sat in the same column past "
+            "the board's aging threshold while other work progressed. There are no overdue or "
+            "high-risk items right now; the risk here is hidden blockers and lost momentum. "
+            "Reason about WHY each task has stopped (blocked, waiting on someone, never started, "
+            "abandoned) and the concrete step to get it moving again. Do NOT frame this around "
+            "due dates — frame it around column dwell time and unblocking."
+        )
+    else:
+        focus_directive = (
+            "Explain the specific risk each task poses to delivery, grounded in its actual data "
+            "(progress, timing, assignment status). Be direct and concrete."
+        )
 
     tasks_block = '\n\n'.join(task_lines)
 
     prompt = f"""You are Spectra, an intelligent AI project management assistant inside PrizmAI.
 Today is {today_str}. The project currently has {context_summary}.
 
-A project manager is viewing a priority action panel. For the tasks below, provide:
-1. A `why` explanation (1-2 sentences) — explain the specific risk this task poses to delivery, 
-   grounded in its actual data (progress, timing, assignment status). Be direct and concrete.
+A project manager is viewing a priority action panel. {focus_directive}
+
+For the tasks below, provide:
+1. A `why` explanation (1-2 sentences), grounded in the task's actual data. Be direct and concrete.
 2. A `next_action` (1 sentence) — a precise, actionable step the PM should take TODAY for this task.
 3. An `action_summary` (2-3 sentences) — an intelligent intro paragraph for the full panel,
    synthesising the cross-task risk pattern and why acting now matters. Do NOT just repeat the task titles.
@@ -202,26 +268,21 @@ def _call_gemini(tasks, action_type, overdue_count, total_high_risk, now):
     per_task_list is a list of dicts with keys 'why' and 'next_action'.
     """
     try:
-        from ai_assistant.utils.ai_clients import GeminiClient
+        from ai_assistant.utils.ai_router import AIRouter
     except ImportError:
-        raise RuntimeError("GeminiClient not available")
+        raise RuntimeError("AIRouter not available")
 
-    client = GeminiClient(default_model='gemini-2.5-flash-lite')
-    if client.models is None:
-        raise RuntimeError("Gemini API not initialised (missing API key?)")
+    router = AIRouter()
 
     prompt = _build_ai_prompt(tasks, action_type, overdue_count, total_high_risk, now)
 
-    result = client.get_response(
+    result = router.complete(
         prompt=prompt,
-        task_complexity='simple',
-        temperature=0.35,          # Analytical, focused
-        use_cache=True,
-        cache_operation='analysis',
-        context_id=f"briefing_{action_type}_{','.join(str(t.id) for t in tasks)}",
+        user=None,
+        complexity='simple',
     )
 
-    raw = result.get('content', '')
+    raw = result.get('text', '')
     if not raw:
         raise ValueError("Empty response from Gemini")
 
@@ -301,3 +362,72 @@ def build_action_plan(tasks, action_type, overdue_count, total_high_risk, briefi
     plan    = _rule_based_action_plan(tasks[:3], action_type, overdue_count, now)
     summary = _rule_based_summary(plan, action_type, overdue_count, briefing_action)
     return plan, summary, False
+
+
+def _action_plan_cache_key(scope_id, action_type, overdue_count, total_high_risk, tasks):
+    """Build a cache key that changes whenever any input affecting the plan changes.
+
+    Including each task's ``updated_at`` means editing a task naturally
+    invalidates the cached plan without relying on pattern-based cache deletion
+    (which the local cache backend does not support).
+    """
+    sig_parts = [
+        str(scope_id), str(action_type),
+        str(overdue_count), str(total_high_risk),
+    ]
+    for t in tasks[:3]:
+        ts = getattr(t, 'updated_at', None)
+        sig_parts.append(f"{t.pk}:{ts.isoformat() if ts else ''}")
+    digest = hashlib.md5('|'.join(sig_parts).encode('utf-8')).hexdigest()
+    return f"briefing_action_plan:{digest}"
+
+
+def build_action_plan_cached(scope_id, tasks, action_type, overdue_count,
+                             total_high_risk, briefing_action, now=None):
+    """Cache wrapper around :func:`build_action_plan`.
+
+    Avoids a synchronous Gemini call on every dashboard load. The cached payload
+    is fully serialisable (no model instances); live ``Task`` objects are
+    re-attached on a cache hit. ``scope_id`` should uniquely identify the
+    user+workspace so plans are never shared across accounts.
+    """
+    if not tasks:
+        # Cheap path — no AI call, nothing worth caching.
+        return build_action_plan(tasks, action_type, overdue_count,
+                                 total_high_risk, briefing_action, now=now)
+
+    cache_key = _action_plan_cache_key(
+        scope_id, action_type, overdue_count, total_high_risk, tasks
+    )
+
+    try:
+        cached = cache.get(cache_key)
+    except Exception as exc:  # never let a cache hiccup break the dashboard
+        logger.warning(f"Briefing cache read failed, regenerating: {exc}")
+        cached = None
+
+    if cached is not None:
+        # Re-attach live task objects to the cached AI text.
+        plan = [
+            {'task': tasks[i], 'why': e['why'], 'next_action': e['next_action']}
+            for i, e in enumerate(cached['entries'])
+            if i < len(tasks)
+        ]
+        return plan, cached['summary'], cached['ai_powered']
+
+    plan, summary, ai_powered = build_action_plan(
+        tasks, action_type, overdue_count, total_high_risk, briefing_action, now=now
+    )
+
+    try:
+        cache.set(cache_key, {
+            'entries': [
+                {'why': p['why'], 'next_action': p['next_action']} for p in plan
+            ],
+            'summary': summary,
+            'ai_powered': ai_powered,
+        }, BRIEFING_CACHE_TTL)
+    except Exception as exc:
+        logger.warning(f"Briefing cache write failed: {exc}")
+
+    return plan, summary, ai_powered

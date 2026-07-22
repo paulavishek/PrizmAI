@@ -5,9 +5,14 @@ urlpatterns = [
     # Board-specific knowledge
     path('boards/<int:board_id>/knowledge/', views.board_knowledge, name='board_knowledge'),
     path('boards/<int:board_id>/knowledge/add/', views.add_manual_memory, name='add_manual_memory'),
+    path('memory/<int:node_id>/edit/', views.edit_manual_memory, name='edit_manual_memory'),
+    path('memory/review-gaps/', views.review_memory_gaps, name='review_memory_gaps'),
+    path('memory/<int:node_id>/delete/', views.delete_manual_memory, name='delete_manual_memory'),
     path('boards/<int:board_id>/deja-vu/', views.deja_vu_check, name='deja_vu_check'),
     # Global organizational memory
     path('memory/', views.organizational_memory, name='organizational_memory'),
+    path('memory/browse/', views.memory_browse, name='memory_browse'),
+    path('memory/<int:node_id>/detail/', views.memory_node_detail, name='memory_node_detail'),
     path('memory/search/', views.organizational_memory_search, name='organizational_memory_search'),
     path('memory/feedback/<int:query_id>/', views.memory_feedback, name='memory_feedback'),
 ]

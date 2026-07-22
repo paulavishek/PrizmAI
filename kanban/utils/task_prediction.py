@@ -104,6 +104,8 @@ def predict_task_completion_date(task):
         'adjusted_estimate_days': round(adjusted_days, 1),
         'remaining_progress': round(remaining_progress * 100, 1),
         'complexity_score': task.complexity_score,
+        'complexity_range_min': max(1, task.complexity_score - 2),
+        'complexity_range_max': min(10, task.complexity_score + 2),
         'priority': task.priority,
         'workload_impact': task.workload_impact,
         'skill_match_score': task.skill_match_score,
@@ -113,15 +115,19 @@ def predict_task_completion_date(task):
         'team_member_velocity': round(historical_stats.get('velocity_factor', 1.0), 2),
         'historical_avg_days': round(historical_stats['avg_duration'], 1),
         'sample_size': historical_stats['sample_size'],
+        'displayed_tasks': historical_stats.get('displayed_tasks', len(historical_stats.get('similar_tasks', []))),
         'data_quality': historical_stats.get('data_quality', 'unknown'),
         'adjustments_applied': historical_stats.get('adjustments', {})
     }
-    
+
+    displayed_count = historical_stats.get('displayed_tasks', len(historical_stats.get('similar_tasks', [])))
+
     return {
         'predicted_date': predicted_date,
         'confidence': round(confidence, 2),
         'confidence_interval_days': round(confidence_interval, 1),
         'based_on_tasks': historical_stats['sample_size'],
+        'displayed_tasks': displayed_count,
         'similar_tasks': historical_stats.get('similar_tasks', []),
         'factors': factors,
         'early_date': early_date,
@@ -148,14 +154,23 @@ def _get_historical_statistics(task):
         actual_duration_days__isnull=False,
         actual_duration_days__gt=0
     )
-    
-    # Priority 1: Same assignee, similar complexity and priority
+
+    # Workspace is the real tenant-isolation key. Board.organization is a legacy,
+    # nullable field (MVP simplification) that is None on demo/seed boards, so
+    # scoping by it bleeds history across unrelated workspaces. Scope the
+    # cross-board tiers (1 and 3) by workspace instead.
+    workspace = task.column.board.workspace
+
+    # Priority 1: Same assignee, similar complexity and priority (within workspace).
+    # Skip when the board has no workspace — filtering by workspace=None would
+    # re-create the same cross-board bleed across orphaned legacy boards.
     same_assignee_tasks = None
-    if task.assigned_to:
+    if task.assigned_to and workspace is not None:
         same_assignee_tasks = Task.objects.filter(
             query,
             assigned_to=task.assigned_to,
             priority=task.priority,
+            column__board__workspace=workspace,
             complexity_score__range=(
                 max(1, task.complexity_score - 2),
                 min(10, task.complexity_score + 2)
@@ -171,16 +186,24 @@ def _get_historical_statistics(task):
         if stats['count'] >= 5:  # Good sample size
             # Get similar tasks and format completed_at for JSON serialization
             similar_tasks_list = []
-            for task_data in same_assignee_tasks[:10].values('id', 'title', 'actual_duration_days', 'complexity_score', 'priority', 'completed_at'):
+            seen_keys = set()
+            for task_data in same_assignee_tasks.order_by('-completed_at').values('id', 'title', 'actual_duration_days', 'complexity_score', 'priority', 'completed_at'):
                 task_dict = dict(task_data)
                 if task_dict.get('completed_at'):
                     task_dict['completed_at'] = task_dict['completed_at'].isoformat()
-                similar_tasks_list.append(task_dict)
-            
+                # Deduplicate display list: skip entries with identical title+duration
+                dedup_key = (task_dict['title'], task_dict['actual_duration_days'])
+                if dedup_key not in seen_keys:
+                    seen_keys.add(dedup_key)
+                    similar_tasks_list.append(task_dict)
+                if len(similar_tasks_list) >= 10:
+                    break
+
             return {
                 'avg_duration': stats['avg'],
                 'std_dev': stats['std'],
                 'sample_size': stats['count'],
+                'displayed_tasks': len(similar_tasks_list),
                 'data_quality': 'high',
                 'velocity_factor': task.get_velocity_factor(),
                 'similar_tasks': similar_tasks_list
@@ -206,50 +229,69 @@ def _get_historical_statistics(task):
     if stats['count'] >= 3:
         # Get similar tasks and format completed_at for JSON serialization
         similar_tasks_list = []
-        for task_data in board_tasks[:10].values('id', 'title', 'actual_duration_days', 'complexity_score', 'priority', 'completed_at'):
+        seen_keys = set()
+        for task_data in board_tasks.order_by('-completed_at').values('id', 'title', 'actual_duration_days', 'complexity_score', 'priority', 'completed_at'):
             task_dict = dict(task_data)
             if task_dict.get('completed_at'):
                 task_dict['completed_at'] = task_dict['completed_at'].isoformat()
-            similar_tasks_list.append(task_dict)
-        
+            dedup_key = (task_dict['title'], task_dict['actual_duration_days'])
+            if dedup_key not in seen_keys:
+                seen_keys.add(dedup_key)
+                similar_tasks_list.append(task_dict)
+            if len(similar_tasks_list) >= 10:
+                break
+
         return {
             'avg_duration': stats['avg'],
             'std_dev': stats['std'],
             'sample_size': stats['count'],
+            'displayed_tasks': len(similar_tasks_list),
             'data_quality': 'medium',
             'velocity_factor': 1.0,
             'similar_tasks': similar_tasks_list
         }
     
-    # Priority 3: Organization-wide with same complexity
+    # Priority 3: Workspace-wide with same complexity. Scoped by workspace (not the
+    # nullable Board.organization) so history stays within the current tenant.
+    # Skipped when the board has no workspace (see note above).
+    if workspace is None:
+        return None
+
     org_tasks = Task.objects.filter(
         query,
-        column__board__organization=task.column.board.organization,
+        column__board__workspace=workspace,
         complexity_score__range=(
             max(1, task.complexity_score - 2),
             min(10, task.complexity_score + 2)
         )
     ).exclude(id=task.id)
-    
+
     stats = org_tasks.aggregate(
         avg=Avg('actual_duration_days'),
         std=StdDev('actual_duration_days'),
         count=Count('id')
     )
-    
+
     if stats['count'] >= 2:
         # Get similar tasks and format completed_at for JSON serialization
         similar_tasks_list = []
-        for task_data in org_tasks[:10].values('id', 'title', 'actual_duration_days', 'complexity_score', 'priority', 'completed_at'):
+        seen_keys = set()
+        for task_data in org_tasks.order_by('-completed_at').values('id', 'title', 'actual_duration_days', 'complexity_score', 'priority', 'completed_at'):
             task_dict = dict(task_data)
             if task_dict.get('completed_at'):
                 task_dict['completed_at'] = task_dict['completed_at'].isoformat()
-            similar_tasks_list.append(task_dict)
-        
+            dedup_key = (task_dict['title'], task_dict['actual_duration_days'])
+            if dedup_key not in seen_keys:
+                seen_keys.add(dedup_key)
+                similar_tasks_list.append(task_dict)
+            if len(similar_tasks_list) >= 10:
+                break
+
         return {
             'avg_duration': stats['avg'],
             'std_dev': stats['std'],
             'sample_size': stats['count'],
+            'displayed_tasks': len(similar_tasks_list),
             'data_quality': 'low',
             'velocity_factor': 1.0,
             'similar_tasks': similar_tasks_list
@@ -340,8 +382,8 @@ def _apply_prediction_adjustments(base_days, task, historical_stats):
         if skill_factor != 1.0:
             adjusted_days *= skill_factor
     
-    # Team velocity adjustment
-    velocity_factor = historical_stats.get('velocity_factor', 1.0)
+    # Team velocity adjustment — capped at 2.5x to avoid runaway inflation from sparse data
+    velocity_factor = min(2.5, max(0.4, historical_stats.get('velocity_factor', 1.0)))
     if velocity_factor != 1.0:
         adjusted_days *= velocity_factor
         adjustments['velocity_adjustment'] = f"{velocity_factor:.2f}x (team member velocity)"
@@ -499,23 +541,30 @@ def update_task_prediction(task):
         dict: Prediction result or None
     """
     
+    # Prediction fields are *derived*, not user intent. Saving them must never
+    # run automation rules — otherwise refreshing a prediction (including on a
+    # GET page load) spuriously fires triggers like schedule_status_changed.
+    from kanban.signals import automation_silent
+
     if task.progress == 100:
         # Clear predictions for completed tasks
         task.predicted_completion_date = None
         task.prediction_confidence = None
         task.prediction_metadata = {}
         task.last_prediction_update = None
-        task.save()
+        with automation_silent():
+            task.save()
         return None
-    
+
     prediction = predict_task_completion_date(task)
-    
+
     if prediction:
         task.predicted_completion_date = prediction['predicted_date']
         task.prediction_confidence = prediction['confidence']
         task.prediction_metadata = {
             'confidence_interval_days': prediction['confidence_interval_days'],
             'based_on_tasks': prediction['based_on_tasks'],
+            'displayed_tasks': prediction.get('displayed_tasks', len(prediction.get('similar_tasks', []))),
             'similar_tasks': prediction.get('similar_tasks', []),
             'factors': prediction['factors'],
             'early_date': prediction['early_date'].isoformat(),
@@ -523,7 +572,8 @@ def update_task_prediction(task):
             'prediction_method': prediction['prediction_method']
         }
         task.last_prediction_update = timezone.now()
-        task.save()
+        with automation_silent():
+            task.save()
         
         logger.info(
             f"Updated prediction for task {task.id}: "

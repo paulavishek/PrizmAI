@@ -68,6 +68,85 @@ def _release_mission_lock(mission_id):
         logger.warning(f"Could not release mission AI lock for mission {mission_id}: {exc}")
 
 
+# ---------------------------------------------------------------------------
+# Goal-Aware Analytics — auto-classification tasks
+# ---------------------------------------------------------------------------
+
+@shared_task(
+    bind=True,
+    name='kanban.ai_summary.classify_board_on_creation',
+    max_retries=2,
+    default_retry_delay=30,
+    queue='summaries',
+    time_limit=60,
+    soft_time_limit=50,
+)
+def classify_board_on_creation(self, board_id):
+    """Classify a newly created board's project type in the background."""
+    from kanban.models import Board
+    from kanban.utils.ai_utils import classify_board_project_type
+
+    try:
+        board = Board.objects.get(pk=board_id)
+    except Board.DoesNotExist:
+        logger.warning(f"Board {board_id} not found for classification")
+        return
+
+    if board.project_type is not None:
+        logger.info(f"Board {board_id} already classified — skipping")
+        return
+
+    result = classify_board_project_type(board)
+    if result:
+        board.project_type = result['project_type']
+        board.project_type_confidence = result['confidence']
+        board.project_type_confirmed = False
+        board.save(update_fields=['project_type', 'project_type_confidence', 'project_type_confirmed'])
+        logger.info(f"Board {board_id} classified as {result['project_type']} (confidence={result['confidence']:.2f})")
+    else:
+        logger.warning(f"Board {board_id} classification failed")
+
+
+@shared_task(
+    bind=True,
+    name='kanban.ai_summary.generate_proxy_metrics_on_goal_creation',
+    max_retries=2,
+    default_retry_delay=30,
+    queue='summaries',
+    time_limit=90,
+    soft_time_limit=75,
+)
+def generate_proxy_metrics_on_goal_creation(self, goal_id):
+    """Generate proxy metrics for a newly created goal in the background."""
+    from kanban.models import OrganizationGoal, GoalProxyMetric
+    from kanban.utils.ai_utils import generate_proxy_metrics
+
+    try:
+        goal = OrganizationGoal.objects.get(pk=goal_id)
+    except OrganizationGoal.DoesNotExist:
+        logger.warning(f"Goal {goal_id} not found for proxy metric generation")
+        return
+
+    if goal.proxy_metrics.exists():
+        logger.info(f"Goal {goal_id} already has proxy metrics — skipping")
+        return
+
+    metrics = generate_proxy_metrics(goal)
+    if metrics:
+        GoalProxyMetric.objects.filter(goal=goal).delete()
+        for i, m in enumerate(metrics):
+            GoalProxyMetric.objects.create(
+                goal=goal,
+                name=m['name'],
+                why_it_matters=m['why_it_matters'],
+                how_to_measure=m['how_to_measure'],
+                display_order=i,
+            )
+        logger.info(f"Generated {len(metrics)} proxy metrics for goal {goal_id}")
+    else:
+        logger.warning(f"Proxy metric generation failed for goal {goal_id}")
+
+
 def _build_board_prompt(board_name, exception_lines, agg):
     """
     Build the structured Program-Manager prompt from pruned task data.
@@ -106,6 +185,56 @@ Write 4–6 concise bullet points covering:
 
 Rules: Be factual. Do NOT invent data not listed above.
 Each bullet MUST start with the • character. Output ONLY the bullet list — no headings, no paragraphs, no JSON."""
+
+
+def _board_task_fallback(board, max_tasks=15):
+    """Content-grounded fallback for a board with no saved AI summary.
+
+    Returns aggregate counts PLUS a short list of real tasks (column, progress,
+    overdue flag) so the strategy/mission roll-up has actual task content to
+    describe rather than only counts — which forces the model to anchor on the
+    strategy's name and confabulate domain detail.
+    """
+    from kanban.models import Task
+
+    try:
+        qs = (
+            Task.objects.filter(column__board=board, item_type='task')
+            .select_related('column')
+            .order_by('column__position', 'position')
+        )
+        total = qs.count()
+        if total == 0:
+            return "no tasks yet"
+
+        today = date.today()
+        done = 0
+        overdue = 0
+        task_lines = []
+        for t in qs:
+            prog = t.progress or 0
+            if prog >= 100:
+                done += 1
+            is_overdue = (
+                t.due_date is not None
+                and t.due_date.date() < today
+                and prog < 100
+            )
+            if is_overdue:
+                overdue += 1
+            if len(task_lines) < max_tasks:
+                col = (t.column.name if t.column else 'Unassigned')
+                flag = ' OVERDUE' if is_overdue else ''
+                task_lines.append(f'    · [{col}] "{t.title}" — {prog}%{flag}')
+
+        header = (
+            f"{total} tasks, {done} completed "
+            f"({round(done / total * 100)}% done), {overdue} overdue. Tasks:"
+        )
+        more = f"\n    · …and {total - max_tasks} more" if total > max_tasks else ""
+        return header + "\n" + "\n".join(task_lines) + more
+    except Exception:
+        return f"Board '{board.name}' — no data yet"
 
 
 # ---------------------------------------------------------------------------
@@ -180,9 +309,8 @@ def generate_board_summary_task(self, board_id):
             if is_high_risk:
                 agg['high_risk'] += 1
 
-            # blocked-column flag
-            col_name = (task.column.name or '').lower() if task.column else ''
-            is_blocked = any(kw in col_name for kw in ('block', 'stall', 'stuck', 'hold'))
+            # blocked-column flag (structural column_type marker, else name heuristic)
+            is_blocked = task.column.is_blocked() if task.column else False
 
             # LSS counts
             lss = task.lss_classification or ''
@@ -303,22 +431,11 @@ def generate_strategy_summary_task(self, strategy_id):
         for board in boards:
             snippet = board.ai_summary
             if not snippet:
-                # Cheap fallback: live task count stats, zero LLM calls
-                try:
-                    qs = Task.objects.filter(column__board=board, item_type='task')
-                    total = qs.count()
-                    done = qs.filter(progress=100).count()
-                    overdue = sum(
-                        1 for t in qs.only('due_date', 'progress')
-                        if t.due_date and t.due_date.date() < date.today() and (t.progress or 0) < 100
-                    )
-                    snippet = (
-                        f"{total} tasks, {done} completed "
-                        f"({round(done / total * 100) if total else 0}% done), "
-                        f"{overdue} overdue"
-                    )
-                except Exception:
-                    snippet = f"Board '{board.name}' — no data yet"
+                # Fallback for boards with no saved summary yet. Ground it in real
+                # task content (titles/columns/progress), not bare counts, so the
+                # model describes what's actually on the board instead of riffing
+                # on the strategy's name.
+                snippet = _board_task_fallback(board)
             board_lines.append(f"- [{board.name}] {snippet}")
 
         if not board_lines:
@@ -327,18 +444,22 @@ def generate_strategy_summary_task(self, strategy_id):
             snippets_block = "\n".join(board_lines)
             prompt = (
                 f"You are a senior strategy analyst.\n"
-                f"Below are board-level summaries for the strategy "
-                f'"{strategy.name}" (mission: "{strategy.mission.name}").\n\n'
-                f"Board summaries:\n{snippets_block}\n\n"
-                f"Write 3\u20135 concise bullet points that ADD NEW INSIGHT beyond what each board summary "
-                f"already says. Do NOT repeat task counts, blocker names, or budget figures that are "
-                f"already visible in the board summaries above.\n"
-                f"Instead focus on:\n"
-                f"\u2022 Cross-board dependencies and sequencing risks (work that cannot proceed until another board unblocks)\n"
-                f"\u2022 Whether the combined effort of all boards is sufficient to deliver the strategy on time\n"
-                f"\u2022 Team capacity or coordination gaps that individual boards cannot see in isolation\n"
-                f"\u2022 The single highest-leverage action at the strategy level (not repeating board-level actions)\n\n"
-                f"Be factual \u2014 do NOT invent data not listed above.\n"
+                f'The strategy is named "{strategy.name}" (mission: "{strategy.mission.name}").\n'
+                f"IMPORTANT: that name is the team's ASPIRATION, not evidence of what has been done. "
+                f"Base every statement ONLY on the board/task data below. Do NOT infer domain "
+                f"specifics (e.g. compliance, architecture, testing phases) from the strategy name "
+                f"if the tasks don't mention them. If the tasks are unrelated to the strategy's stated "
+                f"intent, say so plainly.\n\n"
+                f"Board / task data:\n{snippets_block}\n\n"
+                f"Write 3\u20135 concise bullet points that ADD NEW INSIGHT beyond simply restating the "
+                f"task list. Do NOT repeat raw task counts or budget figures already shown above.\n"
+                f"Focus on:\n"
+                f"\u2022 What the actual tasks reveal about progress and the nearest risks (name real tasks)\n"
+                f"\u2022 Whether the current work plausibly advances the strategy's stated intent \u2014 or diverges from it\n"
+                f"\u2022 Cross-board dependencies or sequencing risks, if any are visible in the data\n"
+                f"\u2022 The single highest-leverage next action, grounded in a task shown above\n\n"
+                f"Be strictly factual \u2014 do NOT invent tasks, phases, or domain details not present above. "
+                f"Refer to tasks by their real titles.\n"
                 f"Each bullet MUST start with the \u2022 character. "
                 f"Output ONLY the bullet list \u2014 no headings, no paragraphs, no JSON."
             )
@@ -437,6 +558,10 @@ def generate_mission_summary_task(self, mission_id):
                 f"{goal_block}\n"
                 f"MISSION: \"{mission.name}\"\n"
                 f"Mission description: {(mission.description or 'Not provided.')[:300]}\n\n"
+                f"IMPORTANT: the mission name and description are the team's INTENT, not evidence of "
+                f"what has been delivered. Base every statement ONLY on the strategy summaries below. Do "
+                f"NOT infer domain specifics from the mission's name if the underlying work doesn't show "
+                f"them. If the strategies' actual work diverges from the mission's stated intent, flag it.\n\n"
                 f"Strategy summaries (what the teams are actually doing):\n{snippets_block}\n\n"
                 f"{goal_instruction}\n\n"
                 f"Write 4\u20136 concise bullet points at the EXECUTIVE level. "
@@ -534,6 +659,10 @@ def generate_goal_summary_task(self, goal_id):
                 f"You are a C-level executive advisor.\n"
                 f"ORGANIZATION GOAL: \"{goal.name}\"\n"
                 f"{target_line}{desc_line}\n"
+                f"IMPORTANT: the goal's name, target metric, and context are the organisation's AMBITION, "
+                f"not evidence of what has been achieved. Base every statement ONLY on the mission summaries "
+                f"below. Do NOT infer progress or domain specifics from the goal's name if the missions don't "
+                f"show them. If the missions' actual work diverges from the goal's stated ambition, say so directly.\n\n"
                 f"Mission summaries (each mission addresses one facet of the goal):\n{snippets_block}\n\n"
                 f"Write 4–6 concise bullet points at the EXECUTIVE level.\n"
                 f"Focus on:\n"

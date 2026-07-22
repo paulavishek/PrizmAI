@@ -43,11 +43,15 @@ class ConflictDetectionService:
         if self.board:
             boards = [self.board]
         else:
-            # Only analyze active boards with recent activity
+            # Only analyze active boards with recent activity,
+            # excluding official demo templates and sandbox copies
+            # (sandbox conflicts are seeded during provisioning).
             from django.utils import timezone
             thirty_days_ago = timezone.now() - timedelta(days=30)
             boards = Board.objects.filter(
-                columns__tasks__updated_at__gte=thirty_days_ago
+                columns__tasks__updated_at__gte=thirty_days_ago,
+                is_official_demo_board=False,
+                is_sandbox_copy=False,
             ).distinct()
         
         for board in boards:
@@ -131,12 +135,17 @@ class ConflictDetectionService:
                         task1.start_date, task1_due,
                         task2.start_date, task2_due
                     ):
+                        user_display = user.get_full_name() or user.username
+                        conflict_title = f"Resource conflict: {user_display} overbooked"
+
                         # Check if this conflict already exists and is active
+                        # Use title match instead of M2M lookup so copied
+                        # conflicts with empty M2M are still detected.
                         existing = ConflictDetection.objects.filter(
                             board=board,
                             conflict_type='resource',
                             status='active',
-                            tasks__in=[task1, task2]
+                            title=conflict_title,
                         ).first()
                         
                         if existing:
@@ -152,7 +161,7 @@ class ConflictDetectionService:
                             conflict_type='resource',
                             severity=severity,
                             board=board,
-                            title=f"Resource conflict: {user.get_full_name() or user.username} overbooked",
+                            title=conflict_title,
                             description=f"{user.get_full_name() or user.username} is assigned to overlapping tasks: '{task1.title}' and '{task2.title}'",
                             conflict_data={
                                 'user_id': user.id,
@@ -215,15 +224,27 @@ class ConflictDetectionService:
         overdue_tasks = incomplete_tasks.filter(due_date__lt=now)
         if overdue_tasks.count() >= 3:  # Multiple overdue = schedule conflict
             for task in overdue_tasks[:5]:  # Limit to prevent spam
-                # Check if conflict already exists
+                # Check if an active schedule conflict already exists for this
+                # task on this board — prefer title match so copied conflicts
+                # with empty M2M are still detected as duplicates.
                 existing = ConflictDetection.objects.filter(
                     board=board,
                     conflict_type='schedule',
                     status='active',
-                    tasks=task
+                    title=f"Overdue task: {task.title}",
                 ).first()
                 
                 if existing:
+                    # Update severity / description on the existing record
+                    days_overdue = (now.date() - task.due_date.date() if hasattr(task.due_date, 'date') else now.date() - task.due_date).days
+                    new_sev = 'high' if days_overdue > 7 else 'medium' if days_overdue > 3 else 'low'
+                    ConflictDetection.objects.filter(pk=existing.pk).update(
+                        severity=new_sev,
+                        description=f"Task '{task.title}' is {days_overdue} days overdue (due: {task.due_date.strftime('%Y-%m-%d')})",
+                    )
+                    # Ensure M2M is linked (may have been empty from sandbox copy)
+                    if not existing.tasks.filter(pk=task.pk).exists():
+                        existing.tasks.add(task)
                     continue
                 
                 days_overdue = (now.date() - task.due_date.date() if hasattr(task.due_date, 'date') else now.date() - task.due_date).days
@@ -459,6 +480,162 @@ class ConflictResolutionSuggester:
         
         return suggestions
     
+    def _get_resolution_reasoning(self, resolution_type):
+        """
+        Return substantive 2-3 sentence reasoning for a (conflict_type, resolution_type) pair.
+        Specific to the conflict type so the text is meaningful for the card's "Why this works" section.
+        """
+        conflict_type = self.conflict.conflict_type
+        reasoning_map = {
+            ('resource', 'reassign'): (
+                "Reassigning one of the conflicting tasks to a team member with available capacity directly removes "
+                "the overallocation at its source, giving each task a dedicated owner with realistic bandwidth. "
+                "The expected outcome is that both tasks proceed at their normal pace without quality trade-offs from "
+                "context-switching or divided attention. "
+                "For this to work, the receiving team member needs sufficient context on the task — a brief handover "
+                "is recommended to avoid ramp-up delays."
+            ),
+            ('resource', 'reschedule'): (
+                "Rescheduling one task to a non-overlapping window serialises the workload, eliminating the "
+                "simultaneous demand that is causing the resource conflict. "
+                "The team member can then give focused attention to each task in sequence, reducing the risk of "
+                "delays or errors that arise from split focus. "
+                "This approach requires downstream dependencies and stakeholder expectations to tolerate the "
+                "adjusted timeline before committing."
+            ),
+            ('resource', 'split_task'): (
+                "Breaking the overloaded task into smaller independent units allows portions to be delegated or "
+                "deprioritised without reassigning ownership entirely. "
+                "This reduces the immediate pressure on the team member while keeping them accountable for the "
+                "overall outcome. "
+                "It works best when the task has distinct deliverables that can be distributed cleanly — tightly "
+                "coupled work may not split effectively."
+            ),
+            ('resource', 'add_resources'): (
+                "Adding a contributor to one of the conflicting tasks accelerates its completion, shortening the "
+                "window during which two pieces of work compete for the same person's time. "
+                "The expected outcome is faster throughput on the selected task, freeing the team member's capacity "
+                "sooner for the other work. "
+                "This requires the new contributor to have sufficient context and availability, and works best when "
+                "the task has parallelisable workstreams."
+            ),
+            ('dependency', 'modify_dependency'): (
+                "Removing or softening the dependency allows the blocked task to proceed in parallel using a mock "
+                "or stub in place of the upstream deliverable. "
+                "Once the blocking task is complete, integration is straightforward since both sides are developed "
+                "against an agreed interface contract. "
+                "This requires the team to define that contract upfront and maintain discipline to swap out the "
+                "placeholder cleanly when the real implementation is ready."
+            ),
+            ('dependency', 'adjust_dates'): (
+                "Shifting the start date of the blocked task to after its dependency is complete eliminates the "
+                "scheduling conflict and ensures work begins only when prerequisites are genuinely ready. "
+                "This removes the risk of rework caused by building on an incomplete or changing foundation. "
+                "It requires confirming that the adjusted start date is still compatible with the task's own "
+                "deadline and any downstream deliverables that depend on it."
+            ),
+            ('dependency', 'remove_dependency'): (
+                "Re-evaluating whether the dependency is strictly necessary may reveal that the blocked task can "
+                "proceed independently, either in full or with currently available information. "
+                "Removing an unnecessary dependency unlocks parallel progress and reduces scheduling fragility "
+                "across the project. "
+                "This should be validated with both task owners to confirm no critical coupling is being overlooked "
+                "before the link is severed."
+            ),
+            ('schedule', 'adjust_dates'): (
+                "Extending the deadline to a realistic date resolves the scheduling conflict by aligning the target "
+                "with the actual work remaining, rather than forcing rushed completion. "
+                "The expected outcome is a higher-quality deliverable completed on a timeline the team can commit "
+                "to confidently. "
+                "This requires stakeholder agreement on the revised date and should be paired with a review of "
+                "downstream tasks that depend on this one."
+            ),
+            ('schedule', 'add_resources'): (
+                "Adding a team member to help with the overdue task brings more capacity to bear on the bottleneck, "
+                "making the original deadline achievable without cutting scope. "
+                "The expected outcome is faster progress through task sharing or parallel workstreams, reducing "
+                "the schedule overrun. "
+                "This works best when the task has parallelisable components and the new contributor can ramp up "
+                "quickly without requiring extensive context-setting."
+            ),
+            ('schedule', 'reschedule'): (
+                "Staggering the overlapping tasks creates dedicated focus windows for each, preventing the "
+                "context-switching overhead that reduces effectiveness when both are active simultaneously. "
+                "The expected outcome is higher quality output and a lower risk of one task slipping because of "
+                "pressure from the other. "
+                "This requires stakeholder agreement on the revised timeline before committing to the change."
+            ),
+            ('schedule', 'reduce_scope'): (
+                "Reducing the scope lowers the total work volume to a level that fits the available time, making "
+                "the schedule feasible without changing the deadline or adding resources. "
+                "The expected outcome is that the task reaches a meaningful completion state within the original "
+                "timeline, with lower-priority elements deferred to a future iteration. "
+                "This requires product owner sign-off on which scope elements can be safely cut, and clarity on "
+                "what 'done enough' looks like for the current milestone."
+            ),
+        }
+        return reasoning_map.get((conflict_type, resolution_type), '')
+
+    @staticmethod
+    def pick_reassignment_candidate(board, excluded_user_id, task=None):
+        """
+        Pick the best other board member as a reassignment target, using the
+        same weighted scoring (skill match 30%, availability 25%, velocity 20%,
+        reliability 15%, quality 10%) the AI Resource Optimization panel uses
+        — not availability/workload alone — so this can't recommend a
+        candidate who's a poor skill match just because they're less loaded,
+        nor one who's already more loaded than the excluded (overbooked) user.
+
+        ``task`` (optional): the task being reassigned. When provided, skill
+        match is scored against its title/description via
+        ResourceLevelingService.analyze_task_assignment. Without it, falls
+        back to ranking by availability (utilization) alone.
+
+        Returns (target_member, ai_confidence) or (None, None) if there are no
+        other board members.
+        """
+        from kanban.resource_leveling import ResourceLevelingService
+
+        board_members = list(User.objects.filter(board_memberships__board=board).exclude(id=excluded_user_id))
+        if not board_members:
+            return None, None
+
+        leveling_service = ResourceLevelingService(workspace=board.workspace)
+        overbooked_profile = leveling_service.get_or_create_profile(
+            User.objects.get(id=excluded_user_id), board=board
+        )
+
+        target_member = None
+        target_utilization = None
+
+        if task is not None:
+            analysis = leveling_service.analyze_task_assignment(
+                task, potential_assignees=board_members, board=board
+            )
+            scored_candidates = [
+                c for c in analysis.get('all_candidates', []) if c['user_id'] != excluded_user_id
+            ]
+            if scored_candidates:
+                top = max(scored_candidates, key=lambda c: c['overall_score'])
+                target_member = next((m for m in board_members if m.id == top['user_id']), None)
+                target_utilization = top['actual_utilization']
+
+        if target_member is None:
+            # No task context (or no scored candidates) — fall back to
+            # ranking by availability alone.
+            candidates = [
+                (member, leveling_service.get_or_create_profile(member, board=board).utilization_percentage)
+                for member in board_members
+            ]
+            target_member, target_utilization = min(candidates, key=lambda c: c[1])
+
+        # Confidence scales with how much lower the candidate's utilization is
+        # versus the overbooked user's — a bigger gap is stronger evidence the
+        # reassignment will actually help.
+        gap = overbooked_profile.utilization_percentage - target_utilization
+        ai_confidence = max(50, min(90, round(70 + gap / 4)))
+        return target_member, ai_confidence
+
     def _suggest_resource_resolutions(self):
         """Suggest resolutions for resource conflicts."""
         suggestions = []
@@ -498,43 +675,44 @@ class ConflictResolutionSuggester:
         
         # Suggestion 1: Reassign one task to another user
         if task1 and task2:
-            # Find users with lower workload
             board = self.conflict.board
-            board_members = board.members.all()
-            
-            for member in board_members:
-                if member.id != user_id:
-                    # Suggest reassigning task2 to this member
-                    resolution = ConflictResolution.objects.create(
-                        conflict=self.conflict,
-                        resolution_type='reassign',
-                        title=f"Reassign '{task2.title}' to {member.get_full_name() or member.username}",
-                        description=f"Move task '{task2.title}' from {user_name} to {member.get_full_name() or member.username} to balance workload.",
-                        ai_confidence=70,
-                        auto_applicable=True,
-                        implementation_data={
-                            'task_id': task2.id,
-                            'old_assignee_id': user_id,
-                            'new_assignee_id': member.id
-                        },
-                        estimated_impact="Reduces workload conflict and balances team capacity"
-                    )
-                    suggestions.append(resolution)
-                    break  # Only suggest first available member
+            target_member, ai_confidence = self.pick_reassignment_candidate(board, user_id, task=task2)
+
+            if target_member:
+                resolution = ConflictResolution.objects.create(
+                    conflict=self.conflict,
+                    resolution_type='reassign',
+                    title=f"Reassign '{task2.title}' to {target_member.get_full_name() or target_member.username}",
+                    description=f"Move task '{task2.title}' from {user_name} to {target_member.get_full_name() or target_member.username} to balance workload.",
+                    ai_confidence=ai_confidence,
+                    ai_reasoning=self._get_resolution_reasoning('reassign'),
+                    auto_applicable=True,
+                    implementation_data={
+                        'task_id': task2.id,
+                        'old_assignee_id': user_id,
+                        'new_assignee_id': target_member.id
+                    },
+                    estimated_impact="Reduces workload conflict and balances team capacity"
+                )
+                suggestions.append(resolution)
         
         # Suggestion 2: Reschedule one task
         if task2:
-            # Try to get due date from conflict_data first
-            task1_due = data.get('task1_dates', {}).get('due')
-            if task1_due:
-                new_start = datetime.fromisoformat(task1_due.replace('Z', '+00:00')).date() + timedelta(days=1)
-            elif task1.due_date:
-                # Fall back to task's actual due date
+            # Prefer the blocking task's LIVE due date. The conflict_data
+            # snapshot (task1_dates.due) is captured at detection time and is
+            # NOT updated by the demo date-refresh, so it drifts stale and can
+            # collapse new_start to a no-op. Only fall back to the snapshot when
+            # the live task has no due date.
+            if task1.due_date:
                 task1_due_date = task1.due_date.date() if hasattr(task1.due_date, 'date') else task1.due_date
                 new_start = task1_due_date + timedelta(days=1)
             else:
-                new_start = None
-            
+                task1_due = data.get('task1_dates', {}).get('due')
+                if task1_due:
+                    new_start = datetime.fromisoformat(task1_due.replace('Z', '+00:00')).date() + timedelta(days=1)
+                else:
+                    new_start = None
+
             if new_start:
                 resolution = ConflictResolution.objects.create(
                     conflict=self.conflict,
@@ -542,9 +720,14 @@ class ConflictResolutionSuggester:
                     title=f"Reschedule '{task2.title}' to start after first task",
                     description=f"Delay start of '{task2.title}' until '{task1.title}' is complete.",
                     ai_confidence=85,
+                    ai_reasoning=self._get_resolution_reasoning('reschedule'),
                     auto_applicable=True,
+                    # after_task_id lets _auto_apply recompute the new start from
+                    # the blocking task's LIVE due date at apply time (robust to
+                    # demo date drift); new_start_date is only a fallback.
                     implementation_data={
                         'task_id': task2.id,
+                        'after_task_id': task1.id,
                         'new_start_date': str(new_start)
                     },
                     estimated_impact="Eliminates overlap and creates sequential workflow"
@@ -579,6 +762,7 @@ class ConflictResolutionSuggester:
                 title=f"Extend due date by 1 week",
                 description=f"Extend due date for '{task.title}' to {new_due.strftime('%Y-%m-%d')} to allow completion.",
                 ai_confidence=75,
+                ai_reasoning=self._get_resolution_reasoning('adjust_dates'),
                 auto_applicable=True,
                 implementation_data={
                     'task_id': task.id,
@@ -596,6 +780,7 @@ class ConflictResolutionSuggester:
                 title=f"Add team member to accelerate task",
                 description=f"Assign additional team member to '{task.title}' to help meet deadline.",
                 ai_confidence=65,
+                ai_reasoning=self._get_resolution_reasoning('add_resources'),
                 auto_applicable=False,
                 estimated_impact="Accelerates completion through collaboration"
             )
@@ -620,14 +805,32 @@ class ConflictResolutionSuggester:
             logger.warning(f"Could not find task for dependency conflict {self.conflict.id}")
             return suggestions
         
-        # Suggestion 1: Adjust dates to after dependencies
+        # Suggestion 1: Adjust dates to after dependencies.
+        # The blocking task = the dependency with the latest due date. When one
+        # exists we can auto-apply: _auto_apply recomputes the new start from
+        # that task's LIVE due date (via after_task_id) and preserves duration.
+        # Without a dated dependency we can't compute anything, so the card
+        # stays manual (auto_applicable=False) rather than silently no-op.
+        blocking_task = task.dependencies.filter(
+            due_date__isnull=False
+        ).order_by('-due_date').first()
+        dep_impl_data = {}
+        dep_auto = False
+        if blocking_task:
+            dep_impl_data = {
+                'task_id': task.id,
+                'after_task_id': blocking_task.id,
+            }
+            dep_auto = True
         resolution = ConflictResolution.objects.create(
             conflict=self.conflict,
             resolution_type='adjust_dates',
             title=f"Reschedule to after blocking tasks",
             description=f"Adjust dates for '{task.title}' to start after dependencies are complete.",
             ai_confidence=80,
-            auto_applicable=False,
+            ai_reasoning=self._get_resolution_reasoning('adjust_dates'),
+            auto_applicable=dep_auto,
+            implementation_data=dep_impl_data,
             estimated_impact="Ensures proper task sequencing"
         )
         suggestions.append(resolution)
@@ -639,6 +842,7 @@ class ConflictResolutionSuggester:
             title=f"Re-evaluate task dependencies",
             description=f"Review whether all dependencies for '{task.title}' are truly required.",
             ai_confidence=60,
+            ai_reasoning=self._get_resolution_reasoning('modify_dependency'),
             auto_applicable=False,
             estimated_impact="May enable parallel work and faster completion"
         )
@@ -647,32 +851,60 @@ class ConflictResolutionSuggester:
         return suggestions
     
     def _apply_learned_patterns(self, suggestions):
-        """Apply learned patterns to adjust confidence scores."""
+        """Apply learned patterns to adjust confidence scores and append historical context."""
         for suggestion in suggestions:
-            boost = ResolutionPattern.get_confidence_boost(
-                self.conflict.conflict_type,
-                suggestion.resolution_type,
-                self.conflict.board
-            )
-            
+            # Fetch the full pattern object so we can access times_used and success_rate,
+            # not just the pre-computed confidence_boost float.
+            pattern = None
+
+            # Board-specific pattern takes priority (requires ≥ 3 uses for reliability)
+            if self.conflict.board:
+                pattern = ResolutionPattern.objects.filter(
+                    conflict_type=self.conflict.conflict_type,
+                    resolution_type=suggestion.resolution_type,
+                    board=self.conflict.board,
+                    times_used__gte=3,
+                ).first()
+
+            # Fall back to global pattern (requires ≥ 5 uses)
+            if pattern is None:
+                pattern = ResolutionPattern.objects.filter(
+                    conflict_type=self.conflict.conflict_type,
+                    resolution_type=suggestion.resolution_type,
+                    board__isnull=True,
+                    times_used__gte=5,
+                ).first()
+
+            boost = pattern.confidence_boost if pattern else 0.0
+
             # Apply boost (with bounds checking)
             new_confidence = max(0, min(100, suggestion.ai_confidence + boost))
             suggestion.ai_confidence = int(new_confidence)
-            
-            # Add reasoning about learning
-            if boost > 0:
-                suggestion.ai_reasoning = (
-                    f"This resolution type has worked well in the past "
-                    f"(+{boost:.0f}% confidence based on team history)."
+
+            # Build historical note only when we have real pattern data
+            historical_note = ''
+            if pattern is not None:
+                n = pattern.times_used
+                success_pct = round(pattern.success_rate * 100)
+                boost_val = pattern.confidence_boost
+                boost_sign = '+' if boost_val >= 0 else ''
+                scope = 'this board' if pattern.board else 'your projects'
+                historical_note = (
+                    f"Based on {n} past resolution{'s' if n != 1 else ''} of this type on "
+                    f"{scope}, this approach has a {success_pct}% success rate "
+                    f"({boost_sign}{boost_val:.0f}% confidence adjustment)."
                 )
-            elif boost < 0:
-                suggestion.ai_reasoning = (
-                    f"This resolution type has had mixed results in the past "
-                    f"({boost:.0f}% confidence adjustment)."
-                )
-            
+
+            # Append historical note to existing reasoning — never overwrite substantive text
+            if historical_note:
+                existing = suggestion.ai_reasoning.strip()
+                if existing:
+                    suggestion.ai_reasoning = existing + ' ' + historical_note
+                else:
+                    suggestion.ai_reasoning = historical_note
+
             suggestion.save()
-        
+
         # Sort by confidence
         suggestions.sort(key=lambda s: s.ai_confidence, reverse=True)
         return suggestions

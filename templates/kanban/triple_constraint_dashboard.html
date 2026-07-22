@@ -9,7 +9,11 @@
     .constraint-badge-on-track  { background: rgba(40,167,69,.15);  color: #1a6e30; border: 1px solid rgba(40,167,69,.4); }
     .constraint-badge-at-risk   { background: rgba(255,193,7,.15);  color: #856404; border: 1px solid rgba(255,193,7,.4); }
     .constraint-badge-over      { background: rgba(220,53,69,.15);  color: #842029; border: 1px solid rgba(220,53,69,.4); }
-    .constraint-badge-unknown   { background: rgba(108,117,125,.1); color: #6c757d; border: 1px solid rgba(108,117,125,.3); }
+    .constraint-badge-unknown   { background: rgba(108,117,125,.1); color: var(--text-muted); border: 1px solid rgba(108,117,125,.3); }
+
+    [data-bs-theme="dark"] .constraint-badge-on-track { background: rgba(40,167,69,.22);  color: #81c995; border-color: rgba(40,167,69,.5); }
+    [data-bs-theme="dark"] .constraint-badge-at-risk  { background: rgba(255,193,7,.22);  color: #fdd663; border-color: rgba(255,193,7,.5); }
+    [data-bs-theme="dark"] .constraint-badge-over     { background: rgba(220,53,69,.22);  color: #f28b82; border-color: rgba(220,53,69,.5); }
 
     /* ── Constraint cards ── */
     .constraint-card {
@@ -23,14 +27,14 @@
     .constraint-card.time  { border-top-color: #dc3545; }
 
     .big-number { font-size: 2.2rem; font-weight: 700; line-height: 1; }
-    .sub-label  { font-size: .78rem; color: #6c757d; margin-top: 2px; }
+    .sub-label  { font-size: .78rem; color: var(--text-muted); margin-top: 2px; }
 
     /* ── What‑if simulator ── */
     .sim-row { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
-    .sim-label { width: 90px; font-weight: 600; font-size: .85rem; color: #495057; flex-shrink: 0; }
+    .sim-label { width: 90px; font-weight: 600; font-size: .85rem; color: var(--text-secondary); flex-shrink: 0; }
     .sim-slider { flex: 1; }
     .sim-value  { width: 120px; text-align: right; font-size: .85rem; font-weight: 600; }
-    .sim-impact { font-size: .78rem; color: #6c757d; }
+    .sim-impact { font-size: .78rem; color: var(--text-muted); }
 
     /* ── AI result pane ── */
     .health-score-circle {
@@ -41,17 +45,27 @@
     .health-circle-healthy  { border-color: #198754; color: #198754; background: rgba(25,135,84,.08); }
     .health-circle-at-risk  { border-color: #ffc107; color: #856404; background: rgba(255,193,7,.08); }
     .health-circle-critical { border-color: #dc3545; color: #dc3545; background: rgba(220,53,69,.08); }
-    .health-circle-unknown  { border-color: #6c757d; color: #6c757d; background: rgba(108,117,125,.08); }
+    .health-circle-unknown  { border-color: #6c757d; color: var(--text-muted); background: rgba(108,117,125,.08); }
 
-    .scenario-card { border-left: 4px solid #0d6efd; border-radius: 6px; padding: 14px 16px; background: #f8f9fa; margin-bottom: 12px; }
+    .scenario-card { border-left: 4px solid #0d6efd; border-radius: 6px; padding: 14px 16px; background: var(--bg-tertiary); margin-bottom: 12px; }
     .scenario-card.reduce-scope    { border-color: #0d6efd; }
     .scenario-card.increase-budget { border-color: #198754; }
     .scenario-card.extend-timeline { border-color: #dc3545; }
+    .scenario-card h6 { color: var(--text-primary) !important; }
+    .scenario-card p.text-muted { color: var(--text-secondary) !important; }
+    .scenario-card small { color: var(--text-secondary) !important; }
+    .scenario-card small strong { color: var(--text-primary) !important; }
+
+    /* ── Project Confidence heart icon + score badge ── */
+    .pc-heart-icon { color: #6f42c1; }
+    .pc-score-badge { font-size: .7rem; background: rgba(111,66,193,.12); color: #6f42c1; border: 1px solid rgba(111,66,193,.3); }
+    [data-bs-theme="dark"] .pc-heart-icon { color: #b794f6; }
+    [data-bs-theme="dark"] .pc-score-badge { background: rgba(183,148,246,.18); color: #b794f6; border-color: rgba(183,148,246,.4); }
 
     /* ── Relationship matrix ── */
     .matrix-table th, .matrix-table td { text-align: center; vertical-align: middle; padding: 10px; }
     .matrix-table thead th { background: #f1f3f5; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
-    .matrix-table .driver-cell { font-weight: 600; background: #f8f9fa; }
+    .matrix-table .driver-cell { font-weight: 600; background: var(--bg-tertiary); }
 </style>
 {% endblock %}
 
@@ -71,8 +85,22 @@
                             <li class="breadcrumb-item active">Triple Constraint</li>
                         </ol>
                     </nav>
+                    <button class="btn btn-link btn-sm ps-0 mt-1 text-decoration-none fw-semibold"
+                            style="color: #0d6efd;"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#tripleConstraintGuide"
+                            aria-expanded="false"
+                            aria-controls="tripleConstraintGuide">
+                        <i class="fas fa-question-circle me-1"></i>
+                        <span id="triple-constraint-guide-label">How does this work?</span>
+                        <i class="fas fa-chevron-down ms-1 triple-constraint-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+                    </button>
                 </div>
                 <div class="d-flex gap-2 flex-wrap">
+                    <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back btn-sm">
+                        <i class="fas fa-arrow-left"></i> Back to Board
+                    </a>
                     <a href="{% url 'scope_dashboard' board.id %}" class="btn btn-outline-primary btn-sm">
                         <i class="fas fa-chart-area me-1"></i>Scope Dashboard
                     </a>
@@ -99,6 +127,150 @@
                 Changing one constraint forces a trade-off in at least one of the others.
                 Use this page to understand the current balance and simulate what-if scenarios
                 before committing to a change.
+            </div>
+        </div>
+    </div>
+
+    <!-- ── How It Works — Collapsible Guide ────────────────────────────────── -->
+    <div class="collapse mb-4" id="tripleConstraintGuide">
+        <div class="card border shadow-sm">
+            <div class="card-body p-4">
+                <div class="row g-4">
+
+                    <!-- What is this? -->
+                    <div class="col-12">
+                        <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-balance-scale text-primary me-2"></i>What is the Triple Constraint Dashboard?</h6>
+                        <p class="mb-0 small text-secondary">Every project is constrained by three forces: <strong>Scope</strong> (what you build), <strong>Cost</strong> (what you spend), and <strong>Time</strong> (when you deliver). Changing any one of them forces a trade-off in at least one of the others — this is the Iron Triangle. This dashboard visualises the live balance of all three, lets you simulate changes before committing, and auto-computes a <strong>Project Confidence score</strong> (0–100) that honestly answers: <em>"How likely is this project to land on time and on budget?"</em></p>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Iron Triangle -->
+                    <div class="col-12">
+                        <h6 class="mb-3 fw-semibold text-dark"><i class="fas fa-draw-polygon me-1 text-primary"></i>The Iron Triangle — the fundamental trade-off</h6>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #0d6efd !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-expand-arrows-alt text-primary"></i>
+                                        <strong class="small text-primary">Scope</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-1">What your team will build. Tracked via task count, completion rate, and scope change history.</p>
+                                    <p class="small text-secondary mb-0"><em>Expand scope → need more time or money (or both).</em></p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #198754 !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-dollar-sign text-success"></i>
+                                        <strong class="small text-success">Cost</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-1">What you spend. Tracked via budget allocation vs actual spend and burn rate projection.</p>
+                                    <p class="small text-secondary mb-0"><em>Cut budget → must reduce scope or extend timeline.</em></p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #dc3545 !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-clock text-danger"></i>
+                                        <strong class="small text-danger">Time</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-1">When you deliver. Tracked via burndown velocity, predicted completion date, and delay probability.</p>
+                                    <p class="small text-secondary mb-0"><em>Compress timeline → must reduce scope or add cost.</em></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Project Confidence Score -->
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-heartbeat fa-2x" style="color:#6f42c1;"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Project Confidence Score</h6>
+                                <p class="small mb-2 text-secondary">A composite score (0–100) that auto-computes from your three constraint dimensions in real time. No manual setup required. Three confidence bands:</p>
+                                <div class="d-flex flex-column gap-1 mb-2">
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#198754; min-width:90px;">HEALTHY 70–100</span>
+                                        <span class="text-dark">Project on track, no intervention needed</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#d97706; min-width:90px;">AT RISK 40–69</span>
+                                        <span class="text-dark">One or more constraints under pressure</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#c0392b; min-width:90px;">CRITICAL 0–39</span>
+                                        <span class="text-dark">Major constraint failure. AI proposes 3 recovery options.</span>
+                                    </div>
+                                </div>
+                                <div class="p-2 rounded bg-warning-subtle border-start border-warning border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-robot text-warning me-1"></i>When confidence drops below 40%, the AI Coach automatically proposes three concrete recovery options: reduce scope, extend timeline, or add resources.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Signal Log + Workflow -->
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-history fa-2x text-info"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Signal Log</h6>
+                                <p class="small mb-2 text-secondary">Every event that moves the confidence needle is recorded automatically. You can also log manual signals.</p>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="text-muted">Signal type</th>
+                                                <th class="text-muted">Auto-detected?</th>
+                                                <th class="text-muted">Score impact</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td class="text-dark">Task completions</td>
+                                                <td class="text-success"><i class="fas fa-check me-1"></i>Yes</td>
+                                                <td class="text-success">+</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-dark">Scope changes</td>
+                                                <td class="text-success"><i class="fas fa-check me-1"></i>Yes</td>
+                                                <td class="text-danger">−</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-dark">Budget changes</td>
+                                                <td class="text-success"><i class="fas fa-check me-1"></i>Yes</td>
+                                                <td class="text-muted">±</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-dark">Manual signal</td>
+                                                <td class="text-muted">You log it</td>
+                                                <td class="text-muted">±</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="mt-3">
+                                    <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-list-ol me-1 text-info"></i>Workflow</h6>
+                                    <ol class="small ps-3 mb-0 text-secondary">
+                                        <li class="mb-1">View the three constraint cards — understand your current balance</li>
+                                        <li class="mb-1">Check the Project Confidence score — healthy, at risk, or critical?</li>
+                                        <li class="mb-1">Read the Signal Log — what moved the needle recently?</li>
+                                        <li class="mb-1">Use the What-If simulator to model trade-off scenarios</li>
+                                        <li>Log manual signals for events the system can't auto-detect</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
             </div>
         </div>
     </div>
@@ -232,7 +404,7 @@
                     <!-- Target + predicted dates -->
                     <div class="row text-center mb-2">
                         <div class="col-6">
-                            <div class="big-number" style="font-size:1.0rem; color:#495057;">{{ time_data.target_date }}</div>
+                            <div class="big-number" style="font-size:1.0rem; color:var(--text-secondary);">{{ time_data.target_date }}</div>
                             <div class="sub-label">
                                 Target
                                 {% if time_data.deadline_source == 'burndown' %}
@@ -268,9 +440,13 @@
                         {% if time_data.days_ahead_behind is not None %}
                         <small class="text-muted">
                             Variance:
-                            <strong class="{% if time_data.days_ahead_behind < 0 %}text-danger{% elif time_data.days_ahead_behind > 0 %}text-success{% endif %}">
-                                {% if time_data.days_ahead_behind >= 0 %}+{% endif %}{{ time_data.days_ahead_behind }} days
-                            </strong>
+                            {% if time_data.days_ahead_behind > 0 %}
+                            <strong class="text-success">{{ time_data.days_ahead_behind }} days ahead</strong>
+                            {% elif time_data.days_ahead_behind < 0 %}
+                            <strong class="text-danger">{{ time_data.days_ahead_behind|cut:"-" }} days behind</strong>
+                            {% else %}
+                            <strong class="text-success">On schedule</strong>
+                            {% endif %}
                         </small>
                         {% else %}
                         <small class="text-muted">Variance: <strong>—</strong> (run burndown prediction)</small>
@@ -465,21 +641,283 @@
         </div>
     </div>
 
+    <!-- ── Project Confidence ─────────────────────────────────────────────────── -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card" style="border-top: 4px solid #6f42c1;">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0">
+                            <i class="fas fa-heartbeat me-2 pc-heart-icon"></i>Project Confidence
+                            <span class="badge ms-2 fw-normal pc-score-badge">
+                                Score 0–100
+                            </span>
+                        </h5>
+                        <small class="text-muted">
+                            Auto-computed composite — scope stability × 30%, budget health × 30%, schedule adherence × 40%.
+                            <span
+                                tabindex="0"
+                                data-bs-toggle="tooltip"
+                                data-bs-placement="right"
+                                title="This score blends three dimensions into one number. Because budget and scope can be perfect while schedule lags, the composite may read higher than the AI's standalone opinion below, which weights velocity more aggressively. Both views are intentional — they highlight different risks."
+                                style="cursor:help; color:var(--text-muted);"
+                                aria-label="Why this score may differ from the AI analysis"
+                            ><i class="fas fa-info-circle"></i> May differ from AI score below</span>
+                        </small>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <form method="post" action="{% url 'recalculate_confidence' board.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-secondary btn-sm" title="Recalculate now">
+                                <i class="fas fa-sync-alt me-1"></i>Recalculate
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if confidence_data %}
+                    <div class="row align-items-center mb-3">
+                        <!-- Score circle -->
+                        <div class="col-auto text-center">
+                            <div class="health-score-circle
+                                {% if confidence_data.color == 'success' %}health-circle-healthy
+                                {% elif confidence_data.color == 'warning' %}health-circle-at-risk
+                                {% else %}health-circle-critical{% endif %}"
+                                 style="width:100px;height:100px;font-size:2rem;">
+                                <span>{{ confidence_data.score|floatformat:0 }}</span>
+                                <small style="font-size:.6rem;font-weight:400;">/ 100</small>
+                            </div>
+                            <div class="mt-1">
+                                <span class="badge bg-{{ confidence_data.color }}">{{ confidence_data.status_label }}</span>
+                            </div>
+                        </div>
+                        <!-- Dimension breakdown -->
+                        <div class="col">
+                            <!-- Tip for new users -->
+                            <div class="alert alert-light py-2 px-3 mb-3" style="font-size:.82rem; border-left: 3px solid #6f42c1;">
+                                <i class="fas fa-lightbulb me-1" style="color:#6f42c1;"></i>
+                                <strong>How this works:</strong> This score is computed automatically from your project data — no setup needed.
+                                It combines scope stability, budget health, and schedule adherence into one number. If it drops below 40, the AI Coach
+                                will suggest recovery options.
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <div class="p-2 rounded bg-light text-center">
+                                        <div class="fw-bold {% if confidence_data.scope_score >= 70 %}text-success{% elif confidence_data.scope_score >= 40 %}text-warning{% else %}text-danger{% endif %}" style="font-size:1.3rem;">
+                                            {{ confidence_data.scope_score|floatformat:0 }}
+                                        </div>
+                                        <small class="text-muted d-block">Scope</small>
+                                        <div class="progress mt-1" style="height:4px;">
+                                            <div class="progress-bar bg-primary" style="width:{{ confidence_data.scope_score|floatformat:0 }}%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-2 rounded bg-light text-center">
+                                        <div class="fw-bold {% if confidence_data.budget_score >= 70 %}text-success{% elif confidence_data.budget_score >= 40 %}text-warning{% else %}text-danger{% endif %}" style="font-size:1.3rem;">
+                                            {{ confidence_data.budget_score|floatformat:0 }}
+                                        </div>
+                                        <small class="text-muted d-block">Budget</small>
+                                        <div class="progress mt-1" style="height:4px;">
+                                            <div class="progress-bar bg-success" style="width:{{ confidence_data.budget_score|floatformat:0 }}%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-2 rounded bg-light text-center">
+                                        <div class="fw-bold {% if confidence_data.schedule_score >= 70 %}text-success{% elif confidence_data.schedule_score >= 40 %}text-warning{% else %}text-danger{% endif %}" style="font-size:1.3rem;">
+                                            {{ confidence_data.schedule_score|floatformat:0 }}
+                                        </div>
+                                        <small class="text-muted d-block">Schedule</small>
+                                        <div class="progress mt-1" style="height:4px;">
+                                            <div class="progress-bar bg-danger" style="width:{{ confidence_data.schedule_score|floatformat:0 }}%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Trend -->
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                {% if confidence_data.trend == 'improving' %}
+                                <span class="badge bg-success"><i class="fas fa-arrow-up me-1"></i>Improving</span>
+                                {% elif confidence_data.trend == 'declining' %}
+                                <span class="badge bg-danger"><i class="fas fa-arrow-down me-1"></i>Declining</span>
+                                {% else %}
+                                <span class="badge bg-secondary"><i class="fas fa-minus me-1"></i>Stable</span>
+                                {% endif %}
+                                {% if confidence_data.previous_score %}
+                                <small class="text-muted">Previous: {{ confidence_data.previous_score|floatformat:0 }}%</small>
+                                {% endif %}
+                                <small class="text-muted ms-auto">Last computed: {{ confidence_data.computed_at|timesince }} ago</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Confidence History Chart -->
+                    <div class="mt-3">
+                        <h6 class="text-muted mb-2"><i class="fas fa-chart-line me-1"></i>30-Day Confidence Trend</h6>
+                        {% if confidence_history|length >= 2 %}
+                        <!-- Fixed-height, position:relative wrapper is REQUIRED:
+                             the chart uses responsive + maintainAspectRatio:false,
+                             which sizes to the parent. Without a constrained parent
+                             the canvas re-expands every resize tick and grows
+                             infinitely. -->
+                        <div style="position: relative; height: 220px;">
+                            <canvas id="confidenceChart"></canvas>
+                        </div>
+                        {% else %}
+                        <div class="text-center py-3 border rounded bg-light">
+                            <i class="fas fa-chart-line fa-2x text-muted mb-2"></i>
+                            <p class="text-muted small mb-0">
+                                Not enough data yet — the trend chart will appear after at least two data points are recorded.
+                                Each recalculation adds a point.
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {% else %}
+                    <!-- No score yet -->
+                    <div class="text-center py-4">
+                        <i class="fas fa-heartbeat fa-3x text-muted mb-3"></i>
+                        <h6 class="text-muted">No confidence score yet</h6>
+                        <p class="text-muted small mb-3">
+                            Click <strong>Recalculate</strong> to compute your first project confidence score,
+                            or wait for the next automatic computation (runs every 6 hours).
+                        </p>
+                        <form method="post" action="{% url 'recalculate_confidence' board.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-sync-alt me-1"></i>Compute Now
+                            </button>
+                        </form>
+                    </div>
+                    {% endif %}
+
+                    <!-- Recent Signals -->
+                    {% if recent_signals %}
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted mb-0"><i class="fas fa-signal me-1"></i>Recent Signals</h6>
+                        <button class="btn btn-sm btn-outline-secondary" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#addSignalForm">
+                            <i class="fas fa-plus me-1"></i>Add Signal
+                        </button>
+                    </div>
+                    <!-- Tip for new users -->
+                    <p class="text-muted small mb-2">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Signals are events that affect your project confidence. Most are detected automatically (task completions, scope changes).
+                        You can also add manual signals for events the system can't detect, like stakeholder approval or a team member leaving.
+                    </p>
+                    <!-- Manual signal form (collapsed) -->
+                    <div class="collapse mb-3" id="addSignalForm">
+                        <div class="card card-body bg-light">
+                            <form method="post" action="{% url 'record_manual_signal' board.id %}">
+                                {% csrf_token %}
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-md-3">
+                                        <label class="form-label small">Type</label>
+                                        <select name="signal_type" class="form-select form-select-sm">
+                                            <option value="manual_positive">Positive Update</option>
+                                            <option value="manual_negative">Negative Update</option>
+                                            <option value="milestone_hit">Milestone Hit</option>
+                                            <option value="milestone_missed">Milestone Missed</option>
+                                            <option value="blocker_added">Blocker Emerged</option>
+                                            <option value="blocker_resolved">Blocker Resolved</option>
+                                            <option value="team_member_joined">Team Member Joined</option>
+                                            <option value="team_member_left">Team Member Left</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-7">
+                                        <label class="form-label small">Description</label>
+                                        <input type="text" name="description" class="form-control form-control-sm"
+                                               placeholder="Briefly describe what happened..." required maxlength="500">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                                            <i class="fas fa-paper-plane me-1"></i>Log
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <!-- Signal list -->
+                    <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                        <table class="table table-sm table-hover mb-0" style="font-size:.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:30%;">Event</th>
+                                    <th style="width:10%;">Impact</th>
+                                    <th>Description</th>
+                                    <th style="width:18%;">When</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for signal in recent_signals %}
+                                <tr>
+                                    <td>
+                                        {% if signal.impact == 'positive' %}
+                                        <i class="fas fa-arrow-up text-success me-1"></i>
+                                        {% elif signal.impact == 'negative' %}
+                                        <i class="fas fa-arrow-down text-danger me-1"></i>
+                                        {% else %}
+                                        <i class="fas fa-minus text-muted me-1"></i>
+                                        {% endif %}
+                                        {{ signal.get_signal_type_display }}
+                                    </td>
+                                    <td>
+                                        {% if signal.strength > 0 %}
+                                        <span class="text-success">+{{ signal.strength|floatformat:2 }}</span>
+                                        {% elif signal.strength < 0 %}
+                                        <span class="text-danger">{{ signal.strength|floatformat:2 }}</span>
+                                        {% else %}
+                                        <span class="text-muted">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-truncate" style="max-width:300px;" title="{{ signal.description }}">{{ signal.description }}</td>
+                                    <td class="text-muted">{{ signal.timestamp|timesince }} ago</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ── AI Analysis ───────────────────────────────────────────────────────── -->
     <div class="row mb-4">
         <div class="col-12">
             <div class="card">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="fas fa-robot me-2 text-primary"></i>AI Triple Constraint Analysis</h5>
-                    <form method="post">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="ai_analyze">
-                        <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="fas fa-wand-magic-sparkles me-1"></i>Get AI Recommendation
-                        </button>
-                    </form>
+                    <div>
+                        <h5 class="mb-0">
+                            <i class="fas fa-robot me-2 text-primary"></i>AI Triple Constraint Analysis
+                            <span class="badge ms-2 fw-normal"
+                                  style="font-size:.7rem; background:rgba(13,110,253,.1); color:#0d6efd; border:1px solid rgba(13,110,253,.25);">
+                                Score 1–10
+                            </span>
+                        </h5>
+                        <small class="text-muted">
+                            Independent AI opinion — weights velocity and momentum more heavily than the composite above.
+                            <span
+                                tabindex="0"
+                                data-bs-toggle="tooltip"
+                                data-bs-placement="right"
+                                title="The AI analyses narrative risk — if velocity has stalled it will flag 'At Risk' even when budget and scope are healthy. The Project Confidence score above averages all three dimensions mathematically. Use both together: the composite tells you the balanced picture; the AI tells you what's most likely to hurt you first."
+                                style="cursor:help; color:var(--text-muted);"
+                                aria-label="How this score relates to Project Confidence"
+                            ><i class="fas fa-info-circle"></i> Complements the composite score above</span>
+                        </small>
+                    </div>
+                    <button type="button" class="btn btn-primary btn-sm" id="tcAiAnalyzeBtn" onclick="runTripleConstraintAiAnalysis()">
+                        <i class="fas fa-wand-magic-sparkles me-1"></i>Get AI Recommendation
+                    </button>
                 </div>
-                <div class="card-body">
+                <div class="card-body" id="tcAiAnalysisBody">
 
                     {% if ai_error %}
                     <div class="alert alert-danger">
@@ -498,14 +936,14 @@
                                 <span>{{ ai_result.overall_health_score }}</span>
                                 <small style="font-size:.6rem; font-weight:400;">/ 10</small>
                             </div>
-                            <div class="text-center mt-1" style="font-size:.65rem; color:#6c757d; white-space:nowrap;">
+                            <div class="text-center mt-1" style="font-size:.65rem; color:var(--text-muted); white-space:nowrap;">
                                 Health Score
                                 <span
                                     tabindex="0"
                                     data-bs-toggle="tooltip"
                                     data-bs-placement="bottom"
                                     title="Health score out of 10. Below 3 = Critical, 3&#8211;5 = At Risk, 6&#8211;8 = Healthy, 9&#8211;10 = Excellent."
-                                    style="cursor:help; color:#6c757d;"
+                                    style="cursor:help; color:var(--text-muted);"
                                     aria-label="Health score scale info"
                                 >ⓘ</span>
                             </div>
@@ -647,44 +1085,13 @@
         </div>
     </div>
 
-    <!-- ── Living Commitment Protocols widget ─────────────────────────────── -->
-    {% if commitment_health %}
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-2">
-                    <h6 class="mb-0"><i class="bi bi-shield-check me-2 text-primary"></i>Team Commitment Confidence</h6>
-                    <a href="{% url 'commitment_dashboard' board.id %}" class="btn btn-sm btn-outline-primary">
-                        View All Protocols
-                    </a>
-                </div>
-                <div class="card-body py-3">
-                    <div class="row g-3 text-center">
-                        <div class="col-md-4">
-                            <div class="fs-3 fw-bold text-{% if commitment_health.avg_confidence >= 70 %}success{% elif commitment_health.avg_confidence >= 40 %}warning{% else %}danger{% endif %}">
-                                {{ commitment_health.avg_confidence }}%
-                            </div>
-                            <div class="text-muted small">Avg Portfolio Confidence</div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="fs-3 fw-bold text-warning">{{ commitment_health.at_risk_count }}</div>
-                            <div class="text-muted small">At Risk Protocols</div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="fs-3 fw-bold text-danger">{{ commitment_health.critical_count }}</div>
-                            <div class="text-muted small">Critical Protocols</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
 </div><!-- /container-fluid -->
 {% endblock %}
 
 {% block extra_js %}
+<!-- Chart.js — required by the 30-Day Confidence Trend chart below. base.html
+     does not load it globally, so include it here (mirrors burndown_dashboard). -->
+<script src="{% static 'js/chart.umd.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
 /* ── What‑if simulator ───────────────────────────────────────────────────── */
 var WIF = {
@@ -753,6 +1160,176 @@ function simUpdate(driver) {
     document.getElementById('simTimeDelta').innerHTML   = timeAdj !== 0 ? fmtDelta(timeAdj, ' wks') : '—';
 }
 
+/* ── AI Triple Constraint Analysis — Spectra loader + AJAX ─────────────── */
+var TC_BOARD_ID = {{ board.id }};
+var TC_CSRF = document.querySelector('[name=csrfmiddlewaretoken]') ?
+    document.querySelector('[name=csrfmiddlewaretoken]').value :
+    (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
+
+function tcEsc(s) {
+    var d = document.createElement('div');
+    d.textContent = (s === null || s === undefined) ? '' : String(s);
+    return d.innerHTML;
+}
+
+function tcHealthCircleClass(label) {
+    if (label === 'Healthy') return 'health-circle-healthy';
+    if (label === 'At Risk') return 'health-circle-at-risk';
+    return 'health-circle-critical';
+}
+
+function tcFeasibilityBadgeClass(feasibility) {
+    if (feasibility === 'High') return 'bg-success';
+    if (feasibility === 'Medium') return 'bg-warning text-dark';
+    return 'bg-danger';
+}
+
+function tcScenarioClass(title) {
+    var t = (title || '').toLowerCase();
+    if (t.indexOf('scope') !== -1 || t.indexOf('reduce') !== -1) return 'reduce-scope';
+    if (t.indexOf('budget') !== -1 || t.indexOf('cost') !== -1) return 'increase-budget';
+    return 'extend-timeline';
+}
+
+function tcRenderAiResult(ai) {
+    var mostStressedHTML = '';
+    if (ai.most_stressed_constraint && ai.most_stressed_constraint !== 'None') {
+        mostStressedHTML =
+            '<span class="badge bg-warning text-dark ms-2" style="font-size:.75rem;">' +
+            '<i class="fas fa-exclamation-triangle me-1"></i>' + tcEsc(ai.most_stressed_constraint) + ' is most stressed</span>';
+    }
+
+    var insightsHTML = '';
+    if (ai.constraint_insights) {
+        insightsHTML =
+            '<div class="row mb-4">' +
+                '<div class="col-md-4"><div class="p-3 rounded" style="background: rgba(13,110,253,.05); border-left: 3px solid #0d6efd;">' +
+                    '<h6 class="text-primary mb-1"><i class="fas fa-expand-arrows-alt me-1"></i>Scope</h6>' +
+                    '<p class="mb-0 small">' + tcEsc(ai.constraint_insights.scope) + '</p></div></div>' +
+                '<div class="col-md-4"><div class="p-3 rounded" style="background: rgba(25,135,84,.05); border-left: 3px solid #198754;">' +
+                    '<h6 class="text-success mb-1"><i class="fas fa-dollar-sign me-1"></i>Cost</h6>' +
+                    '<p class="mb-0 small">' + tcEsc(ai.constraint_insights.cost) + '</p></div></div>' +
+                '<div class="col-md-4"><div class="p-3 rounded" style="background: rgba(220,53,69,.05); border-left: 3px solid #dc3545;">' +
+                    '<h6 class="text-danger mb-1"><i class="fas fa-clock me-1"></i>Time</h6>' +
+                    '<p class="mb-0 small">' + tcEsc(ai.constraint_insights.time) + '</p></div></div>' +
+            '</div>';
+    }
+
+    var scenariosHTML = '';
+    if (ai.trade_off_scenarios && ai.trade_off_scenarios.length) {
+        scenariosHTML += '<h6 class="mb-3"><i class="fas fa-exchange-alt me-2"></i>Trade-off Scenarios</h6>';
+        ai.trade_off_scenarios.forEach(function (s) {
+            var detailsHTML = '';
+            if (s.estimated_cost_saving_pct) {
+                detailsHTML += '<small><i class="fas fa-dollar-sign text-success me-1"></i>Cost saving: <strong>~' + tcEsc(s.estimated_cost_saving_pct) + '%</strong></small>';
+            }
+            if (s.estimated_time_saving_days) {
+                detailsHTML += '<small><i class="fas fa-clock text-danger me-1"></i>Time saving: <strong>~' + tcEsc(s.estimated_time_saving_days) + ' days</strong></small>';
+            }
+            if (s.recommended_budget_increase_pct) {
+                detailsHTML += '<small><i class="fas fa-arrow-up text-warning me-1"></i>Budget increase: <strong>~' + tcEsc(s.recommended_budget_increase_pct) + '%</strong></small>';
+            }
+            if (s.recommended_extension_weeks) {
+                detailsHTML += '<small><i class="fas fa-calendar-plus text-danger me-1"></i>Extend by: <strong>~' + tcEsc(s.recommended_extension_weeks) + ' weeks</strong></small>';
+            }
+            if (s.estimated_scope_tasks_deliverable) {
+                detailsHTML += '<small><i class="fas fa-tasks text-primary me-1"></i>Tasks deliverable: <strong>~' + tcEsc(s.estimated_scope_tasks_deliverable) + '</strong></small>';
+            }
+            scenariosHTML +=
+                '<div class="scenario-card ' + tcScenarioClass(s.title) + '">' +
+                    '<div class="d-flex justify-content-between align-items-start">' +
+                        '<div class="flex-grow-1">' +
+                            '<h6 class="mb-1">' + tcEsc(s.title) +
+                                '<span class="badge ms-2 ' + tcFeasibilityBadgeClass(s.feasibility) + '" style="font-size:.7rem;">' + tcEsc(s.feasibility) + ' feasibility</span>' +
+                            '</h6>' +
+                            '<p class="mb-1 small text-muted">' + tcEsc(s.description) + '</p>' +
+                            '<div class="d-flex gap-3 mt-1 flex-wrap">' + detailsHTML + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+        });
+    }
+
+    var recommendedActionHTML = '';
+    if (ai.recommended_action) {
+        recommendedActionHTML =
+            '<div class="alert alert-primary d-flex align-items-start gap-2 mt-3">' +
+                '<i class="fas fa-lightbulb fa-lg mt-1 flex-shrink-0"></i>' +
+                '<div><strong>Recommended Action:</strong> ' + tcEsc(ai.recommended_action) + '</div>' +
+            '</div>';
+    }
+
+    var optimalConfigHTML = '';
+    if (ai.optimal_configuration) {
+        var oc = ai.optimal_configuration;
+        optimalConfigHTML =
+            '<div class="row mt-3">' +
+                '<div class="col-12"><h6 class="mb-2"><i class="fas fa-star me-2 text-warning"></i>Optimal Configuration</h6></div>' +
+                '<div class="col-md-4"><div class="bg-light rounded p-2"><small class="text-muted d-block">Scope</small><span class="small">' + tcEsc(oc.scope_recommendation) + '</span></div></div>' +
+                '<div class="col-md-4"><div class="bg-light rounded p-2"><small class="text-muted d-block">Cost</small><span class="small">' + tcEsc(oc.cost_recommendation) + '</span></div></div>' +
+                '<div class="col-md-4"><div class="bg-light rounded p-2"><small class="text-muted d-block">Time</small><span class="small">' + tcEsc(oc.time_recommendation) + '</span></div></div>' +
+            '</div>';
+    }
+
+    return (
+        '<div class="row align-items-center mb-4">' +
+            '<div class="col-auto">' +
+                '<div class="health-score-circle ' + tcHealthCircleClass(ai.overall_health_label) + '">' +
+                    '<span>' + tcEsc(ai.overall_health_score) + '</span><small style="font-size:.6rem; font-weight:400;">/ 10</small>' +
+                '</div>' +
+                '<div class="text-center mt-1" style="font-size:.65rem; color:var(--text-muted); white-space:nowrap;">' +
+                    'Health Score ' +
+                    '<span tabindex="0" data-bs-toggle="tooltip" data-bs-placement="bottom" ' +
+                    'title="Health score out of 10. Below 3 = Critical, 3&#8211;5 = At Risk, 6&#8211;8 = Healthy, 9&#8211;10 = Excellent." ' +
+                    'style="cursor:help; color:var(--text-muted);" aria-label="Health score scale info">ⓘ</span>' +
+                '</div>' +
+            '</div>' +
+            '<div class="col">' +
+                '<h5 class="mb-1">' + tcEsc(ai.overall_health_label) + mostStressedHTML + '</h5>' +
+                '<p class="text-muted mb-0">' + tcEsc(ai.risk_summary) + '</p>' +
+            '</div>' +
+        '</div>' +
+        insightsHTML + scenariosHTML + recommendedActionHTML + optimalConfigHTML
+    );
+}
+
+function runTripleConstraintAiAnalysis() {
+    var body = document.getElementById('tcAiAnalysisBody');
+    var btn = document.getElementById('tcAiAnalyzeBtn');
+    var saved = body.innerHTML;
+
+    body.innerHTML = '<div id="tcAiLoadingSlot"></div>';
+    var loader = PrizmLoading.showSpectra(document.getElementById('tcAiLoadingSlot'), {
+        messageKey: 'tripleConstraint',
+        subtitle: 'Spectra is analysing Scope, Cost & Time…'
+    });
+    var busy = PrizmLoading.buttonBusy(btn, { label: 'Analysing…' });
+
+    fetch("{% url 'triple_constraint_ai_analyze' board.id %}", {
+        method: 'POST',
+        headers: { 'X-CSRFToken': TC_CSRF, 'Content-Type': 'application/json' },
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+        loader.complete();
+        busy.done();
+        if (data.ok) {
+            body.innerHTML = tcRenderAiResult(data.ai_result);
+            body.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+                new bootstrap.Tooltip(el);
+            });
+        } else {
+            body.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i>' + tcEsc(data.error || 'AI analysis failed.') + '</div>';
+        }
+    })
+    .catch(function () {
+        loader.stop();
+        busy.done();
+        body.innerHTML = saved;
+        alert('Network error. Please try again.');
+    });
+}
+
 /* initialise display on page load */
 document.addEventListener('DOMContentLoaded', function() {
     simUpdate('scope');
@@ -760,6 +1337,86 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
         new bootstrap.Tooltip(el);
     });
+
+    /* ── Confidence Trend Chart ──────────────────────────────────── */
+    {% if confidence_history|length >= 2 %}
+    var confCanvas = document.getElementById('confidenceChart');
+    if (confCanvas && typeof Chart !== 'undefined') {
+        var confData = {{ confidence_history|safe }};
+        new Chart(confCanvas, {
+            type: 'line',
+            data: {
+                labels: confData.map(function(d) { return d.date; }),
+                datasets: [
+                    {
+                        label: 'Composite',
+                        data: confData.map(function(d) { return d.score; }),
+                        borderColor: '#6f42c1',
+                        backgroundColor: 'rgba(111,66,193,0.08)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3,
+                    },
+                    {
+                        label: 'Scope',
+                        data: confData.map(function(d) { return d.scope; }),
+                        borderColor: '#0d6efd',
+                        borderDash: [4,4],
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 0,
+                    },
+                    {
+                        label: 'Budget',
+                        data: confData.map(function(d) { return d.budget; }),
+                        borderColor: '#198754',
+                        borderDash: [4,4],
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 0,
+                    },
+                    {
+                        label: 'Schedule',
+                        data: confData.map(function(d) { return d.schedule; }),
+                        borderColor: '#dc3545',
+                        borderDash: [4,4],
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 0,
+                    },
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                },
+                scales: {
+                    y: { min: 0, max: 100, ticks: { callback: function(v) { return v + '%'; } } },
+                    x: { ticks: { maxTicksLimit: 10, autoSkip: true, font: { size: 10 } } },
+                }
+            }
+        });
+    }
+    {% endif %}
+
+    // Guide toggle label
+    var tcGuide = document.getElementById('tripleConstraintGuide');
+    if (tcGuide) {
+        tcGuide.addEventListener('shown.bs.collapse', function() {
+            var label = document.getElementById('triple-constraint-guide-label');
+            if (label) label.textContent = 'Hide guide';
+            var chevron = document.querySelector('.triple-constraint-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+        });
+        tcGuide.addEventListener('hidden.bs.collapse', function() {
+            var label = document.getElementById('triple-constraint-guide-label');
+            if (label) label.textContent = 'How does this work?';
+            var chevron = document.querySelector('.triple-constraint-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+        });
+    }
 });
 </script>
 {% endblock %}

@@ -32,19 +32,19 @@
     }
     
     .nav-tabs a:hover { 
-        background: #f9fafb;
-        color: #1f2937;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
     }
     
     .nav-tabs a.active { 
-        background: white;
+        background: var(--card-bg);
         color: #667eea;
-        border-color: #e5e7eb;
+        border-color: var(--border-color);
         border-bottom-color: white;
     }
     
     .search-box {
-        background: white;
+        background: var(--card-bg);
         border-radius: 12px;
         padding: 30px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.05);
@@ -54,7 +54,7 @@
     
     .search-box h2 {
         margin: 0 0 20px 0;
-        color: #333;
+        color: var(--text-primary);
     }
     
     .search-form {
@@ -95,7 +95,7 @@
     }
     
     .result-card {
-        background: white;
+        background: var(--card-bg);
         border-radius: 12px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         overflow: hidden;
@@ -125,7 +125,7 @@
     
     .info-item {
         padding: 15px;
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-radius: 8px;
     }
     
@@ -157,7 +157,7 @@
     .no-result {
         text-align: center;
         padding: 50px;
-        color: #999;
+        color: var(--text-muted);
     }
     
     .no-result .icon {
@@ -200,7 +200,7 @@
     
     .risk-bar-fill {
         height: 100%;
-        background: white;
+        background: var(--card-bg);
     }
 </style>
 {% endblock %}
@@ -359,7 +359,7 @@
             <div class="result-body" style="padding: 0;">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead>
-                        <tr style="background: #f8f9fa;">
+                        <tr style="background: var(--bg-tertiary);">
                             <th style="padding: 12px; text-align: left;">Session</th>
                             <th style="padding: 12px; text-align: left;">Mode</th>
                             <th style="padding: 12px; text-align: left;">AI Used</th>

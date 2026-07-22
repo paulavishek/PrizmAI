@@ -6,6 +6,7 @@ Every database write is wrapped in try / except and returns a structured dict.
 """
 import logging
 import re
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Q
 from django.urls import reverse
@@ -31,20 +32,40 @@ class SpectraActionService:
 
     @staticmethod
     def _user_has_board_access(user, board):
-        """Return True if *user* is a member of (or creator of) *board*."""
-        if board.created_by_id == user.id:
-            return True
-        return board.members.filter(id=user.id).exists()
+        """Return True if *user* has any access (including viewer) to *board*."""
+        from ai_assistant.utils.rbac_utils import can_spectra_read_board
+        return can_spectra_read_board(user, board)
+
+    @staticmethod
+    def _user_can_modify_board(user, board):
+        """Return True if *user* can create/edit/delete content on *board* (not viewer)."""
+        from ai_assistant.utils.rbac_utils import can_spectra_write_board
+        return can_spectra_write_board(user, board)
+
+    @staticmethod
+    def _user_can_manage_board(user, board):
+        """Return True if *user* has owner-level access on *board*."""
+        from ai_assistant.utils.rbac_utils import can_spectra_manage_board
+        return can_spectra_manage_board(user, board)
+
+    @staticmethod
+    def _viewer_denial_message(board):
+        """Standard denial message for viewer-role users attempting writes."""
+        return (
+            f"You have **viewer** access on **{board.name}**, which is read-only. "
+            "I can answer questions about this board, but I can't create, edit, or "
+            "delete content on your behalf. Please ask a board owner to upgrade your role."
+        )
 
     @staticmethod
     def _resolve_column(board):
-        """Find the 'To Do' column (or fall back to the first column)."""
+        """Find the To Do-type column (or fall back to the first column)."""
         from kanban.models import Column
+        from kanban.column_semantics import column_type_q
 
         col = Column.objects.filter(
-            board=board,
-            name__iregex=r'^(to do|todo)$',
-        ).first()
+            column_type_q('todo', field=''), board=board,
+        ).order_by('position').first()
         if not col:
             col = Column.objects.filter(board=board).order_by('position').first()
         return col
@@ -56,14 +77,44 @@ class SpectraActionService:
 
         Returns ``(user_obj, None)`` on success, or
         ``(None, member_names_list)`` on failure.
+        The member_names_list is formatted as a numbered list for easy selection.
         """
         name_lower = name.lower().strip()
         if not name_lower:
             return None, []
-        candidates = list(board.members.all())
+
+        # Detect group names — these can't resolve to a single user
+        _GROUP_NAMES = {
+            'board_members', 'board members', 'team', 'everyone',
+            'all', 'all members', 'the team', 'whole team',
+        }
+        if name_lower in _GROUP_NAMES:
+            candidates = list(get_user_model().objects.filter(board_memberships__board=board))
+            if board.created_by and board.created_by not in candidates:
+                candidates.append(board.created_by)
+            candidates.sort(key=lambda u: (u.get_full_name() or u.username).lower())
+            member_names = [
+                f"{i + 1}. {u.get_full_name() or u.username}"
+                for i, u in enumerate(candidates)
+            ]
+            return None, member_names
+
+        candidates = list(get_user_model().objects.filter(board_memberships__board=board))
         if board.created_by and board.created_by not in candidates:
             candidates.append(board.created_by)
 
+        # Sort candidates consistently by display name for stable numbering
+        candidates.sort(key=lambda u: (u.get_full_name() or u.username).lower())
+
+        # Try number-based selection (1-based index)
+        try:
+            num = int(name_lower)
+            if 1 <= num <= len(candidates):
+                return candidates[num - 1], None
+        except (ValueError, TypeError):
+            pass
+
+        # Exact match: username, full name, first name, or last name
         for u in candidates:
             full = u.get_full_name().lower()
             if (
@@ -74,8 +125,15 @@ class SpectraActionService:
             ):
                 return u, None
 
+        # Partial match: name starts with input or input starts with name
+        for u in candidates:
+            full = u.get_full_name().lower()
+            if full.startswith(name_lower) or u.first_name.lower().startswith(name_lower):
+                return u, None
+
         member_names = [
-            u.get_full_name() or u.username for u in candidates
+            f"{i + 1}. {u.get_full_name() or u.username}"
+            for i, u in enumerate(candidates)
         ]
         return None, member_names
 
@@ -97,8 +155,13 @@ class SpectraActionService:
         from kanban.audit_utils import log_model_change
 
         try:
-            # Permission check
-            if not self._user_has_board_access(user, board):
+            # Permission check — must be member or owner to create tasks
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {
+                        'success': False,
+                        'error': self._viewer_denial_message(board),
+                    }
                 return {
                     'success': False,
                     'error': "You don't have access to this board.",
@@ -192,41 +255,46 @@ class SpectraActionService:
                 organization = user.profile.organization
 
             with transaction.atomic():
+                # Resolve workspace
+                ws = None
+                if hasattr(user, 'profile') and user.profile:
+                    ws = user.profile.active_workspace
+                    if ws and ws.is_demo and not is_demo_mode:
+                        ws = None  # Don't put real boards into demo workspace
+                    if not ws and not is_demo_mode:
+                        from kanban.workspace_utils import get_or_create_real_workspace
+                        ws = get_or_create_real_workspace(user)
+
                 board = Board(
                     name=collected_data['name'],
                     description=collected_data.get('description', '') or '',
                     organization=organization,
                     created_by=user,
+                    workspace=ws,
                 )
                 # Tag the board so it shows up in demo workspace (and is
                 # excluded from the personal workspace).
                 if is_demo_mode:
                     board.created_by_session = f'spectra_demo_{user.id}'
                 board.save()
-                board.members.add(user)
+                board.owner = user
+                board.save(update_fields=['owner'])
 
-                # Assign Admin role via RBAC if organization exists
-                if organization:
-                    try:
-                        from kanban.permission_models import Role, BoardMembership
-                        admin_role = Role.objects.filter(
-                            organization=organization,
-                            name='Admin',
-                        ).first()
-                        if admin_role:
-                            BoardMembership.objects.create(
-                                board=board,
-                                user=user,
-                                role=admin_role,
-                                added_by=user,
-                            )
-                    except Exception as rbac_err:
-                        logger.warning('Spectra RBAC setup failed for board %s: %s', board.id, rbac_err)
+                # Create RBAC membership for the creator as Owner
+                from kanban.models import BoardMembership
+                BoardMembership.objects.get_or_create(
+                    board=board, user=user,
+                    defaults={'role': 'owner', 'added_by': user}
+                )
 
                 # Create 3 default columns (matching existing board creation behaviour)
                 default_columns = ['To Do', 'In Progress', 'Done']
                 for i, col_name in enumerate(default_columns):
                     Column.objects.create(name=col_name, board=board, position=i)
+
+                # Auto-add workspace members to the new board
+                from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+                auto_add_workspace_members_to_board(board)
 
             # Audit trail (non-critical — outside the atomic block)
             try:
@@ -260,7 +328,17 @@ class SpectraActionService:
         from kanban.automation_models import AutomationRule, AutomationTemplate
 
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_manage_board(user, board):
+                if self._user_has_board_access(user, board):
+                    from ai_assistant.utils.rbac_utils import get_user_board_role
+                    role = get_user_board_role(user, board)
+                    return {
+                        'success': False,
+                        'error': (
+                            f"Managing automations on **{board.name}** requires **owner** access. "
+                            f"You're currently a **{role}**."
+                        ),
+                    }
                 return {'success': False, 'error': "You don't have access to this board."}
 
             # Map number → template by ID order
@@ -327,7 +405,9 @@ class SpectraActionService:
         from messaging.models import ChatRoom, ChatMessage
 
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
                 return {'success': False, 'error': "You don't have access to this board."}
 
             # Resolve recipient
@@ -397,13 +477,15 @@ class SpectraActionService:
         from kanban.models import Task
 
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
                 return {'success': False, 'error': "You don't have access to this board."}
 
             # Resolve task by name using fuzzy matching
             task_name = collected_data.get('task_name', '')
             board_tasks = list(Task.objects.filter(
-                column__board=board, is_archived=False,
+                column__board=board,
             ).select_related('column'))
 
             matched = self._fuzzy_match_task(task_name, board_tasks)
@@ -484,6 +566,11 @@ class SpectraActionService:
         from kanban.models import CalendarEvent
 
         try:
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
+                return {'success': False, 'error': "You don't have access to this board."}
+
             title = collected_data.get('title', 'Untitled Event')
 
             # Parse start datetime
@@ -505,6 +592,8 @@ class SpectraActionService:
             if event_type not in valid_types:
                 event_type = 'meeting'
 
+            from kanban.utils.demo_protection import user_is_demo
+
             with transaction.atomic():
                 event = CalendarEvent.objects.create(
                     title=title,
@@ -515,9 +604,11 @@ class SpectraActionService:
                     description=collected_data.get('description', ''),
                     board=board,
                     created_by=user,
+                    is_demo=user_is_demo(user),
                 )
-                # Add creator as participant
-                event.participants.add(user)
+                # Add creator as participant — accepted, since organizing your
+                # own event isn't an invitation you need to respond to.
+                event.participants.add(user, through_defaults={'status': 'accepted'})
 
                 # Resolve and add other participants
                 participants = collected_data.get('participants', [])
@@ -555,7 +646,9 @@ class SpectraActionService:
         ``retrospective_type`` (str, optional), ``manual_insights`` (str, optional).
         """
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
                 return {'success': False, 'error': "You don't have access to this board."}
 
             from ai_assistant.utils.conversation_flow import _parse_date
@@ -579,6 +672,7 @@ class SpectraActionService:
                 board=board,
                 period_start=start_dt.date() if hasattr(start_dt, 'date') else start_dt,
                 period_end=end_dt.date() if hasattr(end_dt, 'date') else end_dt,
+                user=user,
             )
             retro = generator.create_retrospective(
                 created_by=user,
@@ -617,7 +711,17 @@ class SpectraActionService:
         from kanban.automation_models import AutomationRule
 
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_manage_board(user, board):
+                if self._user_has_board_access(user, board):
+                    from ai_assistant.utils.rbac_utils import get_user_board_role
+                    role = get_user_board_role(user, board)
+                    return {
+                        'success': False,
+                        'error': (
+                            f"Managing automations on **{board.name}** requires **owner** access. "
+                            f"You're currently a **{role}**."
+                        ),
+                    }
                 return {'success': False, 'error': "You don't have access to this board."}
 
             name = collected_data.get('name', 'Untitled Automation')
@@ -671,7 +775,17 @@ class SpectraActionService:
         from kanban.automation_models import ScheduledAutomation
 
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_manage_board(user, board):
+                if self._user_has_board_access(user, board):
+                    from ai_assistant.utils.rbac_utils import get_user_board_role
+                    role = get_user_board_role(user, board)
+                    return {
+                        'success': False,
+                        'error': (
+                            f"Managing automations on **{board.name}** requires **owner** access. "
+                            f"You're currently a **{role}**."
+                        ),
+                    }
                 return {'success': False, 'error': "You don't have access to this board."}
 
             name = collected_data.get('name', 'Untitled Scheduled Automation')
@@ -744,8 +858,10 @@ class SpectraActionService:
         from kanban.models import Task, Column
 
         try:
-            if not self._user_has_board_access(user, board):
-                return {'success': False, 'error': 'Access denied.'}
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
+                return {'success': False, 'error': 'You don\'t have access to this board.'}
 
             task_name = collected_data.get('task_name', '').strip()
             field = collected_data.get('field', '').strip().lower()
@@ -756,7 +872,7 @@ class SpectraActionService:
 
             # Resolve the task
             tasks = list(Task.objects.filter(
-                column__board=board, is_archived=False,
+                column__board=board,
             ).select_related('column', 'assigned_to'))
 
             matched = self._fuzzy_match_task(task_name, tasks)
@@ -774,10 +890,16 @@ class SpectraActionService:
 
             # Apply the update based on field
             if field == 'status':
-                # "done", "complete" → move to last column; otherwise match column name
-                val_lower = new_value.lower()
-                if val_lower in ('done', 'complete', 'completed', 'finished'):
-                    target_col = Column.objects.filter(board=board).order_by('-position').first()
+                # A "done"-type value → move to the board's Done column (fall back
+                # to the last column); otherwise match the column name.
+                from kanban.column_semantics import classify_column_name, column_type_q
+                wants_done = classify_column_name(new_value) == 'done'
+                if wants_done:
+                    target_col = (
+                        Column.objects.filter(column_type_q('done', field=''), board=board)
+                        .order_by('-position').first()
+                        or Column.objects.filter(board=board).order_by('-position').first()
+                    )
                 else:
                     target_col = Column.objects.filter(
                         board=board, name__icontains=new_value,
@@ -790,9 +912,9 @@ class SpectraActionService:
                 task.save(update_fields=['column', 'position', 'updated_at'])
                 # Proactive insight: remaining open tasks
                 insight = ''
-                if val_lower in ('done', 'complete', 'completed', 'finished'):
+                if wants_done:
                     remaining = Task.objects.filter(
-                        column__board=board, is_archived=False,
+                        column__board=board,
                     ).exclude(column=target_col).count()
                     if remaining > 0:
                         insight = f"\n\n💡 **{remaining} tasks** remaining on this board."
@@ -904,16 +1026,40 @@ class SpectraActionService:
         if len(substr) > 1 and len(substr) <= 5:
             return substr  # disambiguation
 
-        # Word overlap scoring
-        query_words = set(query_lower.split())
+        # Reverse substring: task title contained in query
+        rev_substr = [t for t in tasks if t.title.lower() in query_lower]
+        if len(rev_substr) == 1:
+            return rev_substr[0]
+
+        # Word overlap scoring with stemming for gerund forms
+        # Strip common verb suffixes: "reviewing" → "review", "updating" → "updat"
+        def _stem(word):
+            w = word.lower()
+            for suffix in ('ing', 'tion', 'ed', 'ment', 'ness', 'ity'):
+                if w.endswith(suffix) and len(w) - len(suffix) >= 3:
+                    return w[:-len(suffix)]
+            return w
+
+        # Remove filler words from query
+        _filler = {'the', 'a', 'an', 'on', 'for', 'to', 'of', 'my', 'our',
+                    'i', 'we', 'am', 'was', 'is', 'are', 'been', 'worked',
+                    'working', 'today', 'yesterday'}
+        query_words = {w for w in query_lower.split() if w not in _filler}
+        query_stems = {_stem(w) for w in query_words}
+
         scored = []
         for t in tasks:
             title_words = set(t.title.lower().split())
+            title_stems = {_stem(w) for w in title_words}
             if not query_words:
                 continue
-            overlap = len(query_words & title_words) / len(query_words)
-            if overlap >= 0.5:
-                scored.append((overlap, t))
+            # Score using both exact word overlap and stem overlap
+            exact_overlap = len(query_words & title_words)
+            stem_overlap = len(query_stems & title_stems)
+            best_overlap = max(exact_overlap, stem_overlap)
+            score = best_overlap / max(len(query_words), 1)
+            if score >= 0.4:
+                scored.append((score, t))
         scored.sort(key=lambda x: -x[0])
         if scored:
             if len(scored) == 1 or (len(scored) > 1 and scored[0][0] > scored[1][0]):
@@ -1013,7 +1159,9 @@ class SpectraActionService:
         from kanban.commitment_models import CommitmentProtocol, CommitmentBet, UserCredibilityScore
 
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
                 return {'success': False, 'error': "You don't have access to this board."}
 
             commitment_id = collected_data.get('commitment_id')
@@ -1071,5 +1219,104 @@ class SpectraActionService:
 
         except Exception as exc:
             logger.exception('Spectra place_commitment_bet failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    # ── Requirements Analysis ────────────────────────────────────────────────
+
+    def get_requirements_summary(self, user, board, collected_data):
+        """
+        Return a pre-computed summary of all requirements on a board.
+        collected_data keys: board_id
+        """
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            from requirements.spectra_data import get_requirements_context_for_board
+
+            ctx = get_requirements_context_for_board(board)
+            summary = ctx.get('summary', {})
+
+            if summary.get('total', 0) == 0:
+                return {
+                    'success': True,
+                    'message': f"📋 **{board.name}** has no requirements defined yet.",
+                }
+
+            return {
+                'success': True,
+                'message': ctx.get('full_narrative', 'No data available.'),
+            }
+
+        except ImportError:
+            return {'success': False, 'error': 'Requirements feature is not installed.'}
+        except Exception as exc:
+            logger.exception('Spectra get_requirements_summary failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    def analyze_requirements_quality(self, user, board, collected_data):
+        """
+        Return an AI-powered quality overview of all requirements on a board.
+        collected_data keys: board_id
+        """
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            from requirements.spectra_data import get_requirements_quality_overview
+
+            quality = get_requirements_quality_overview(board)
+            narrative = quality.get('narrative', 'No quality data available.')
+
+            return {
+                'success': True,
+                'message': f"🔍 **Requirements Quality Report**\n\n{narrative}",
+            }
+
+        except ImportError:
+            return {'success': False, 'error': 'Requirements feature is not installed.'}
+        except Exception as exc:
+            logger.exception('Spectra analyze_requirements_quality failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    def detect_requirements_gaps(self, user, board, collected_data):
+        """
+        Detect gaps in requirements coverage for a board.
+        collected_data keys: board_id
+        """
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            from requirements.ai_analysis import RequirementsAIAnalyzer
+
+            analyzer = RequirementsAIAnalyzer(board)
+            result = analyzer.detect_gaps()
+
+            parts = [f"📊 **Gap Analysis — {board.name}**\n"]
+            if result.get('summary'):
+                parts.append(result['summary'])
+            if result.get('gaps'):
+                parts.append("\n**Identified Gaps:**")
+                for g in result['gaps'][:5]:
+                    parts.append(f"- [{g.get('severity', 'info').upper()}] {g['area']}")
+                    if g.get('recommendation'):
+                        parts.append(f"  → {g['recommendation']}")
+            if result.get('uncovered_goals'):
+                parts.append(f"\n**Uncovered Goals:** {len(result['uncovered_goals'])}")
+                for o in result['uncovered_goals'][:5]:
+                    parts.append(f"- {o['name']}")
+            if result.get('orphaned_tasks'):
+                parts.append(f"\n**Orphaned Tasks (no requirement):** {len(result['orphaned_tasks'])}")
+
+            return {
+                'success': True,
+                'message': '\n'.join(parts),
+            }
+
+        except ImportError:
+            return {'success': False, 'error': 'Requirements feature is not installed.'}
+        except Exception as exc:
+            logger.exception('Spectra detect_requirements_gaps failed: %s', exc)
             return {'success': False, 'error': str(exc)}
 

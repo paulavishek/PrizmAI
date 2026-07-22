@@ -1,0 +1,25 @@
+{% comment %}
+Spectra loader — the canonical AI loading visual (pulsing robot icon +
+cycling context messages + animated progress bar). Renders hidden; show it by
+toggling `d-none`/`display` on the container and PrizmLoading.autoInit drives it.
+
+Usage:
+  {% include "partials/spectra_loading.html" with target_id="coach-result" messages_key="coachDashboard" %}
+  {% include "partials/spectra_loading.html" with target_id="mem-gaps" messages_key="requirementGap" subtitle="Spectra is reviewing…" %}
+
+Params:
+  target_id    (required) — unique id; container becomes #{{target_id}}-loading
+  messages_key (required) — key into PrizmLoading.messages (see prizm_loading.js)
+  subtitle     (optional) — static subtitle under the message (omit for the
+                            default "Spectra is analysing…")
+  duration     (optional) — ms to spread messages across (default 55000)
+
+Show:  el.classList.remove('d-none')   /  el.style.display = ''
+Hide:  el.classList.add('d-none')      /  el.style.display = 'none'
+{% endcomment %}
+<div id="{{ target_id }}-loading"
+     class="prizm-spectra-loading-host d-none"
+     data-prizm-variant="spectra"
+     data-prizm-messages="{{ messages_key }}"{% if subtitle %}
+     data-prizm-subtitle="{{ subtitle }}"{% endif %}{% if duration %}
+     data-prizm-duration="{{ duration }}"{% endif %}></div>

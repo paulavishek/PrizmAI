@@ -45,14 +45,83 @@ def demo_context(request):
         context['show_demo_limitations'] = False  # No limitations for authenticated users
         context['is_authenticated_exploring_demo'] = False
 
-        # V2 onboarding demo toggle (profile-based, not session-based)
+        # Single-tier personal sandbox (profile-based, not session-based)
         if request.user.is_authenticated:
             try:
-                context['is_viewing_demo'] = getattr(request.user.profile, 'is_viewing_demo', False)
+                profile = request.user.profile
+                context['is_viewing_demo'] = getattr(profile, 'is_viewing_demo', False)
+                # Demo Info navbar dropdown: the user's primary sandbox board for
+                # the "Open board" link (mirrors the lookup in views.dashboard).
+                if context['is_viewing_demo']:
+                    from kanban.models import Board
+                    context['demo_board'] = (
+                        Board.objects.filter(
+                            owner=request.user, is_sandbox_copy=True
+                        ).order_by('-created_at').first()
+                        or Board.objects.filter(
+                            is_official_demo_board=True
+                        ).first()
+                    )
+                # Workspace context for the workspace switcher dropdown.
+                # Workspaces are private to their owner, so the chooser lists
+                # only the workspaces this user owns, plus the shared demo
+                # workspace.  Organization is no longer read here.
+                active_ws = getattr(profile, 'active_workspace', None)
+                context['active_workspace'] = active_ws
+
+                # Topbar avatar stack — small, capped query (at most 5 rows),
+                # only for a real (non-demo) active workspace.
+                if active_ws and not active_ws.is_demo:
+                    context['workspace_member_users'] = [
+                        m.user for m in
+                        active_ws.memberships.select_related('user__profile').order_by('-added_at')[:5]
+                    ]
+                else:
+                    context['workspace_member_users'] = []
+
+                from kanban.models import Workspace
+                from kanban.utils.demo_protection import get_demo_workspace
+                from kanban.permissions import owns_active_workspace
+
+                own_ws = list(
+                    Workspace.objects.filter(
+                        created_by=request.user,
+                        is_demo=False,
+                        is_active=True,
+                    ).order_by('-created_at')
+                )
+                demo_ws = get_demo_workspace()
+                context['real_workspaces'] = own_ws
+                context['demo_workspace'] = demo_ws
+                context['user_workspaces'] = own_ws + ([demo_ws] if demo_ws else [])
+
+                # Any authenticated user may create a workspace.
+                context['can_setup_workspace'] = True
+                # Rename / delete / manage-members are the active workspace
+                # owner's privileges (never on the demo workspace).
+                _owns_active = owns_active_workspace(request.user)
+                context['can_rename_workspace'] = _owns_active
+                context['can_delete_workspace'] = _owns_active
+                context['can_manage_ws_members'] = (
+                    _owns_active
+                    and not getattr(profile, 'is_viewing_demo', False)
+                )
             except Exception:
                 context['is_viewing_demo'] = False
+                context['active_workspace'] = None
+                context['workspace_member_users'] = []
+                context['user_workspaces'] = []
+                context['real_workspaces'] = []
+                context['demo_workspace'] = None
+                context['can_setup_workspace'] = False
         else:
             context['is_viewing_demo'] = False
+            context['active_workspace'] = None
+            context['workspace_member_users'] = []
+            context['user_workspaces'] = []
+            context['real_workspaces'] = []
+            context['demo_workspace'] = None
+            context['can_setup_workspace'] = False
         
         # User gets their standard quotas (not demo quotas)
         if request.user.is_authenticated:
@@ -149,8 +218,8 @@ def demo_context(request):
         # Role display names
         role_names = {
             'admin': 'Demo Admin (Solo)',
-            'member': 'Sam Rivera (Member)',
-            'viewer': 'Jordan Taylor (Viewer)'
+            'member': 'Marcus Chen (Member)',
+            'viewer': 'Elena Vasquez (Viewer)'
         }
         context['demo_role_display'] = role_names.get(
             context['current_demo_role'], 
@@ -192,13 +261,14 @@ def conflict_count(request):
 
         if demo_mode:
             boards = Board.objects.filter(
-                Q(is_official_demo_board=True)
-                | Q(created_by_session=f'spectra_demo_{request.user.id}')
+                owner=request.user,
+                is_sandbox_copy=True,
             ).distinct()
         else:
             boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user),
+                Q(created_by=request.user) | Q(memberships__user=request.user),
                 is_official_demo_board=False,
+                is_sandbox_copy=False,
             ).exclude(
                 created_by_session__startswith='spectra_demo_'
             ).distinct()
@@ -212,6 +282,23 @@ def conflict_count(request):
         return {'active_conflict_count': count}
     except:
         return {'active_conflict_count': 0}
+
+
+def discovery_count(request):
+    """Expose the Discovery 'ideas to score' count to the global sidebar badge.
+
+    Mirrors the dashboard's own count (kanban.views._get_discovery_widget_counts)
+    so the number shown next to the sidebar Discovery item matches the feature.
+    Returns 0 when unauthenticated, feature-disabled, or on any error.
+    """
+    if not request.user.is_authenticated:
+        return {'sidebar_discovery_to_score': 0}
+    try:
+        from kanban.views import _get_discovery_widget_counts
+        counts = _get_discovery_widget_counts(request.user)
+        return {'sidebar_discovery_to_score': counts.get('discovery_ideas_to_score', 0)}
+    except Exception:
+        return {'sidebar_discovery_to_score': 0}
 
 
 def user_favorites(request):
@@ -233,3 +320,60 @@ def user_favorites(request):
         return {'user_favorites': favorites}
     except Exception:
         return {'user_favorites': []}
+
+
+def preset_features(request):
+    """
+    Inject feature-visibility flags into every template based on the
+    effective workspace preset (lean / professional / enterprise).
+
+    Priority order:
+      1. Demo accounts (persona accounts or is_viewing_demo) → always enterprise
+      2. Board-specific preset (from URL board_id kwarg) → BoardPreset.effective_preset()
+      3. Active-workspace global preset → WorkspacePreset.global_preset
+      4. Fallback → lean (safest default for unknown state)
+    """
+    from kanban.preset_models import build_feature_flags
+
+    if not request.user.is_authenticated:
+        return {'features': build_feature_flags('lean')}
+
+    # Demo accounts always see everything
+    is_demo = False
+    try:
+        profile = request.user.profile
+        is_demo = getattr(profile, 'is_demo_account', False) or \
+                  getattr(profile, 'is_viewing_demo', False)
+    except Exception:
+        pass
+
+    if is_demo:
+        return {'features': build_feature_flags('enterprise')}
+
+    # Try to resolve from a board-specific context
+    preset = None
+    board_id = None
+    if getattr(request, 'resolver_match', None) and request.resolver_match.kwargs:
+        board_id = request.resolver_match.kwargs.get('board_id') or \
+                   request.resolver_match.kwargs.get('pk')
+
+    if board_id:
+        try:
+            from kanban.preset_models import BoardPreset
+            bp = BoardPreset.objects.select_related(
+                'board__workspace__workspace_preset'
+            ).get(board_id=board_id)
+            preset = bp.effective_preset()
+        except Exception:
+            pass
+
+    # Fall back to the active workspace's global preset (the tenant boundary)
+    if preset is None:
+        try:
+            ws = request.user.profile.active_workspace
+            if ws is not None:
+                preset = ws.workspace_preset.global_preset
+        except Exception:
+            pass
+
+    return {'features': build_feature_flags(preset or 'lean')}

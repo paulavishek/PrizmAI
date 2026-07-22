@@ -6,7 +6,7 @@
 {% block extra_css %}
 <style>
     .profile-section-header {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-bottom: 1px solid #dee2e6;
         padding: 0.75rem 1.25rem;
         border-radius: 0;
@@ -15,7 +15,7 @@
         margin: 0;
         font-size: 0.95rem;
         font-weight: 600;
-        color: #343a40;
+        color: var(--text-primary);
     }
     .avatar-upload-wrapper {
         display: flex;
@@ -95,63 +95,55 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2><i class="fas fa-user-circle me-2"></i>My Profile</h2>
-    <button onclick="goBack()" class="btn btn-outline-secondary">
+    <a href="{% url 'dashboard' %}" class="btn-prizm-back">
         <i class="fas fa-arrow-left me-1"></i> Back
-    </button>
+    </a>
 </div>
 <div class="row">
-    <div class="col-md-4">
-        <div class="card shadow mb-4">
-            <div class="profile-section-header card-header">
-                <h5>Profile Information</h5>
-            </div>
-            <div class="card-body text-center">
-                {% if profile.profile_picture %}
-                    <img src="{{ profile.profile_picture.url }}" alt="Profile Picture" class="img-fluid rounded-circle mb-3" style="max-width: 150px;">
-                {% else %}
-                    <div class="bg-light rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 150px; height: 150px;">
-                        <i class="fas fa-user fa-5x text-secondary"></i>
+    <div class="col-12 mb-3">
+        <div class="card shadow">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-4">
+                    <div class="flex-shrink-0">
+                        {% if profile.profile_picture %}
+                            <img src="{{ profile.profile_picture.url }}" alt="Profile Picture" class="rounded-circle" style="width:80px;height:80px;object-fit:cover;">
+                        {% else %}
+                            <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width:80px;height:80px;">
+                                <i class="fas fa-user fa-2x text-secondary"></i>
+                            </div>
+                        {% endif %}
                     </div>
-                {% endif %}
-                
-                <h4>{{ user.username }}</h4>
-                <p class="text-muted">{{ user.email }}</p>
-                
-                <div class="d-flex justify-content-center mb-2">
-                    {% if profile.is_admin %}
-                        <span class="badge bg-danger me-2">Admin</span>
-                    {% else %}
-                        <span class="badge bg-secondary me-2">Member</span>
-                    {% endif %}
-                    
-                    {% if profile.organization %}
-                        <span class="badge bg-info">{{ profile.organization.name }}</span>
-                    {% endif %}
-                </div>
-                
-                <hr>
-                
-                <div class="text-start">
-                    <h6 class="text-muted mb-2"><i class="fas fa-briefcase"></i> Capacity</h6>
-                    <p class="mb-2"><strong>{{ profile.weekly_capacity_hours }}</strong> hours/week</p>
-                    <p class="mb-2"><strong>{{ profile.utilization_percentage|floatformat:0 }}%</strong> utilized</p>
-                    
-                    {% if profile.skills %}
-                        <h6 class="text-muted mb-2 mt-3"><i class="fas fa-code"></i> Skills</h6>
-                        <div class="d-flex flex-wrap gap-1">
+                    <div class="flex-grow-1">
+                        <h5 class="mb-1">{{ user.username }}</h5>
+                        <p class="text-muted mb-1" style="font-size:0.875rem;">{{ user.email }}</p>
+                        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                            {% if profile.is_admin %}
+                                <span class="badge bg-danger">Admin</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Member</span>
+                            {% endif %}
+                            {% if profile.organization %}
+                                <span class="badge bg-info text-dark">{{ profile.organization.name }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-muted mb-2" style="font-size:0.8rem;">
+                            <i class="fas fa-briefcase me-1"></i>{{ profile.weekly_capacity_hours }}h/wk &bull; {{ profile.utilization_percentage|floatformat:0 }}% utilized
+                            <i class="fas fa-info-circle ms-1" title="Workload across all your active boards (flat estimate: 8h per active task), capped at 100%."></i>
+                        </div>
+                        {% if profile.skills %}
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
                             {% for skill in profile.skills %}
-                                {% if skill.name %}
-                                    <span class="badge bg-success">{{ skill.name }}</span>
-                                {% endif %}
+                                {% if skill.name %}<span class="badge" style="background-color:#e0f2fe;color:#0c4a6e;font-weight:500;">{{ skill.name }}</span>{% endif %}
                             {% endfor %}
                         </div>
-                    {% endif %}
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
     </div>
     
-    <div class="col-md-8">
+    <div class="col-12">
         <div class="card shadow">
             <div class="profile-section-header card-header">
                 <h5>Edit Profile</h5>
@@ -159,6 +151,7 @@
             <div class="card-body">
                 <form method="post" enctype="multipart/form-data" id="profile-form">
                     {% csrf_token %}
+                    <input type="hidden" name="form_type" value="profile">
 
                     <!-- Styled Profile Picture Upload -->
                     <div class="mb-3">
@@ -181,10 +174,12 @@
                         </div>
                     </div>
 
-                    <!-- Remaining form fields (excluding profile_picture which is rendered above) -->
+                    <!-- Remaining form fields (excluding profile_picture and the AI-style fields,
+                         which are rendered above / in their own sub-section below) -->
+                    <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
                     {% for field in form %}
-                        {% if field.html_name != 'profile_picture' %}
-                        <div class="mb-3">
+                        {% if field.html_name != 'profile_picture' and field.html_name != 'response_tone' and field.html_name != 'response_length' and field.html_name != 'response_structure' and field.html_name != 'custom_ai_instructions' %}
+                        <div class="mb-3 {% if field.field.required %}required{% endif %}">
                             {{ field.label_tag }}
                             {{ field }}
                             {% if field.help_text %}
@@ -193,10 +188,45 @@
                             {% for error in field.errors %}
                                 <div class="invalid-feedback d-block">{{ error }}</div>
                             {% endfor %}
+                            {% if field.field.required %}
+                            <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> This field is required.</div>
+                            {% endif %}
                         </div>
                         {% endif %}
                     {% endfor %}
-                    
+
+                    <!-- ── Response Style & AI Instructions ─────────────────────────── -->
+                    <hr class="my-4">
+                    <h6 class="fw-semibold mb-1"><i class="fas fa-robot me-2"></i>Response Style &amp; AI Instructions</h6>
+                    <p class="form-text text-muted mb-3">
+                        These preferences shape AI-generated briefs, retrospectives, coaching, and Spectra replies.
+                        Leave on <em>Default</em> to keep the standard style.
+                    </p>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.response_tone.label_tag }}
+                            {{ form.response_tone }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            {{ form.response_length.label_tag }}
+                            {{ form.response_length }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            {{ form.response_structure.label_tag }}
+                            {{ form.response_structure }}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        {{ form.custom_ai_instructions.label_tag }}
+                        {{ form.custom_ai_instructions }}
+                        {% if form.custom_ai_instructions.help_text %}
+                            <div class="form-text text-muted">{{ form.custom_ai_instructions.help_text }}</div>
+                        {% endif %}
+                        {% for error in form.custom_ai_instructions.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
                     <button type="submit" class="btn btn-primary mt-3">Save Changes</button>
                 </form>
             </div>
@@ -219,10 +249,71 @@
             </div>
         </div>
         
+        {# ============================================================ #}
+        {# Google Calendar Integration card #}
+        {# ============================================================ #}
         <div class="card shadow mt-4">
             <div class="profile-section-header card-header">
-                <h5><i class="fas fa-palette me-2"></i>Display Mode</h5>
+                <h5><i class="bi bi-calendar3 me-2"></i>Google Calendar Sync</h5>
             </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    When connected, PrizmAI automatically creates a Google Calendar event for every task assigned to you
+                    that has a due date. When the due date changes, the Calendar event updates too.
+                </p>
+
+                {% if request.user.google_calendar_token %}
+                    {% with token=request.user.google_calendar_token %}
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <span class="badge {% if token.sync_enabled %}bg-success{% else %}bg-secondary{% endif %} px-3 py-2">
+                            <i class="bi bi-{% if token.sync_enabled %}check-circle{% else %}pause-circle{% endif %} me-1"></i>
+                            {% if token.sync_enabled %}Sync Active{% else %}Sync Paused{% endif %}
+                        </span>
+                        <small class="text-muted">Connected {{ token.connected_at|date:"M j, Y" }}</small>
+                        {% if token.last_synced_at %}
+                        <small class="text-muted">Last synced: {{ token.last_synced_at|date:"M j, Y H:i" }}</small>
+                        {% endif %}
+                    </div>
+                    {% if token.last_sync_error %}
+                    <div class="alert alert-warning alert-sm d-flex align-items-start gap-2 py-2 px-3 mb-3" style="font-size:0.85rem;">
+                        <i class="bi bi-exclamation-triangle-fill mt-1 flex-shrink-0"></i>
+                        <div>
+                            <strong>Last sync failed:</strong> {{ token.last_sync_error }}
+                            <div class="mt-1 text-muted" style="font-size:0.8rem;">Check that your Google Calendar connection is still authorised, or disconnect and reconnect.</div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    <div class="d-flex gap-2 flex-wrap">
+                        <form method="post" action="{% url 'google_calendar_toggle_sync' %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-{% if token.sync_enabled %}pause{% else %}play{% endif %} me-1"></i>
+                                {% if token.sync_enabled %}Pause Sync{% else %}Resume Sync{% endif %}
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'google_calendar_disconnect' %}" class="d-inline"
+                              onsubmit="return confirm('Disconnect Google Calendar? Future task updates will not sync.');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                                <i class="bi bi-x-circle me-1"></i> Disconnect
+                            </button>
+                        </form>
+                    </div>
+                    {% endwith %}
+                {% else %}
+                    <a href="{% url 'google_calendar_connect' %}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-calendar-plus me-1"></i> Connect Google Calendar
+                    </a>
+                    <small class="text-muted d-block mt-2">
+                        You will be redirected to Google to grant calendar access.
+                    </small>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card shadow mt-4">
+            <div class="profile-section-header card-header">
+                <h5><i class="fas fa-palette me-2"></i>Display Mode</h5>            </div>
             <div class="card-body">
                 <p class="text-muted small mb-3">Choose how PrizmAI looks on your screen. Your preference is saved and applied on every device you log in from.</p>
                 <div class="row g-3" id="display-mode-selector">
@@ -278,19 +369,255 @@
                     </a>
                 </div>
                 
-                <hr>
-                
-                <div class="alert alert-info mb-0">
-                    <i class="fas fa-info-circle me-2"></i>
-                    <strong>Security Tips:</strong>
-                    <ul class="mb-0 mt-2">
-                        <li>Use a strong, unique password for your account</li>
-                        <li>Change your password regularly</li>
-                        <li>Never share your password with anyone</li>
-                    </ul>
-                </div>
+
             </div>
         </div>
+
+        {# ============================================================ #}
+        {# AI Provider Preferences card — visible to all logged-in users #}
+        {# ============================================================ #}
+        <div id="ai-provider-preferences"></div>
+        <form method="post" id="user-ai-settings-form" class="mt-4">
+            {% csrf_token %}
+            <input type="hidden" name="form_type" value="user_ai_settings">
+
+            <div class="card shadow">
+                <div class="profile-section-header card-header">
+                    <h5><i class="fas fa-robot me-2" style="color:#5046e5;"></i>AI Provider Preferences</h5>
+                </div>
+                <div class="card-body">
+
+                    {# Non-field errors from the AI settings form #}
+                    {% if user_ai_settings_form.non_field_errors %}
+                    <div class="alert alert-danger py-2 mb-3">
+                        {% for error in user_ai_settings_form.non_field_errors %}
+                        <div><i class="fas fa-exclamation-circle me-1"></i>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    {# ---- Switching behaviour notice ---- #}
+                    <div class="alert alert-info py-2 mb-3" style="font-size:.85rem; border-left:4px solid #0d6efd;">
+                        <div class="fw-semibold mb-1">
+                            <i class="fas fa-info-circle me-1"></i>When does a switch take effect?
+                        </div>
+                        <p class="mb-1">Your provider selection applies from your <strong>next conversation</strong> with Spectra. If you're currently in a chat, finish that conversation first — switching mid-conversation is not supported to ensure consistent, high-quality responses.</p>
+                        <p class="mb-0 text-muted" style="font-size:.8rem;"><i class="fas fa-check-circle me-1"></i>Changes to your provider take effect <strong>immediately</strong> for all AI features except active Spectra conversations.</p>
+                    </div>
+
+                    {# ---- Scenario A: override allowed ---- #}
+                    {% if show_provider_override %}
+                    <div class="mb-3">
+                        <label for="id_provider_override" class="form-label fw-semibold" style="font-size:.875rem;">{{ user_ai_settings_form.fields.provider_override.label }}</label>
+                        <select name="provider_override" id="id_provider_override" class="form-select" style="max-width:320px;">
+                            {% for val, label in user_ai_settings_form.fields.provider_override.choices %}
+                            <option value="{{ val }}" {% if user_ai_settings_form.initial.provider_override == val or user_ai_settings_form.data.provider_override == val %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Choose which AI model powers your Spectra conversations and AI features.</div>
+                    </div>
+                    <p class="text-muted" style="font-size:.8rem;">
+                        <i class="fas fa-info-circle me-1"></i>Currently using: <strong>{{ effective_provider }}</strong>
+                    </p>
+
+                    {# ---- Response quality disclaimer ---- #}
+                    <div class="alert py-2 mb-0 mt-2" style="background:#fffbea; border:1px solid #fde68a; font-size:.82rem; border-radius:.375rem;">
+                        <div class="fw-semibold mb-1" style="color:#92400e;">
+                            <i class="fas fa-lightbulb me-1" style="color:#f59e0b;"></i>About response quality
+                        </div>
+                        <p class="mb-0" style="color:#78350f;">Each AI provider has its own strengths. Gemini, OpenAI, and Anthropic Claude all produce high-quality results for most tasks, but you may notice differences in writing style, response length, or how complex analysis is structured. This is normal — try each provider to find which works best for your workflow.</p>
+                    </div>
+                    {# ---- Scenario B: override not allowed ---- #}
+                    {% else %}
+                    <div class="alert alert-secondary py-2 mb-3" style="font-size:.875rem;">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Your workspace uses <strong>{{ org_provider_display }}</strong>.
+                        Contact your Org Admin to enable personal provider preferences.
+                    </div>
+                    <p class="text-muted" style="font-size:.8rem;">
+                        <i class="fas fa-microchip me-1"></i>Currently using model: <strong>{{ effective_model }}</strong> &mdash; use BYOK to choose your own.
+                    </p>
+                    {# Still need to submit provider_override as 'inherit' so the form validates #}
+                    <input type="hidden" name="provider_override" value="inherit">
+                    {% endif %}
+
+                    <hr class="my-3">
+
+                    {# ---- BYOK section: always shown ---- #}
+                    <button class="btn btn-sm btn-outline-secondary" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#user-byok-collapse"
+                            aria-expanded="false" aria-controls="user-byok-collapse">
+                        <i class="fas fa-key me-1"></i>Use Your Own API Key (BYOK)
+                        <i class="fas fa-chevron-down ms-1" style="font-size:.75rem;"></i>
+                    </button>
+
+                    <div class="collapse mt-3" id="user-byok-collapse">
+                        <p class="text-muted" style="font-size:.875rem;">
+                            Provide your own API key to use your own quota and billing instead of the workspace key.
+                        </p>
+
+                        {# ---- BYOK quality note ---- #}
+                        <div class="alert py-2 mb-3" style="background:#f0f9ff; border:1px solid #bae6fd; font-size:.8rem; border-radius:.375rem;">
+                            <i class="fas fa-info-circle me-1" style="color:#0284c7;"></i>
+                            <strong style="color:#0369a1;">Using your own API key?</strong>
+                            <span style="color:#075985;"> Response quality depends on the plan and model tier associated with your key. A free-tier key may have rate limits or use a smaller model than PrizmAI's default.</span>
+                        </div>
+
+                        {% if user_has_byok_key and user_ai %}
+                        <div class="alert alert-info py-2 mb-3" style="font-size:.8rem;">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            Current key: <strong>{{ user_ai.key_last_four }}</strong>
+                            ({{ user_ai.byok_provider|capfirst }})
+                            {% if user_ai.key_validated_at %}
+                            &mdash; validated {{ user_ai.key_validated_at|date:"M d, Y" }}
+                            {% endif %}
+                            {% if user_ai.byok_model %}
+                            &mdash; model: <strong>{{ user_ai.byok_model }}</strong>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-3" style="max-width:320px;">
+                            <label for="id_user_byok_provider" class="form-label" style="font-size:.875rem;">{{ user_ai_settings_form.fields.byok_provider.label }}</label>
+                            <select name="byok_provider" id="id_user_byok_provider" class="form-select form-select-sm">
+                                {% for val, label in user_ai_settings_form.fields.byok_provider.choices %}
+                                <option value="{{ val }}" {% if user_ai_settings_form.initial.byok_provider == val or user_ai_settings_form.data.byok_provider == val %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        {# ---- Per-provider API key instructions ---- #}
+                        <div id="user-byok-instructions-gemini" class="byok-instructions d-none mb-3" style="max-width:500px;">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body py-2 px-3">
+                                    <button class="btn btn-link btn-sm p-0 text-decoration-none fw-semibold collapsed"
+                                            type="button" data-bs-toggle="collapse"
+                                            data-bs-target="#user-byok-guide-gemini"
+                                            aria-expanded="false">
+                                        <i class="fas fa-lightbulb me-1" style="color:#f59e0b;"></i>
+                                        How do I get a Google Gemini API key?
+                                        <i class="fas fa-chevron-down ms-1" style="font-size:.7rem;"></i>
+                                    </button>
+                                    <div class="collapse mt-2" id="user-byok-guide-gemini">
+                                        <ol class="mb-1 ps-3" style="font-size:.8rem;">
+                                            <li>Go to <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer">Google AI Studio</a></li>
+                                            <li>Sign in with your Google account</li>
+                                            <li>Click <strong>Get API Key</strong> &rarr; <strong>Create API key</strong></li>
+                                            <li>Copy the key and paste it in the field below</li>
+                                        </ol>
+                                        <p class="mb-0 text-muted" style="font-size:.75rem;"><i class="fas fa-info-circle me-1"></i>Free tier available. Paid plans at <a href="https://ai.google.dev/pricing" target="_blank" rel="noopener noreferrer">Google AI pricing</a>.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="user-byok-instructions-openai" class="byok-instructions d-none mb-3" style="max-width:500px;">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body py-2 px-3">
+                                    <button class="btn btn-link btn-sm p-0 text-decoration-none fw-semibold collapsed"
+                                            type="button" data-bs-toggle="collapse"
+                                            data-bs-target="#user-byok-guide-openai"
+                                            aria-expanded="false">
+                                        <i class="fas fa-lightbulb me-1" style="color:#f59e0b;"></i>
+                                        How do I get an OpenAI API key?
+                                        <i class="fas fa-chevron-down ms-1" style="font-size:.7rem;"></i>
+                                    </button>
+                                    <div class="collapse mt-2" id="user-byok-guide-openai">
+                                        <ol class="mb-1 ps-3" style="font-size:.8rem;">
+                                            <li>Go to <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer">platform.openai.com</a></li>
+                                            <li>Sign in or create an account</li>
+                                            <li>Navigate to <strong>Settings &rarr; API Keys &rarr; Create new secret key</strong></li>
+                                            <li>Copy the key immediately and paste it below</li>
+                                        </ol>
+                                        <div class="alert alert-warning py-1 px-2 mb-1" style="font-size:.75rem;">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            <strong>Important:</strong> OpenAI only shows your API key once at creation time. If you navigate away without copying it, you will have to create a new key.
+                                        </div>
+                                        <p class="mb-0 text-muted" style="font-size:.75rem;"><i class="fas fa-info-circle me-1"></i>Requires a paid account with billing set up at <a href="https://platform.openai.com/settings/organization/billing" target="_blank" rel="noopener noreferrer">OpenAI billing</a>.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="user-byok-instructions-anthropic" class="byok-instructions d-none mb-3" style="max-width:500px;">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body py-2 px-3">
+                                    <button class="btn btn-link btn-sm p-0 text-decoration-none fw-semibold collapsed"
+                                            type="button" data-bs-toggle="collapse"
+                                            data-bs-target="#user-byok-guide-anthropic"
+                                            aria-expanded="false">
+                                        <i class="fas fa-lightbulb me-1" style="color:#f59e0b;"></i>
+                                        How do I get an Anthropic Claude API key?
+                                        <i class="fas fa-chevron-down ms-1" style="font-size:.7rem;"></i>
+                                    </button>
+                                    <div class="collapse mt-2" id="user-byok-guide-anthropic">
+                                        <ol class="mb-1 ps-3" style="font-size:.8rem;">
+                                            <li>Go to <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">console.anthropic.com</a></li>
+                                            <li>Sign in or create an account</li>
+                                            <li>Navigate to <strong>Settings &rarr; API Keys &rarr; Create Key</strong></li>
+                                            <li>Copy the key and paste it below</li>
+                                        </ol>
+                                        <p class="mb-0 text-muted" style="font-size:.75rem;"><i class="fas fa-info-circle me-1"></i>Requires credits or a paid plan. Manage at <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener noreferrer">Anthropic billing</a>.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3" style="max-width:420px;">
+                            <label for="id_user_raw_api_key" class="form-label" style="font-size:.875rem;">{{ user_ai_settings_form.fields.raw_api_key.label }}</label>
+                            <input type="password" name="raw_api_key" id="id_user_raw_api_key"
+                                   class="form-control form-control-sm" autocomplete="off"
+                                   placeholder="Paste API key here">
+                            <div class="form-text">{{ user_ai_settings_form.fields.raw_api_key.help_text }}</div>
+                        </div>
+
+                        {# ---- Model selector ---- #}
+                        <div class="mb-3 d-none" id="user-byok-model-section" style="max-width:420px;">
+                            <label for="id_user_byok_model_select" class="form-label fw-semibold" style="font-size:.875rem;">
+                                <i class="fas fa-microchip me-1" style="color:#5046e5;"></i>Which model would you like to use?
+                            </label>
+                            <select id="id_user_byok_model_select" class="form-select form-select-sm mb-2">
+                                <option value="">--- Select model ---</option>
+                            </select>
+                            <div id="user-byok-model-custom-wrap" class="d-none">
+                                <input type="text" id="id_user_byok_model_custom"
+                                       class="form-control form-control-sm"
+                                       placeholder="e.g. gemini-2.5-pro-exp-03-25"
+                                       maxlength="100">
+                                <div class="form-text">Enter the exact model string from your provider's documentation.</div>
+                            </div>
+                            <input type="hidden" name="byok_model" id="id_user_byok_model_hidden"
+                                   value="{{ user_ai_settings_form.initial.byok_model|default:'' }}">
+                        </div>
+
+                        {% if user_has_byok_key %}
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="remove_byok_key"
+                                   id="id_user_remove_byok_key">
+                            <label class="form-check-label text-danger" for="id_user_remove_byok_key">
+                                {{ user_ai_settings_form.fields.remove_byok_key.label }}
+                            </label>
+                        </div>
+                        {% endif %}
+
+                        <p class="text-muted mt-2" style="font-size:.8rem;">
+                            <i class="fas fa-lock me-1"></i>
+                            Your API key is encrypted before storage and is never logged or displayed after saving.
+                        </p>
+                    </div>
+
+                </div>
+                <div class="card-footer d-flex justify-content-end" style="background:var(--bg-tertiary);">
+                    <button type="submit" class="btn btn-primary" id="user-ai-save-btn">
+                        <i class="fas fa-save me-1"></i> Save AI Preferences
+                    </button>
+                </div>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -334,6 +661,131 @@ document.getElementById('id_profile_picture').addEventListener('change', functio
             }
         });
     });
+})();
+
+// AI preferences form — disable button and show spinner on submit
+(function () {
+    var aiForm = document.getElementById('user-ai-settings-form');
+    if (!aiForm) return;
+    var btn = document.getElementById('user-ai-save-btn');
+    aiForm.addEventListener('submit', function () {
+        var keyField = document.getElementById('id_user_raw_api_key');
+        var hasKey = keyField && keyField.value.trim().length > 0;
+        btn.disabled = true;
+        btn.innerHTML = hasKey
+            ? '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Validating key\u2026'
+            : '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Saving\u2026';
+    });
+})();
+
+// BYOK provider instructions + model selector
+(function () {
+    var BYOK_MODELS = {
+        gemini: [
+            {value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash \u2014 Fast, balanced (default)'},
+            {value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite \u2014 Lightweight, cheapest'},
+            {value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro \u2014 Most capable'},
+            {value: '__custom__', label: 'Other / Custom model\u2026'},
+        ],
+        openai: [
+            {value: 'gpt-4o', label: 'GPT-4o \u2014 Latest flagship (default)'},
+            {value: 'gpt-4o-mini', label: 'GPT-4o Mini \u2014 Fast and cheap'},
+            {value: 'gpt-4-turbo', label: 'GPT-4 Turbo \u2014 Previous generation'},
+            {value: '__custom__', label: 'Other / Custom model\u2026'},
+        ],
+        anthropic: [
+            {value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 \u2014 Balanced (default)'},
+            {value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 \u2014 Fast and cheap'},
+            {value: 'claude-opus-4-6', label: 'Claude Opus 4.6 \u2014 Most capable'},
+            {value: '__custom__', label: 'Other / Custom model\u2026'},
+        ],
+    };
+
+    var providerSelect   = document.getElementById('id_user_byok_provider');
+    var modelSection     = document.getElementById('user-byok-model-section');
+    var modelSelect      = document.getElementById('id_user_byok_model_select');
+    var modelCustomWrap  = document.getElementById('user-byok-model-custom-wrap');
+    var modelCustomInput = document.getElementById('id_user_byok_model_custom');
+    var modelHidden      = document.getElementById('id_user_byok_model_hidden');
+
+    function hideAllInstructions() {
+        document.querySelectorAll('.byok-instructions').forEach(function (el) {
+            el.classList.add('d-none');
+        });
+    }
+
+    function populateModelDropdown(provider, savedModel) {
+        modelSelect.innerHTML = '<option value="">--- Select model ---</option>';
+        var models = BYOK_MODELS[provider];
+        if (!models) return;
+        var hasMatch = false;
+        models.forEach(function (m) {
+            var opt = document.createElement('option');
+            opt.value = m.value;
+            opt.textContent = m.label;
+            if (savedModel && m.value === savedModel) {
+                opt.selected = true;
+                hasMatch = true;
+            }
+            modelSelect.appendChild(opt);
+        });
+        // If savedModel is non-empty but not in the list, pre-select custom
+        if (savedModel && !hasMatch) {
+            modelSelect.value = '__custom__';
+            modelCustomInput.value = savedModel;
+            modelCustomWrap.classList.remove('d-none');
+        } else {
+            modelCustomWrap.classList.add('d-none');
+            modelCustomInput.value = '';
+        }
+        syncHiddenModel();
+    }
+
+    function syncHiddenModel() {
+        if (!modelHidden) return;
+        var sel = modelSelect.value;
+        if (sel === '__custom__') {
+            modelHidden.value = modelCustomInput.value.trim();
+        } else {
+            modelHidden.value = sel;
+        }
+    }
+
+    function onProviderChange(savedModel) {
+        var provider = providerSelect ? providerSelect.value : '';
+        hideAllInstructions();
+        if (provider) {
+            var box = document.getElementById('user-byok-instructions-' + provider);
+            if (box) box.classList.remove('d-none');
+            modelSection.classList.remove('d-none');
+            populateModelDropdown(provider, savedModel !== undefined ? savedModel : (modelHidden ? modelHidden.value : ''));
+        } else {
+            modelSection.classList.add('d-none');
+        }
+    }
+
+    if (providerSelect) {
+        providerSelect.addEventListener('change', function () { onProviderChange(); });
+        // On page load, show instructions and model for any pre-selected provider
+        if (providerSelect.value) {
+            onProviderChange(modelHidden ? modelHidden.value : '');
+        }
+    }
+
+    if (modelSelect) {
+        modelSelect.addEventListener('change', function () {
+            if (modelSelect.value === '__custom__') {
+                modelCustomWrap.classList.remove('d-none');
+            } else {
+                modelCustomWrap.classList.add('d-none');
+                modelCustomInput.value = '';
+            }
+            syncHiddenModel();
+        });
+    }
+    if (modelCustomInput) {
+        modelCustomInput.addEventListener('input', syncHiddenModel);
+    }
 })();
 </script>
 {% endblock %}

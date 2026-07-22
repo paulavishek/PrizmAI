@@ -18,7 +18,7 @@
     .wiki-content {
         line-height: 1.9;
         font-size: 1.05rem;
-        color: #2c3e50;
+        color: var(--text-primary);
         max-width: 100%;
     }
     
@@ -36,7 +36,7 @@
     .wiki-content h2 {
         font-size: 2rem;
         font-weight: 600;
-        color: #2c3e50;
+        color: var(--text-primary);
         margin-top: 3rem;
         margin-bottom: 1.5rem;
         padding-bottom: 0.75rem;
@@ -153,7 +153,7 @@
     }
     
     .wiki-content tbody tr:nth-child(even) {
-        background-color: #f8f9fa;
+        background-color: var(--bg-tertiary);
     }
     
     .wiki-content tbody tr:hover {
@@ -164,7 +164,7 @@
     /* Blockquotes */
     .wiki-content blockquote {
         border-left: 5px solid #3498db;
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         padding: 1.5rem;
         margin: 2rem 0;
         border-radius: 0 8px 8px 0;
@@ -234,7 +234,7 @@
     .breadcrumb-item + .breadcrumb-item::before {
         content: "›";
         font-size: 1.2rem;
-        color: #6c757d;
+        color: var(--text-muted);
     }
     
     /* Page Stats */
@@ -242,7 +242,7 @@
         display: inline-flex;
         align-items: center;
         margin-right: 1.5rem;
-        color: #6c757d;
+        color: var(--text-muted);
         font-size: 0.95rem;
         padding: 0.5rem 0;
     }
@@ -270,7 +270,7 @@
     
     /* Link/Attachment Boxes */
     .link-box {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-left: 5px solid #3498db;
         padding: 1.25rem;
         margin-bottom: 1rem;
@@ -288,7 +288,7 @@
         display: flex;
         align-items: center;
         padding: 1rem;
-        background: #ffffff;
+        background: var(--card-bg);
         border: 1px solid #e9ecef;
         border-radius: 6px;
         margin-bottom: 0.75rem;
@@ -380,7 +380,7 @@
     }
     
     .list-group-item:hover {
-        background-color: #f8f9fa;
+        background-color: var(--bg-tertiary);
         padding-left: 1.5rem;
     }
     
@@ -396,13 +396,13 @@
     .collapsible-header {
         cursor: pointer;
         padding: 1rem;
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-radius: 8px;
         transition: all 0.2s ease;
     }
     
     .collapsible-header:hover {
-        background: #e9ecef;
+        background: var(--bg-tertiary);
     }
     
     .collapsible-header i {
@@ -435,8 +435,8 @@
         
         .wiki-content pre {
             page-break-inside: avoid;
-            background: #f8f9fa !important;
-            color: #000 !important;
+            background: var(--bg-tertiary) !important;
+            color: var(--text-primary) !important;
             border: 1px solid #dee2e6 !important;
         }
         
@@ -459,7 +459,7 @@
         <!-- Breadcrumb -->
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{% url 'wiki:page_list' %}">Wiki</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'wiki:knowledge_hub_home' %}">Wiki</a></li>
                 {% for breadcrumb_page in breadcrumb %}
                     {% if breadcrumb_page == page %}
                         <li class="breadcrumb-item active">{{ breadcrumb_page.title }}</li>
@@ -482,17 +482,19 @@
                     </span>
                 </div>
                 <div>
-                    <button onclick="goBack()" class="btn btn-outline-secondary btn-sm me-2">
+                    <a href="{% url 'wiki:knowledge_hub_home' %}" class="btn-prizm-back btn-sm me-2">
                         <i class="fas fa-arrow-left"></i> Back
-                    </button>
+                    </a>
                     
                     <!-- AI Assistant Button (Available to all users) -->
                     <button class="btn btn-outline-primary btn-sm me-2" id="aiAnalysisBtn" onclick="triggerAIAnalysis()" style="display: none;">
                         <i class="fas fa-magic"></i> <span id="aiAnalysisBtnText">AI Analysis</span>
                     </button>
                     
-                    <!-- Editor Controls (Only for page owner/staff) -->
-                    {% if user == page.created_by or user.is_staff %}
+                    <!-- Editor Controls. Real workspaces: page owner/staff only
+                         (RBAC unchanged). Demo: full edit access for everyone,
+                         matching the demo banner + the wiki's MVP access model. -->
+                    {% if user == page.created_by or user.is_staff or is_viewing_demo %}
                         <div class="btn-group btn-group-sm" role="group">
                             <a href="{% url 'wiki:page_edit' page.slug %}" class="btn btn-outline-primary">
                                 <i class="fas fa-edit"></i> Edit
@@ -568,7 +570,7 @@
                                 {% elif attachment.file_type in 'image' %}
                                     <i class="fas fa-file-image" style="color: #f59e0b;"></i>
                                 {% else %}
-                                    <i class="fas fa-file" style="color: #6c757d;"></i>
+                                    <i class="fas fa-file" style="color: var(--text-muted);"></i>
                                 {% endif %}
                             </div>
                             <div class="flex-grow-1">
@@ -744,9 +746,9 @@
                 </div>
                 <div class="card-body">
                     {% if page.category.ai_assistant_type == 'meeting' %}
-                        <p class="mb-2"><strong>Meeting Analysis</strong></p>
+                        <p class="mb-2"><strong>Meeting Assistant</strong></p>
                         <p class="small text-muted mb-0">
-                            This category uses AI Meeting Analysis to extract:
+                            This category uses the Meeting Assistant to extract:
                         </p>
                         <ul class="small mb-0 mt-2">
                             <li>Action items with assignees</li>
@@ -782,7 +784,7 @@
                     </div>
                     <div class="card-body">
                         {% for tag in page.tags %}
-                            <a href="{% url 'wiki:page_list' %}?q={{ tag }}" class="badge bg-light text-dark me-1 mb-1">
+                            <a href="{% url 'wiki:knowledge_hub_home' %}?q={{ tag }}" class="badge bg-light text-dark me-1 mb-1">
                                 {{ tag }}
                             </a>
                         {% endfor %}
@@ -799,7 +801,7 @@
                     <a href="{% url 'wiki:page_history' page.slug %}" class="list-group-item list-group-item-action">
                         <i class="fas fa-history"></i> View History
                     </a>
-                    {% if user == page.created_by or user.is_staff %}
+                    {% if user == page.created_by or user.is_staff or is_viewing_demo %}
                         <a href="{% url 'wiki:page_edit' page.slug %}" class="list-group-item list-group-item-action">
                             <i class="fas fa-edit"></i> Edit Page
                         </a>
@@ -807,7 +809,7 @@
                             <i class="fas fa-link"></i> Add Link
                         </a>
                     {% endif %}
-                    <a href="{% url 'wiki:page_list' %}" class="list-group-item list-group-item-action">
+                    <a href="{% url 'wiki:knowledge_hub_home' %}" class="list-group-item list-group-item-action">
                         <i class="fas fa-book"></i> All Pages
                     </a>
                 </div>
@@ -840,7 +842,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="fas fa-users text-success"></i> AI Meeting Analysis
+                    <i class="fas fa-users text-success"></i> Meeting Assistant
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" id="closeModal"></button>
             </div>
@@ -1031,7 +1033,7 @@
 // Global variables for the external script
 const wikiPageId = {{ page.id }};
 const csrfToken = '{{ csrf_token }}';
-const wikiListUrl = '{% url "wiki:page_list" %}';
+const wikiListUrl = '{% url "wiki:knowledge_hub_home" %}';
 const categoryAiType = '{{ page.category.ai_assistant_type }}';
 const categoryName = '{{ page.category.name }}';
 
@@ -1277,14 +1279,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Back button functionality
-function goBack() {
-    if (document.referrer && document.referrer.includes(window.location.host)) {
-        window.history.back();
-    } else {
-        window.location.href = wikiListUrl;
-    }
-}
 </script>
 <script src="{% static 'js/wiki_ai_assistant.js' %}"></script>
 {% endblock %}

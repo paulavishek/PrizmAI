@@ -26,13 +26,19 @@ class SkillGapAnalyzer {
      */
     async analyzeGaps(sprintDays = 14) {
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
+            
             const response = await fetch(`/api/skill-gaps/analyze/${this.boardId}/?sprint_days=${sprintDays}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': this.getCsrfToken()
-                }
+                },
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 throw new Error('Failed to analyze skill gaps');
@@ -53,7 +59,11 @@ class SkillGapAnalyzer {
             return data;
         } catch (error) {
             console.error('Error analyzing gaps:', error);
-            this.showNotification('Failed to analyze skill gaps', 'error');
+            if (error.name === 'AbortError') {
+                this.showNotification('Analysis timed out. Try again — cached results will speed it up.', 'warning');
+            } else {
+                this.showNotification('Failed to analyze skill gaps', 'error');
+            }
             throw error;
         }
     }
@@ -383,7 +393,7 @@ class SkillGapAnalyzer {
                 </div>
                 ${gap.recommendations_pending ? `
                     <div class="mt-2">
-                        <small class="text-warning"><i class="fas fa-spinner fa-spin me-1"></i>AI recommendations generating...</small>
+                        <small class="text-warning"><span class="prizm-spinner prizm-spinner--sm me-1 align-middle"></span>AI recommendations generating…</small>
                     </div>
                 ` : gap.recommendations && gap.recommendations.length > 0 ? `
                     <div class="mt-2">
@@ -472,8 +482,8 @@ class SkillGapAnalyzer {
                 ${progressBar}
                 <div class="mt-2">
                     <small class="text-muted">
-                        ${plan.target_users.length} team member(s) • 
-                        ${plan.estimated_hours ? plan.estimated_hours + 'h' : 'No time estimate'}
+                        ${plan.target_users.length === 0 ? 'No team members assigned' : plan.target_users.length + ' team member' + (plan.target_users.length !== 1 ? 's' : '')} • 
+                        ${plan.estimated_hours ? Math.round(plan.estimated_hours) + 'h' : 'No time estimate'}
                     </small>
                 </div>
             </div>
@@ -625,7 +635,7 @@ class SkillGapAnalyzer {
                         </div>
                         <div class="modal-body">
                             <div class="mb-3">
-                                <strong>Gap Size:</strong> Need ${gap.gap_count} more team member(s)<br>
+                                <strong>Gap Size:</strong> Need ${gap.gap_count} more team member${gap.gap_count !== 1 ? 's' : ''}<br>
                                 <strong>Currently Available:</strong> ${gap.available_count}<br>
                                 <strong>Severity:</strong> ${this.getSeverityBadge(gap.severity)}<br>
                                 <strong>Status:</strong> ${this.getStatusBadge(gap.status)}

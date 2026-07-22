@@ -10,84 +10,157 @@ PHILOSOPHY:
 This replaces the complex RBAC system (56 permissions, 5 roles) with:
 - Board creator: Full control (delete board, manage members)
 - Board members: Full CRUD on tasks, columns, comments, labels
-- Organization members: Can access all boards in their org
+- Organization members: Can access boards in their org
+
+Spectra Smart Denial:
+- When a user is denied access to a board or task, helper functions
+  build a contextual Spectra response with an option to send an
+  automated access request to the board Owner.
 """
 
 from functools import wraps
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, JsonResponse
 from django.core.exceptions import PermissionDenied
 
 
 # ============================================================================
-# CORE ACCESS CHECKS (SIMPLIFIED)
+# CORE ACCESS CHECKS (BOARD-MEMBERSHIP ENFORCED)
 # ============================================================================
 
 def can_access_board(user, board):
     """
     Check if user can access a board.
     
-    Rules (SIMPLIFIED - Single Organization Model):
-    - All authenticated users can access all boards
-    - No board membership checks required
-    
+    Rules:
+    - Superuser → always
+    - Board creator or board.owner → always
+    - Has any BoardMembership on this board → yes
+    - Board is an official demo board → yes
+
+    Organization is no longer a basis for board access — collaboration is by
+    explicit board membership only.
+
     Returns:
         Boolean
     """
     if not user or not user.is_authenticated:
         return False
-    
-    # All authenticated users can access all boards
-    return True
+
+    if user.is_superuser:
+        return True
+
+    # Board creator / owner field
+    if board.created_by_id == user.id:
+        return True
+    if getattr(board, 'owner_id', None) and board.owner_id == user.id:
+        return True
+
+    # Official demo board — universally accessible
+    if getattr(board, 'is_official_demo_board', False):
+        return True
+
+    # Explicit BoardMembership
+    from kanban.models import BoardMembership
+    if BoardMembership.objects.filter(board=board, user=user).exists():
+        return True
+
+    return False
 
 
 def can_manage_board(user, board):
     """
     Check if user can manage a board (delete, manage members).
     
-    Rules (SIMPLIFIED):
-    - All authenticated users can manage all boards
-    
+    Rules:
+    - Superuser → always
+    - Board creator → always
+    - BoardMembership with role='owner' → yes
+
     Returns:
         Boolean
     """
     if not user or not user.is_authenticated:
         return False
-    
-    # All authenticated users can manage all boards
-    return True
+
+    if user.is_superuser:
+        return True
+
+    if board.created_by_id == user.id:
+        return True
+
+    from kanban.models import BoardMembership
+    return BoardMembership.objects.filter(
+        board=board, user=user, role='owner'
+    ).exists()
 
 
 def can_modify_board_content(user, board):
     """
     Check if user can create/edit/delete tasks, columns, comments, etc.
     
-    All authenticated users can modify content.
+    All board members (any role except viewer) can modify content.
     
     Returns:
         Boolean
     """
-    # Same as can_access_board - all members have full CRUD
-    return can_access_board(user, board)
+    if not can_access_board(user, board):
+        return False
+
+    # Viewers are read-only
+    from kanban.models import BoardMembership
+    viewer_only = BoardMembership.objects.filter(
+        board=board, user=user, role='viewer'
+    ).exists()
+
+    # If user is the creator, owner, superuser, or on a demo board they can modify
+    if (
+        user.is_superuser
+        or board.created_by_id == user.id
+        or getattr(board, 'owner_id', None) == user.id
+        or getattr(board, 'is_official_demo_board', False)
+    ):
+        return True
+
+    # Non-viewer members have full CRUD
+    return not viewer_only
 
 
 def can_access_task(user, task):
     """
     Check if user can access a task.
-    
+
     Rules:
-    - User must be able to access the board
-    
+    - User must be able to access the parent board
+
     Returns:
         Boolean
     """
     return can_access_board(user, task.column.board)
 
 
+def can_be_assigned_to_board(user, board):
+    """
+    Whether ``user`` may be assigned to work items (tasks) on ``board``.
+
+    Assignment uses the same gate as board access, so an assignee is always
+    someone who can actually see and work on the board (creator/owner, an
+    explicit member, a scoped org admin, or any user on an official demo
+    board). This keeps task assignment consistent with conflict-notification
+    RBAC — anyone assignable is notifiable, and vice-versa — and prevents
+    tasks from being assigned to non-members (which previously leaked
+    cross-workspace conflict notifications).
+
+    Returns:
+        Boolean
+    """
+    if user is None:
+        return True  # unassigning is always allowed
+    return can_access_board(user, board)
+
+
 def can_modify_task(user, task):
     """
     Check if user can modify a task.
-    
-    All board members can modify any task.
     
     Returns:
         Boolean
@@ -96,20 +169,14 @@ def can_modify_task(user, task):
 
 
 # ============================================================================
-# DECORATORS (SIMPLIFIED)
+# DECORATORS
 # ============================================================================
 
 def require_board_access(view_func):
     """
     Decorator to require board access.
-    
-    Usage:
-        @login_required
-        @require_board_access
-        def my_view(request, board_id):
-            ...
-    
-    Assumes board_id is in kwargs.
+    Returns a Spectra-powered JSON denial for AJAX requests,
+    or an HTML denial page for regular requests.
     """
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
@@ -125,7 +192,7 @@ def require_board_access(view_func):
             raise ValueError("Board not found in view kwargs")
         
         if not can_access_board(request.user, board):
-            return HttpResponseForbidden("You don't have access to this board.")
+            return _spectra_denial_response(request, board, trigger='board_view')
         
         kwargs['board'] = board
         return view_func(request, *args, **kwargs)
@@ -134,15 +201,7 @@ def require_board_access(view_func):
 
 
 def require_board_management(view_func):
-    """
-    Decorator to require board management permission.
-    
-    Usage:
-        @login_required
-        @require_board_management
-        def delete_board(request, board_id):
-            ...
-    """
+    """Decorator to require board management permission."""
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         from django.shortcuts import get_object_or_404
@@ -168,12 +227,7 @@ def require_board_management(view_func):
 def require_task_access(view_func):
     """
     Decorator to require task access.
-    
-    Usage:
-        @login_required
-        @require_task_access
-        def task_detail(request, task_id):
-            ...
+    Returns a Spectra-powered denial when the parent board is inaccessible.
     """
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
@@ -189,12 +243,59 @@ def require_task_access(view_func):
             raise ValueError("Task not found in view kwargs")
         
         if not can_access_task(request.user, task):
-            return HttpResponseForbidden("You don't have access to this task.")
-        
+            board = task.column.board
+            return _spectra_denial_response(request, board, trigger='task_view')
+
         kwargs['task'] = task
         return view_func(request, *args, **kwargs)
-    
+
     return wrapper
+
+
+def board_permission_required(permission):
+    """Require a django-rules board permission (e.g. ``'prizmai.edit_board'``).
+
+    Resolves the board from the view's ``board_id`` (or ``pk``) URL kwarg,
+    fetches it once, and enforces the canonical gate used everywhere else::
+
+        is_demo_context(request, board) OR request.user.has_perm(permission, board)
+
+    On success the resolved board is injected as ``kwargs['board']`` so the view
+    need not re-fetch it. On failure it returns the standard Spectra denial
+    (JSON for AJAX/API, HTML page otherwise) at HTTP 403.
+
+    Unlike ``require_board_access`` (which uses the membership-only
+    ``can_access_board``), this decorator honors the full rules predicate set —
+    org admins, ancestor owners, viewer/member/owner roles — so it is the right
+    tool for board-scoped *write* views and for ``pk``-routed views the
+    ``BoardAccessEnforcementMiddleware`` deliberately skips.
+    """
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            from django.shortcuts import get_object_or_404
+            from kanban.models import Board
+            from kanban.permissions import is_demo_context
+
+            board_id = kwargs.get('board_id') or kwargs.get('pk')
+            if board_id:
+                board = get_object_or_404(Board, id=board_id)
+            elif 'board' in kwargs:
+                board = kwargs['board']
+            else:
+                raise ValueError("Board not found in view kwargs")
+
+            if not (is_demo_context(request, board=board)
+                    or request.user.has_perm(permission, board)):
+                trigger = 'board_view' if permission.endswith('view_board') else 'board_edit'
+                return _spectra_denial_response(request, board, trigger=trigger)
+
+            kwargs['board'] = board
+            return view_func(request, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 # ============================================================================
@@ -215,7 +316,7 @@ def check_access_or_403(user, board):
 def check_management_or_403(user, board):
     """
     Check management permission and raise PermissionDenied if not granted.
-    
+
     Usage:
         check_management_or_403(request.user, board)
     """
@@ -223,36 +324,55 @@ def check_management_or_403(user, board):
         raise PermissionDenied("Only board owner can perform this action.")
 
 
+def check_modify_or_403(user, board):
+    """
+    Check content-modification permission and raise PermissionDenied if not
+    granted.  Members/owners pass; viewers (read-only) are rejected.
+
+    Usage:
+        check_modify_or_403(request.user, board)
+    """
+    if not can_modify_board_content(user, board):
+        raise PermissionDenied("You don't have permission to modify this board.")
+
+
 def get_accessible_boards(user, organization=None):
     """
     Get all boards accessible to a user.
-    
+
+    Access flows through board creator + explicit BoardMembership (delegated to
+    ``get_user_boards``). Board access is NEVER derived from Organization any
+    more — Workspace is the tenant boundary.
+
     Args:
         user: User object
-        organization: Optional organization filter
-    
+        organization: DEPRECATED and ignored. Kept only for call-site
+            backwards-compatibility; org must not gate board access.
+
     Returns:
         Board queryset
     """
     from kanban.models import Board
+    from kanban.utils.demo_protection import get_user_boards
     from django.db.models import Q
     
     if not user or not user.is_authenticated:
         return Board.objects.none()
     
     if user.is_superuser:
-        queryset = Board.objects.all()
+        # Even superusers should not see demo boards in My Workspace
+        queryset = Board.objects.exclude(
+            is_official_demo_board=True
+        ).exclude(
+            is_sandbox_copy=True
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
+        )
     else:
-        # Boards created by user OR where user is member OR in user's org
-        queryset = Board.objects.filter(
-            Q(created_by=user) |
-            Q(members=user) |
-            Q(organization=user.profile.organization if hasattr(user, 'profile') else None)
-        ).distinct()
-    
-    if organization:
-        queryset = queryset.filter(organization=organization)
-    
+        queryset = get_user_boards(user)
+
+    # NOTE: ``organization`` is intentionally ignored — board access is scoped by
+    # workspace + membership inside get_user_boards(), never by org.
     return queryset
 
 
@@ -359,6 +479,96 @@ def user_can_edit_task_in_column(user, task):
     return False, "You don't have access to edit this task"
 
 
+# ============================================================================
+# SPECTRA SMART DENIAL RESPONSES
+# ============================================================================
+
+def _get_board_owner_name(board):
+    """Return the display name of the board's owner."""
+    from kanban.models import BoardMembership
+    owner_membership = BoardMembership.objects.filter(
+        board=board, role='owner'
+    ).select_related('user').first()
+    owner = owner_membership.user if owner_membership else board.created_by
+    if owner:
+        return owner.get_full_name() or owner.username
+    return 'the board owner'
+
+
+def get_spectra_denial_context(user, board, trigger='board_view'):
+    """
+    Build a Spectra-style denial context dict suitable for both
+    JSON API responses and template rendering.
+
+    Returns a dict with:
+        spectra_message  – The conversational denial message
+        board_id         – Board PK
+        board_name       – Board name
+        owner_name       – Board owner display name
+        has_pending      – Whether user already has a pending request
+        can_request      – Whether user can send a request
+        trigger          – What triggered the denial
+    """
+    from kanban.access_request_models import AccessRequest
+
+    owner_name = _get_board_owner_name(board)
+    has_pending = AccessRequest.has_pending(user, board)
+
+    if has_pending:
+        spectra_message = (
+            f"I see you're trying to access the <strong>{board.name}</strong> board. "
+            f"You already have a pending access request — "
+            f"{owner_name} will be notified and can approve it from their dashboard. "
+            f"I'll let you know as soon as there's an update!"
+        )
+        can_request = False
+    else:
+        spectra_message = (
+            f"You don't currently have access to the <strong>{board.name}</strong> board. "
+            f"Would you like me to send an automated access request to "
+            f"{owner_name}? They'll receive a notification and can approve "
+            f"it with one click."
+        )
+        can_request = True
+
+    return {
+        'spectra_message': spectra_message,
+        'board_id': board.id,
+        'board_name': board.name,
+        'owner_name': owner_name,
+        'has_pending': has_pending,
+        'can_request': can_request,
+        'trigger': trigger,
+    }
+
+
+def _spectra_denial_response(request, board, trigger='board_view'):
+    """
+    Return an HTTP response for a board access denial.
+
+    - AJAX / API callers get a JSON 403 with Spectra context.
+    - Regular page requests get rendered to the spectra_access_denied template.
+    """
+    from django.shortcuts import render
+
+    ctx = get_spectra_denial_context(request.user, board, trigger=trigger)
+
+    is_ajax = (
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or request.content_type == 'application/json'
+        or request.path.startswith('/api/')
+    )
+
+    if is_ajax:
+        return JsonResponse({
+            'error': 'access_denied',
+            'spectra': True,
+            **ctx,
+        }, status=403)
+
+    return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
+
 def user_can_manage_board_members(user, board):
     """Backwards compatible: Check if user can manage board members."""
     return can_manage_board(user, board)
@@ -383,9 +593,13 @@ def assign_default_role_to_user(user, board):
     """
     Backwards compatible: Add user as board member.
     
-    In simplified model, just add to Board.members.
+    Uses the new BoardMembership model.
     """
-    board.members.add(user)
+    from kanban.models import BoardMembership
+    BoardMembership.objects.get_or_create(
+        board=board, user=user,
+        defaults={'role': 'member'}
+    )
     return get_user_board_membership(user, board)
 
 
@@ -422,10 +636,8 @@ def get_permission_display_name(permission):
 
 
 def get_available_roles_for_organization(organization):
-    """Backwards compatible: Return empty since we don't use roles."""
-    # Return empty queryset to avoid breaking code that expects this
-    from kanban.permission_models import Role
-    return Role.objects.none()
+    """Backwards compatible: Return available roles."""
+    return ['owner', 'member', 'viewer']
 
 
 # Decorator aliases for backwards compatibility

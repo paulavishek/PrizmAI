@@ -1,0 +1,226 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if action == 'edit' %}Edit Form{% else %}New Form{% endif %} — Forms{% endblock %}
+{% block page_title %}{% if action == 'edit' %}Edit Form{% else %}New Form{% endif %}{% endblock %}
+
+{% block extra_css %}
+<style>
+.form-builder-card {
+    max-width: 760px;
+    margin: 0 auto;
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 10px;
+    padding: 1.75rem;
+    background: var(--card-bg, #fff);
+}
+.field-row {
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    margin-bottom: 0.75rem;
+    background: var(--bg-tertiary, #f8f9fa);
+}
+.field-row .row-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <nav aria-label="breadcrumb" style="font-size:0.82rem;">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'form_list' %}">Forms</a></li>
+            <li class="breadcrumb-item active">{% if action == 'edit' %}Edit{% else %}New Form{% endif %}</li>
+        </ol>
+    </nav>
+
+    <div class="form-builder-card">
+        <h5 class="mb-3">
+            {% if action == 'edit' %}<i class="fas fa-pencil me-2"></i>Edit Form{% else %}<i class="fas fa-file-alt me-2"></i>New Form{% endif %}
+        </h5>
+
+        <form method="post" id="form-builder">
+            {% csrf_token %}
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" name="title" maxlength="255" required
+                       value="{% if form_obj %}{{ form_obj.title }}{% endif %}">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Description</label>
+                <textarea class="form-control" name="description" rows="2">{% if form_obj %}{{ form_obj.description }}{% endif %}</textarea>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Destination</label>
+                    <select class="form-select" name="target_destination" id="target-destination">
+                        {% for value, label in target_destination_choices %}
+                        <option value="{{ value }}"
+                            {% if form_obj and form_obj.target_destination == value %}selected{% endif %}
+                            {% if not form_obj and value == 'DISCOVERY' %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Discovery ideas are auto-scored by Spectra on submission.</div>
+                </div>
+                <div class="col-md-6" id="target-board-wrap"
+                     style="display:{% if form_obj and form_obj.target_destination == 'KANBAN_TASK' %}block{% else %}none{% endif %};">
+                    <label class="form-label fw-semibold">Target Board</label>
+                    <select class="form-select" name="target_board">
+                        <option value="">— Select a board —</option>
+                        {% for b in boards %}
+                        <option value="{{ b.pk }}" {% if form_obj and form_obj.target_board_id == b.pk %}selected{% endif %}>{{ b.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Submit Button Text</label>
+                    <input type="text" class="form-control" name="submit_button_text" maxlength="60"
+                           value="{% if form_obj %}{{ form_obj.submit_button_text }}{% else %}Submit Request{% endif %}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Confirmation Message</label>
+                    <input type="text" class="form-control" name="confirmation_message"
+                           value="{% if form_obj %}{{ form_obj.confirmation_message }}{% else %}Thanks — your submission has been received.{% endif %}">
+                </div>
+            </div>
+
+            <hr>
+            <h6 class="fw-bold mb-2">Fields</h6>
+            <div id="field-rows"></div>
+            <button type="button" class="btn btn-outline-secondary btn-sm mb-4" id="add-field-btn">
+                <i class="fas fa-plus me-1"></i>Add Field
+            </button>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    {% if action == 'edit' %}<i class="fas fa-save me-1"></i>Save Changes{% else %}<i class="fas fa-check me-1"></i>Create Form{% endif %}
+                </button>
+                <a href="{% url 'form_list' %}" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<template id="field-row-template">
+    <div class="field-row" data-row>
+        <div class="row-header">
+            <strong>Field</strong>
+            <button type="button" class="btn btn-sm btn-outline-danger" data-remove-row>
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+        <input type="hidden" name="field_id[]" value="" data-field-id>
+        <div class="row g-2 mb-2">
+            <div class="col-md-6">
+                <input type="text" class="form-control form-control-sm" name="field_label[]" placeholder="Question / label" required data-field-label>
+            </div>
+            <div class="col-md-6">
+                <input type="text" class="form-control form-control-sm" name="field_help_text[]" placeholder="Help text (optional)" data-field-help>
+            </div>
+        </div>
+        <div class="row g-2 mb-2">
+            <div class="col-md-4">
+                <select class="form-select form-select-sm" name="field_type[]" data-field-type>
+                    {% for value, label in field_type_choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <select class="form-select form-select-sm" name="field_mapped_property[]" data-field-mapped>
+                    {% for value, label in mapped_property_choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 d-flex align-items-center">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" data-field-required>
+                    <label class="form-check-label">Required</label>
+                </div>
+            </div>
+        </div>
+        <div data-choices-wrap style="display:none;">
+            <input type="text" class="form-control form-control-sm" name="field_choices[]"
+                   placeholder="Comma-separated options, e.g. Bug, Feature, Question" data-field-choices>
+        </div>
+    </div>
+</template>
+
+<script>
+(function () {
+    const rowsContainer = document.getElementById('field-rows');
+    const template = document.getElementById('field-row-template');
+    const targetDestination = document.getElementById('target-destination');
+    const targetBoardWrap = document.getElementById('target-board-wrap');
+
+    function toggleBoardWrap() {
+        targetBoardWrap.style.display = targetDestination.value === 'KANBAN_TASK' ? 'block' : 'none';
+    }
+    targetDestination.addEventListener('change', toggleBoardWrap);
+    toggleBoardWrap();
+
+    function wireRow(row) {
+        const removeBtn = row.querySelector('[data-remove-row]');
+        removeBtn.addEventListener('click', function () { row.remove(); reindexCheckboxes(); });
+
+        const typeSelect = row.querySelector('[data-field-type]');
+        const choicesWrap = row.querySelector('[data-choices-wrap]');
+        function toggleChoices() {
+            const needsChoices = typeSelect.value === 'SINGLE_SELECT' || typeSelect.value === 'MULTI_SELECT';
+            choicesWrap.style.display = needsChoices ? 'block' : 'none';
+        }
+        typeSelect.addEventListener('change', toggleChoices);
+        toggleChoices();
+    }
+
+    function reindexCheckboxes() {
+        // Give each row's "Required" checkbox a unique indexed name so the
+        // server can align it with the other field_*[] arrays even when a
+        // box in the middle is left unchecked.
+        const rows = rowsContainer.querySelectorAll('[data-row]');
+        rows.forEach(function (row, i) {
+            row.querySelector('[data-field-required]').name = 'field_is_required_' + i;
+        });
+    }
+
+    function addRow(data) {
+        const clone = template.content.cloneNode(true);
+        const row = clone.querySelector('[data-row]');
+        if (data) {
+            row.querySelector('[data-field-id]').value = data.id || '';
+            row.querySelector('[data-field-label]').value = data.label || '';
+            row.querySelector('[data-field-help]').value = data.help_text || '';
+            row.querySelector('[data-field-type]').value = data.field_type || 'SHORT_TEXT';
+            row.querySelector('[data-field-mapped]').value = data.mapped_property || 'none';
+            row.querySelector('[data-field-required]').checked = !!data.is_required;
+            row.querySelector('[data-field-choices]').value = (data.choices || []).join(', ');
+        }
+        rowsContainer.appendChild(row);
+        wireRow(rowsContainer.lastElementChild);
+        reindexCheckboxes();
+    }
+
+    document.getElementById('add-field-btn').addEventListener('click', function () { addRow(null); });
+
+    const existingFields = {{ existing_fields_json|default:"[]"|safe }};
+    if (existingFields.length) {
+        existingFields.forEach(addRow);
+    } else {
+        addRow(null);
+    }
+
+    document.getElementById('form-builder').addEventListener('submit', reindexCheckboxes);
+})();
+</script>
+{% endblock %}

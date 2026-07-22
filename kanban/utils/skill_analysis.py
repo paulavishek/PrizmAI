@@ -14,9 +14,10 @@ from datetime import datetime, timedelta
 import json
 import re
 
-import google.generativeai as genai
+import google.generativeai as genai  # genai retained: legacy direct-call path not yet migrated to AIRouter
 from django.conf import settings
 from django.db.models import Q, Count, Avg, Sum
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.contrib.auth.models import User
 
@@ -71,17 +72,19 @@ def extract_skills_from_task(task_title: str, task_description: str = "",
         [{'name': 'Python', 'level': 'Intermediate'}, ...]
     """
     try:
-        prompt = f"""Analyze this task and extract the technical skills required to complete it.
+        prompt = f"""Analyze this task and extract the key technical skills required to complete it.
 
 Task Title: {task_title}
 Task Description: {task_description or 'Not provided'}
 
-Instructions:
-1. Identify all technical skills, tools, frameworks, and technologies required
-2. For each skill, estimate the proficiency level needed: Beginner, Intermediate, Advanced, or Expert
-3. Be specific (e.g., "Python" not just "Programming")
-4. Include both hard skills (programming languages, tools) and relevant soft skills (e.g., "Communication" for tasks requiring stakeholder interaction)
-5. Return ONLY a valid JSON array, nothing else
+Rules:
+1. Return at most 6 skills — only the most essential ones for this specific task.
+2. Use SHORT, CANONICAL skill names only. Do NOT add parenthetical examples, version numbers, tool lists, or any qualifiers after the name.
+   CORRECT: "Backend Framework", "Containerization", "CI/CD", "Python", "SQL"
+   WRONG:   "Backend Framework (e.g., Node.js/Express, Python/Django)", "Containerization (e.g., Docker, Kubernetes)"
+3. For each skill, set the proficiency level needed: Beginner, Intermediate, Advanced, or Expert.
+4. Focus on hard skills (languages, tools, frameworks). Include at most 1 soft skill only if it is directly critical.
+5. Return ONLY a valid JSON array, nothing else.
 
 Output format:
 [
@@ -100,55 +103,74 @@ JSON array:"""
                 logger.debug("Skill extraction cache HIT")
                 return cached
         
-        model = get_model()
-        if not model:
-            return []
+        from ai_assistant.utils.ai_router import AIRouter
+        router = AIRouter()
 
-        # Generation config for skill extraction - deterministic for reproducible gap results
-        generation_config = {
-            'temperature': 0.2,  # Very low for consistent, reproducible skill identification
-            'top_p': 0.8,
-            'top_k': 40,
-            'max_output_tokens': 1024,  # Skill list doesn't need many tokens
-        }
-
-        response = model.generate_content(prompt, generation_config=generation_config)
-        response_text = response.text.strip()
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            try:
+                result = router.complete(
+                    prompt=prompt,
+                    user=None,
+                    complexity='simple',
+                )
+                response_text = result.get('text', '').strip()
+                
+                # Try direct JSON parse first (response_mime_type should guarantee JSON)
+                try:
+                    skills = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # Fallback: extract JSON array from response text
+                    json_match = re.search(r'\[[\s\S]*\]', response_text)
+                    if json_match:
+                        skills = json.loads(json_match.group(0))
+                    else:
+                        if attempt < max_attempts - 1:
+                            logger.warning(f"No valid JSON in skill extraction response (attempt {attempt + 1}), retrying...")
+                            continue
+                        logger.warning(f"No valid JSON found in skill extraction response after {max_attempts} attempts")
+                        return []
+                
+                # Handle if response is a dict wrapping a list
+                if isinstance(skills, dict):
+                    skills = skills.get('skills', skills.get('data', []))
+                
+                if not isinstance(skills, list):
+                    if attempt < max_attempts - 1:
+                        continue
+                    return []
+                
+                # Validate structure
+                valid_skills = []
+                valid_levels = ['Beginner', 'Intermediate', 'Advanced', 'Expert']
+                
+                for skill in skills:
+                    if isinstance(skill, dict) and 'name' in skill and 'level' in skill:
+                        # Normalize level capitalization
+                        level = skill['level'].capitalize()
+                        if level in valid_levels:
+                            valid_skills.append({
+                                'name': skill['name'].strip(),
+                                'level': level
+                            })
+                
+                # Cache the result
+                if use_cache and ai_cache and valid_skills:
+                    ai_cache.set(prompt, valid_skills, 'skill_analysis')
+                    logger.debug("Skill extraction result cached")
+                
+                logger.info(f"Extracted {len(valid_skills)} skills from task: {task_title}")
+                return valid_skills
+                
+            except json.JSONDecodeError:
+                if attempt < max_attempts - 1:
+                    logger.warning(f"JSON parse error in skill extraction (attempt {attempt + 1}), retrying...")
+                    continue
+                logger.error(f"Failed to parse skill extraction JSON after {max_attempts} attempts")
+                return []
         
-        # Extract JSON from response (handle markdown code blocks)
-        json_match = re.search(r'\[[\s\S]*\]', response_text)
-        if json_match:
-            skills_json = json_match.group(0)
-            skills = json.loads(skills_json)
-            
-            # Validate structure
-            valid_skills = []
-            valid_levels = ['Beginner', 'Intermediate', 'Advanced', 'Expert']
-            
-            for skill in skills:
-                if isinstance(skill, dict) and 'name' in skill and 'level' in skill:
-                    # Normalize level capitalization
-                    level = skill['level'].capitalize()
-                    if level in valid_levels:
-                        valid_skills.append({
-                            'name': skill['name'].strip(),
-                            'level': level
-                        })
-            
-            # Cache the result
-            if use_cache and ai_cache and valid_skills:
-                ai_cache.set(prompt, valid_skills, 'skill_analysis')
-                logger.debug("Skill extraction result cached")
-            
-            logger.info(f"Extracted {len(valid_skills)} skills from task: {task_title}")
-            return valid_skills
-        
-        logger.warning(f"No valid JSON found in skill extraction response")
         return []
         
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse skill extraction JSON: {str(e)}")
-        return []
     except Exception as e:
         logger.error(f"Error extracting skills from task: {str(e)}")
         return []
@@ -169,7 +191,8 @@ def build_team_skill_profile(board) -> Dict:
         from accounts.models import UserProfile
         
         # Get all team members
-        members = board.members.select_related('profile').all()
+        User = get_user_model()
+        members = User.objects.filter(board_memberships__board=board).select_related('profile')
         
         # Aggregate skills across team
         skill_inventory = {}
@@ -189,7 +212,10 @@ def build_team_skill_profile(board) -> Dict:
                     skill_name = skill.get('name', '').strip()
                     skill_level = skill.get('level', 'Intermediate').capitalize()
                     
+                    # Normalize skill name to title case for consistent aggregation
+                    # (e.g., "python" and "Python" should merge into "Python")
                     if skill_name:
+                        skill_name = skill_name.title() if skill_name.islower() else skill_name
                         if skill_name not in skill_inventory:
                             skill_inventory[skill_name] = {
                                 'expert': 0,
@@ -234,6 +260,120 @@ def build_team_skill_profile(board) -> Dict:
         }
 
 
+def _canonicalize_skill_name(name: str) -> str:
+    """Strip parenthetical examples and qualifiers from an AI-extracted skill name.
+
+    AI models frequently emit verbose names such as:
+        "Backend Framework (e.g., Node.js/Express, Python/Django/Flask)"
+        "Containerization (e.g., Docker, Kubernetes)"
+    These cause every task to produce unique skill name strings that never
+    deduplicate even after lowercasing.
+
+    This function strips everything inside parentheses so that all of those
+    variations collapse to the same base name:
+        "Backend Framework (e.g., Node.js)" -> "Backend Framework"
+        "Containerization (e.g., Docker, Kubernetes)" -> "Containerization"
+    """
+    # Remove everything in parentheses, including the parentheses themselves
+    cleaned = re.sub(r'\s*\([^)]*\)', '', name)
+    # Strip any trailing punctuation / whitespace left behind
+    return cleaned.strip(' ,;:')
+
+
+# Curated discipline alias map: normalized skill name -> canonical bucket key.
+#
+# WHY: The AI extracts *discipline* names from task titles ("Backend Development",
+# "Frontend Development", "Database Design") while team member profiles store
+# *specific technologies* ("Python", "React", "PostgreSQL"). Exact-name matching
+# can never bridge the two, so a fully capable team was reported as having ZERO
+# coverage for almost everything. Mapping BOTH the generic and the specific names
+# into the same canonical bucket lets coverage be detected correctly.
+#
+# Keys MUST already be canonicalized + lowercased (i.e. the output of
+# _canonicalize_skill_name(name).lower()) so the lookup is exact.
+#
+# DELIBERATELY UNMAPPED (so they remain genuine gaps): authentication,
+# authentication protocols, oauth, web security, cryptography, security
+# engineering — the demo team has no dedicated auth/security specialist, and the
+# feature should still surface that.
+_SKILL_ALIASES = {
+    # backend
+    'backend development': 'backend',
+    'backend framework': 'backend',
+    'backend api development': 'backend',
+    'python': 'backend',
+    'django': 'backend',
+    'flask': 'backend',
+    'node.js': 'backend',
+    'nodejs': 'backend',
+    'asynchronous programming': 'backend',
+    # api
+    'api integration': 'api',
+    'api design': 'api',
+    'api development': 'api',
+    'api gateway': 'api',
+    'rest apis': 'api',
+    'rest api': 'api',
+    'rest': 'api',
+    # frontend
+    'frontend development': 'frontend',
+    'frontend optimization': 'frontend',
+    'react': 'frontend',
+    'javascript': 'frontend',
+    'typescript': 'frontend',
+    'css': 'frontend',
+    'css / tailwind': 'frontend',
+    'html': 'frontend',
+    'ux design': 'frontend',
+    # database
+    'database design': 'database',
+    'database management': 'database',
+    'database migration': 'database',
+    'sql': 'database',
+    'postgresql': 'database',
+    'mysql': 'database',
+    'data access layer': 'database',
+    # devops / ci-cd
+    'ci/cd': 'devops',
+    'github actions': 'devops',
+    'infrastructure as code': 'devops',
+    'docker': 'devops',
+    'containerization': 'devops',
+    'docker / containers': 'devops',
+    'google cloud platform': 'devops',
+    'cloud computing': 'devops',
+    'kubernetes': 'devops',
+    'test automation': 'devops',
+}
+
+# Friendly display labels for canonical bucket keys (used as the gap's
+# skill_name when multiple aliases collapse into a single bucket).
+_CANONICAL_DISPLAY = {
+    'backend': 'Backend Development',
+    'api': 'API Development',
+    'frontend': 'Frontend Development',
+    'database': 'Database',
+    'devops': 'DevOps / CI-CD',
+}
+
+
+def _normalize_skill_name(name: str) -> str:
+    """Normalize a skill name to a case-insensitive deduplication key.
+
+    Applies _canonicalize_skill_name first (strips parenthetical qualifiers),
+    then lowercases, then maps known aliases to a canonical discipline bucket
+    via _SKILL_ALIASES.  This ensures both verbose AI-extracted names like
+        'Backend Framework (e.g., Node.js)'  and
+        'Backend Framework (e.g., Django/Flask)'
+    collapse to one key, AND that generic task disciplines match the specific
+    technologies stored on team profiles:
+        'Backend Development' / 'Python' / 'Django'  -> 'backend'
+        'CI/CD' / 'CI/CD (GitHub Actions)'           -> 'devops'
+    """
+    base = _canonicalize_skill_name(name).lower()
+    return _SKILL_ALIASES.get(base, base)
+
+
 def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
     """
     Calculate skill gaps by comparing required skills (from tasks) 
@@ -267,22 +407,77 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
         
         logger.info(f"Analyzing {len(tasks)} active tasks for skill gaps on board {board.name}")
         
+        # One-time cleanup: clear stored skills that contain parenthetical verbose names
+        # (e.g., "Backend Framework (e.g., Node.js/Express)") so they are re-extracted
+        # with the updated prompt that produces short canonical names.
+        # A skill entry is considered verbose if any name contains a '(' character.
+        verbose_tasks_cleared = 0
+        for task in tasks:
+            if task.required_skills:
+                skills_list = task.required_skills
+                if isinstance(skills_list, str):
+                    try:
+                        skills_list = json.loads(skills_list)
+                    except (json.JSONDecodeError, TypeError):
+                        skills_list = []
+                if isinstance(skills_list, list):
+                    has_verbose = any(
+                        '(' in (s.get('name', '') if isinstance(s, dict) else str(s))
+                        for s in skills_list
+                    )
+                    if has_verbose:
+                        task.required_skills = []
+                        task.save(update_fields=['required_skills'])
+                        verbose_tasks_cleared += 1
+        if verbose_tasks_cleared > 0:
+            logger.info(
+                f"Cleared verbose required_skills from {verbose_tasks_cleared} task(s) — "
+                "will re-extract with canonical short names."
+            )
+
         # Auto-populate required_skills for tasks that don't have them
         tasks_needing_skills = [t for t in tasks if not t.required_skills]
         skills_extracted_count = 0
+        extraction_failures = 0
+        
+        # Time budget: limit skill extraction to 60 seconds to prevent request timeouts
+        import time as _time
+        extraction_start = _time.time()
+        EXTRACTION_TIME_BUDGET_SECS = 60
         
         if tasks_needing_skills:
             logger.info(f"Auto-extracting skills for {len(tasks_needing_skills)} tasks without defined skills")
             # Process up to 50 tasks so a single Run Analysis populates all tasks,
             # making gap detection fully deterministic on subsequent runs.
             for task in tasks_needing_skills[:50]:
+                # Check time budget before each extraction
+                elapsed = _time.time() - extraction_start
+                if elapsed > EXTRACTION_TIME_BUDGET_SECS:
+                    logger.warning(
+                        f"Skill extraction time budget exhausted ({elapsed:.1f}s). "
+                        f"Processed {skills_extracted_count + extraction_failures}/{len(tasks_needing_skills)} tasks."
+                    )
+                    break
+                
+                # Stop early if too many consecutive failures (API issue)
+                if extraction_failures >= 5 and skills_extracted_count == 0:
+                    logger.warning(
+                        f"Stopping skill extraction after {extraction_failures} consecutive failures - "
+                        f"possible API issue. Will use existing task skills for gap analysis."
+                    )
+                    break
+                
                 try:
                     extracted_skills = extract_skills_from_task(task.title, task.description or "")
                     if extracted_skills:
                         task.required_skills = extracted_skills
                         task.save(update_fields=['required_skills'])
                         skills_extracted_count += 1
+                        extraction_failures = 0  # Reset consecutive failure counter
+                    else:
+                        extraction_failures += 1
                 except Exception as e:
+                    extraction_failures += 1
                     logger.warning(f"Failed to extract skills for task {task.id}: {str(e)}")
                     continue
             
@@ -293,7 +488,38 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
         team_profile = build_team_skill_profile(board)
         skill_inventory = team_profile['skill_inventory']
         team_size = team_profile.get('team_size', 1) or 1
-        
+
+        # Build a normalized lookup to match AI-extracted skill names to team profile names.
+        # Both sides are routed through _normalize_skill_name so that:
+        #   - parenthetical qualifiers are stripped ("CI/CD (GitHub Actions)" -> "ci/cd" -> "devops")
+        #   - generic disciplines match specific technologies via the alias map
+        #     ("Python"/"Django" -> "backend", "React"/"JavaScript" -> "frontend")
+        # Multiple profile skills can collapse to the same canonical key, so we MERGE
+        # (sum level counts) and dedupe members by user_id — each member counts once per
+        # bucket at their highest level, otherwise coverage is inflated and real gaps hidden.
+        _level_rank = {'expert': 4, 'advanced': 3, 'intermediate': 2, 'beginner': 1}
+        skill_inventory_norm = {}
+        for raw_name, data in skill_inventory.items():
+            key = _normalize_skill_name(raw_name)
+            entry = skill_inventory_norm.setdefault(key, {
+                'expert': 0, 'advanced': 0, 'intermediate': 0, 'beginner': 0,
+                'members': [],
+            })
+            for member in data.get('members', []):
+                uid = member.get('user_id')
+                m_level = (member.get('level') or 'Intermediate').lower()
+                existing = next((m for m in entry['members'] if m.get('user_id') == uid), None)
+                if existing is None:
+                    entry['members'].append(dict(member))
+                elif _level_rank.get(m_level, 0) > _level_rank.get((existing.get('level') or '').lower(), 0):
+                    # Keep the member's highest level across collapsed skills
+                    existing['level'] = member.get('level')
+            # Recompute per-level counts from the deduped member list
+            for lvl in ('expert', 'advanced', 'intermediate', 'beginner'):
+                entry[lvl] = sum(
+                    1 for m in entry['members'] if (m.get('level') or '').lower() == lvl
+                )
+
         # Aggregate required skills from tasks (re-check since some may have been updated)
         required_skills = {}
         
@@ -343,8 +569,18 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                         continue
                     
                     if skill_name:
-                        if skill_name not in required_skills:
-                            required_skills[skill_name] = {
+                        # Use a normalized (lowercase) key so that name variations like
+                        # "Problem-Solving" and "Problem Solving" collapse into one entry
+                        skill_key = _normalize_skill_name(skill_name)
+                        if skill_key not in required_skills:
+                            required_skills[skill_key] = {
+                                # Friendly label for canonical buckets (e.g. "backend" ->
+                                # "Backend Development"); otherwise the canonicalized
+                                # (no-parens) name so the UI shows "Backend Framework"
+                                # not "Backend Framework (e.g., …)".
+                                'display_name': _CANONICAL_DISPLAY.get(
+                                    skill_key, _canonicalize_skill_name(skill_name)
+                                ),
                                 'expert': 0,
                                 'advanced': 0,
                                 'intermediate': 0,
@@ -352,24 +588,43 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                                 'tasks': [],
                                 'unique_tasks': set()
                             }
-                        
+
                         # Count requirement for this level
                         level_key = skill_level.lower()
-                        if level_key in required_skills[skill_name]:
-                            required_skills[skill_name][level_key] += 1
-                        
-                        required_skills[skill_name]['tasks'].append({
+                        if level_key in required_skills[skill_key]:
+                            required_skills[skill_key][level_key] += 1
+
+                        required_skills[skill_key]['tasks'].append({
                             'id': task.id,
                             'title': task.title,
                             'level': skill_level
                         })
-                        required_skills[skill_name]['unique_tasks'].add(task.id)
-        
+                        required_skills[skill_key]['unique_tasks'].add(task.id)
+
+        # Frequency filter: drop skills that appear in only 1 unique task.
+        # A skill needed by a single task is a one-off task requirement, not a
+        # team-level capability gap worth tracking.  Requiring ≥2 tasks dramatically
+        # reduces noise (one-offs like "WCAG", "ERD", "Static Site Generators") while
+        # keeping genuinely cross-cutting gaps like "Security", "Backend Development".
+        total_extracted = len(required_skills)
+        required_skills = {
+            k: v for k, v in required_skills.items()
+            if len(v.get('unique_tasks', set())) >= 2
+        }
+        logger.info(
+            f"Frequency filter: {len(required_skills)} of {total_extracted} extracted skills "
+            "appear in 2+ tasks and qualify for gap analysis"
+        )
+
         # Calculate gaps
         gaps = []
         
-        for skill_name, requirements in required_skills.items():
-            available = skill_inventory.get(skill_name, {
+        for skill_key, requirements in required_skills.items():
+            # skill_key is the normalized (lowercase) key; use display_name for output
+            display_name = requirements.get('display_name', skill_key)
+
+            # Use normalized lookup to match AI-extracted names to team profile names
+            available = skill_inventory_norm.get(skill_key, {
                 'expert': 0,
                 'advanced': 0,
                 'intermediate': 0,
@@ -397,88 +652,77 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
             # Total tasks needing this skill (at any level)
             total_tasks_needing_skill = len(requirements.get('unique_tasks', set()))
             all_affected_tasks = requirements['tasks']
-            
+
+            # Determine the highest proficiency level required across all tasks for this skill
+            highest_level = 'beginner'
+            for level in ['expert', 'advanced', 'intermediate', 'beginner']:
+                if requirements[level] > 0:
+                    highest_level = level
+                    break
+
             # CASE 1: Team has ZERO coverage for this skill
             # This is always a gap - the team cannot do this work at all
             if not has_any_coverage:
-                # Calculate gap count based on workload
-                # Assume 1 person can handle up to 5 tasks in a sprint
-                tasks_per_person = 5
-                gap_count = max(1, (total_tasks_needing_skill + tasks_per_person - 1) // tasks_per_person)
-                # Cap at reasonable number (not more than team size)
-                gap_count = min(gap_count, max(2, team_size))
-                
-                # Determine the highest level needed
-                highest_level = 'beginner'
-                for level in ['expert', 'advanced', 'intermediate', 'beginner']:
-                    if requirements[level] > 0:
-                        highest_level = level
-                        break
-                
+                # Capacity estimate: how many people would be needed (~4 tasks/person/sprint)
+                tasks_per_person = 4
+                slots_needed = max(1, (total_tasks_needing_skill + tasks_per_person - 1) // tasks_per_person)
+                # Cap to a reasonable number (not more than team size)
+                slots_needed = min(slots_needed, max(2, team_size))
+
                 gaps.append({
-                    'skill_name': skill_name,
+                    'skill_name': display_name,
                     'proficiency_level': highest_level.capitalize(),
-                    'required_count': gap_count,
+                    'required_count': slots_needed,
                     'available_count': 0,
-                    'gap_count': gap_count,
+                    'gap_count': slots_needed,
                     'affected_tasks': all_affected_tasks,
                     'task_count': total_tasks_needing_skill,
                     'has_team_coverage': False,
                     'severity': 'critical' if total_tasks_needing_skill >= 3 or highest_level in ['expert', 'advanced'] else 'high'
                 })
                 continue
-            
-            # CASE 2: Team has SOME coverage - check each proficiency level
-            for level in ['expert', 'advanced', 'intermediate', 'beginner']:
-                task_count_at_level = requirements[level]
-                
-                if task_count_at_level == 0:
-                    continue
-                
-                # Get effective team members who can handle this level
-                available_for_level = effective_coverage.get(level, 0)
-                
-                # Calculate capacity-based need
-                # Assume each person can handle 4-5 tasks per sprint
-                tasks_per_person = 4
-                slots_needed = max(1, (task_count_at_level + tasks_per_person - 1) // tasks_per_person)
-                
-                # Calculate gap
-                gap_count = max(0, slots_needed - available_for_level)
-                
-                # Even if gap_count is 0, check if coverage is thin (bus factor)
-                # If only 1 person covers many tasks, that's a risk
-                is_thin_coverage = available_for_level == 1 and task_count_at_level >= 4
-                
-                if gap_count > 0 or is_thin_coverage:
-                    affected_tasks = [t for t in requirements['tasks'] if t['level'].lower() == level]
-                    
-                    # Determine severity
-                    if gap_count > 0:
-                        severity = _calculate_gap_severity(
-                            skill_name, level, gap_count, affected_tasks,
-                            has_team_coverage=True,
-                            total_team_coverage=total_team_coverage,
-                            effective_coverage=available_for_level,
-                            team_size=team_size
-                        )
-                    else:
-                        # Thin coverage warning (bus factor risk)
-                        severity = 'low'
-                        gap_count = 1  # Suggest adding 1 more for redundancy
-                    
-                    gaps.append({
-                        'skill_name': skill_name,
-                        'proficiency_level': level.capitalize(),
-                        'required_count': slots_needed,
-                        'available_count': available_for_level,
-                        'gap_count': gap_count,
-                        'affected_tasks': affected_tasks,
-                        'task_count': task_count_at_level,
-                        'has_team_coverage': True,
-                        'thin_coverage': is_thin_coverage and gap_count == 1,
-                        'severity': severity
-                    })
+
+            # CASE 2: Team has SOME coverage — create ONE gap entry for this skill.
+            # Compare total task workload against coverage at the highest required level.
+            available_for_highest = effective_coverage.get(highest_level, 0)
+
+            # Capacity estimate for how many people are ideally needed (display/recommendation use)
+            tasks_per_person = 4
+            slots_needed = max(1, (total_tasks_needing_skill + tasks_per_person - 1) // tasks_per_person)
+
+            # Actual gap: additional people needed beyond current coverage at this level
+            actual_gap = max(0, slots_needed - available_for_highest)
+
+            # Bus factor: thin coverage is a risk even without a hard capacity gap
+            is_thin_coverage = available_for_highest == 1 and total_tasks_needing_skill >= 4
+
+            if actual_gap > 0 or is_thin_coverage:
+                if actual_gap == 0:
+                    # Thin coverage only — recommend adding 1 more for redundancy
+                    actual_gap = 1
+                    slots_needed = available_for_highest + 1
+                    severity = 'low'
+                else:
+                    severity = _calculate_gap_severity(
+                        display_name, highest_level, actual_gap, all_affected_tasks,
+                        has_team_coverage=True,
+                        total_team_coverage=total_team_coverage,
+                        effective_coverage=available_for_highest,
+                        team_size=team_size
+                    )
+
+                gaps.append({
+                    'skill_name': display_name,
+                    'proficiency_level': highest_level.capitalize(),
+                    'required_count': slots_needed,
+                    'available_count': available_for_highest,
+                    'gap_count': actual_gap,
+                    'affected_tasks': all_affected_tasks,
+                    'task_count': total_tasks_needing_skill,
+                    'has_team_coverage': True,
+                    'thin_coverage': is_thin_coverage and actual_gap == 1,
+                    'severity': severity
+                })
         
         # Sort by severity and gap size
         severity_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
@@ -569,8 +813,10 @@ def generate_skill_gap_recommendations(gap_data: Dict, board) -> List[Dict]:
         List of recommendation dictionaries
     """
     try:
-        model = get_model()
-        if not model:
+        from ai_assistant.utils.ai_router import AIRouter
+        router = AIRouter()
+
+        if not router:
             return _get_fallback_recommendations(gap_data)
         
         # Build context about the gap
@@ -631,10 +877,12 @@ JSON array:"""
             'max_output_tokens': 2048,  # More tokens for detailed recommendations
         }
 
-        response = model.generate_content(prompt, generation_config=generation_config)
-        response_text = response.text.strip()
-        
-        # Extract JSON
+        result = router.complete(
+            prompt=prompt,
+            user=None,
+            complexity='simple',
+        )
+        response_text = result.get('text', '').strip()
         json_match = re.search(r'\[[\s\S]*\]', response_text)
         if json_match:
             recommendations_json = json_match.group(0)
@@ -795,22 +1043,27 @@ def _calculate_skill_match(required_skills: List[Dict], member_skills: List[Dict
     total_required_weight = 0
     total_matched_weight = 0
     
-    # Build member skill lookup
+    # Build member skill lookup, keyed by the same canonical key used for gap
+    # detection so generic task disciplines match specific member technologies
+    # (e.g. task "Backend Development" matches member "Python"/"Django"). If
+    # several member skills collapse to one key, keep the highest weight.
     member_skill_map = {}
     for skill in member_skills:
-        skill_name = skill.get('name', '').strip().lower()
+        skill_name = _normalize_skill_name(skill.get('name', '').strip())
         skill_level = skill.get('level', 'Intermediate').lower()
-        member_skill_map[skill_name] = level_weights.get(skill_level, 2)
-    
+        weight = level_weights.get(skill_level, 2)
+        if weight > member_skill_map.get(skill_name, 0):
+            member_skill_map[skill_name] = weight
+
     # Check each required skill
     for req_skill in required_skills:
         skill_name = req_skill.get('name', '').strip()
         required_level = req_skill.get('level', 'Intermediate').lower()
         required_weight = level_weights.get(required_level, 2)
         total_required_weight += required_weight
-        
-        skill_name_lower = skill_name.lower()
-        
+
+        skill_name_lower = _normalize_skill_name(skill_name)
+
         if skill_name_lower in member_skill_map:
             member_weight = member_skill_map[skill_name_lower]
             
@@ -864,24 +1117,34 @@ def update_team_skill_profile_model(board):
     """
     try:
         from kanban.models import TeamSkillProfile
+        import time as _time
         
         # Build current profile
         profile_data = build_team_skill_profile(board)
         
-        # Update or create model
-        team_profile, created = TeamSkillProfile.objects.update_or_create(
-            board=board,
-            defaults={
-                'skill_inventory': profile_data['skill_inventory'],
-                'total_capacity_hours': profile_data['total_capacity_hours'],
-                'utilized_capacity_hours': profile_data['utilized_capacity_hours'],
-                'last_analysis': timezone.now()
-            }
-        )
-        
-        action = "Created" if created else "Updated"
-        logger.info(f"{action} TeamSkillProfile for board {board.name}")
-        return team_profile
+        # Update or create model with retry for SQLite database lock
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                team_profile, created = TeamSkillProfile.objects.update_or_create(
+                    board=board,
+                    defaults={
+                        'skill_inventory': profile_data['skill_inventory'],
+                        'total_capacity_hours': profile_data['total_capacity_hours'],
+                        'utilized_capacity_hours': profile_data['utilized_capacity_hours'],
+                        'last_analysis': timezone.now()
+                    }
+                )
+                
+                action = "Created" if created else "Updated"
+                logger.info(f"{action} TeamSkillProfile for board {board.name}")
+                return team_profile
+            except Exception as db_err:
+                if 'database is locked' in str(db_err) and attempt < max_retries - 1:
+                    logger.warning(f"Database locked updating TeamSkillProfile, retrying ({attempt + 1}/{max_retries})...")
+                    _time.sleep(0.5 * (attempt + 1))
+                    continue
+                raise
         
     except Exception as e:
         logger.error(f"Error updating TeamSkillProfile: {str(e)}")

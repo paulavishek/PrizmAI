@@ -8,7 +8,7 @@ from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse, HttpResponseForbidden
+from django.http import JsonResponse, HttpResponseForbidden, Http404
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
@@ -18,6 +18,7 @@ from datetime import timedelta
 import json
 
 from kanban.models import Board, Task
+from kanban.decorators import demo_write_guard, demo_ai_guard
 from kanban.budget_models import (
     ProjectBudget, TaskCost, TimeEntry, ProjectROI, 
     BudgetRecommendation, CostPattern
@@ -29,8 +30,28 @@ from kanban.budget_forms import (
     ProjectROIForm, BudgetRecommendationActionForm
 )
 from api.ai_usage_utils import track_ai_request, check_ai_quota
+from kanban.simple_access import check_access_or_403
 
 logger = logging.getLogger(__name__)
+
+
+def _require_budget_access(request, board):
+    """Return HttpResponseForbidden if user lacks Owner/OrgAdmin access to this board's budget.
+    Per spec: 'View budget fields' and 'Edit budget fields' are restricted to OrgAdmin + Owner only.
+
+    Demo bypass: RBAC is fully bypassed in the demo workspace, so a demo user
+    exploring any demo board (including the shared official template, which they
+    don't own) can open the budget dashboard. The ``delete_board`` permission
+    carries no demo term of its own, so the bypass must be explicit here — see
+    kanban/permissions.is_demo_context."""
+    from kanban.permissions import is_demo_context
+    if is_demo_context(request, board=board):
+        return None
+    if not request.user.has_perm('prizmai.delete_board', board):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'You do not have permission to access budget information for this board.'}, status=403)
+        return HttpResponseForbidden('You do not have permission to access budget information for this board.')
+    return None
 
 
 @login_required
@@ -39,6 +60,8 @@ def budget_dashboard(request, board_id):
     Main budget dashboard showing overview, metrics, and AI insights
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Get or create budget
     try:
@@ -65,10 +88,12 @@ def budget_dashboard(request, board_id):
             status='pending'
         ).order_by('-priority', '-created_at')[:5]
     
-    # Get recent time entries
+    # Get recent time entries — order by work_date first so the list reads
+    # chronologically. (Seeded demo entries share a created_at, so ordering by
+    # created_at alone shows work dates jumbled out of order.)
     recent_entries = TimeEntry.objects.filter(
         task__column__board=board
-    ).select_related('user', 'task').order_by('-created_at')[:10]
+    ).select_related('user', 'task').order_by('-work_date', '-created_at')[:10]
     
     context = {
         'board': board,
@@ -85,11 +110,14 @@ def budget_dashboard(request, board_id):
 
 
 @login_required
+@demo_write_guard
 def budget_create_or_edit(request, board_id):
     """
     Create or edit project budget
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         budget = ProjectBudget.objects.get(board=board)
@@ -121,12 +149,16 @@ def budget_create_or_edit(request, board_id):
 
 
 @login_required
+@demo_write_guard
 def task_cost_edit(request, task_id):
     """
     Edit task cost details
     """
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     try:
         task_cost = TaskCost.objects.get(task=task)
@@ -160,12 +192,17 @@ def task_cost_edit(request, task_id):
 
 
 @login_required
+@demo_write_guard
 def time_entry_create(request, task_id):
     """
     Create time entry for a task
     """
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
+    
+    # RBAC: user must have edit permission on the board to log time
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     if request.method == 'POST':
         form = TimeEntryForm(request.POST, user=request.user)
@@ -184,7 +221,7 @@ def time_entry_create(request, task_id):
                 })
             return redirect('budget_dashboard', board_id=board.id)
     else:
-        form = TimeEntryForm(initial={'work_date': timezone.now().date()}, user=request.user)
+        form = TimeEntryForm(initial={'work_date': timezone.localdate()}, user=request.user)
     
     context = {
         'task': task,
@@ -201,6 +238,8 @@ def budget_analytics(request, board_id):
     Detailed budget analytics and reports
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         budget = ProjectBudget.objects.get(board=board)
@@ -289,6 +328,8 @@ def roi_dashboard(request, board_id):
     ROI tracking and analysis dashboard
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Check if budget exists
     try:
@@ -302,8 +343,17 @@ def roi_dashboard(request, board_id):
     roi_metrics = BudgetAnalyzer.calculate_roi_metrics(board)
     
     # Get historical ROI snapshots (chronological order - oldest first)
-    roi_snapshots = ProjectROI.objects.filter(board=board).order_by('snapshot_date')[:10]
-    
+    roi_snapshots = list(ProjectROI.objects.filter(board=board).order_by('snapshot_date')[:10])
+
+    # Recalculate each snapshot's ROI against the allocated budget so history
+    # is consistent with the header card (which uses allocated_budget as the
+    # cost basis, not the smaller task-cost figure stored at snapshot time).
+    if budget and budget.allocated_budget > 0:
+        for snap in roi_snapshots:
+            value = snap.realized_value if snap.realized_value else snap.expected_value
+            if value:
+                snap.roi_percentage = ((value - budget.allocated_budget) / budget.allocated_budget * 100)
+
     context = {
         'board': board,
         'budget': budget,
@@ -316,11 +366,14 @@ def roi_dashboard(request, board_id):
 
 
 @login_required
+@demo_write_guard
 def roi_snapshot_create(request, board_id):
     """
     Create new ROI snapshot
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     if request.method == 'POST':
         form = ProjectROIForm(request.POST)
@@ -349,6 +402,7 @@ def roi_snapshot_create(request, board_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def ai_analyze_budget(request, board_id):
     """
@@ -356,6 +410,8 @@ def ai_analyze_budget(request, board_id):
     """
     start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         # Check AI quota
@@ -425,6 +481,7 @@ def ai_analyze_budget(request, board_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def ai_generate_recommendations(request, board_id):
     """
@@ -432,6 +489,8 @@ def ai_generate_recommendations(request, board_id):
     """
     start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         # Check AI quota
@@ -499,6 +558,8 @@ def recommendations_list(request, board_id):
     View all budget recommendations
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Filter by status
     status_filter = request.GET.get('status', 'all')
@@ -519,6 +580,7 @@ def recommendations_list(request, board_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def recommendation_action(request, recommendation_id):
     """
@@ -529,6 +591,8 @@ def recommendation_action(request, recommendation_id):
     
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         # Get action from POST data (form submission)
@@ -603,6 +667,8 @@ def recommendation_preview(request, recommendation_id):
     
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         redistributor = BudgetRedistributor(recommendation, request.user)
@@ -637,6 +703,8 @@ def recommendation_implementation_details(request, recommendation_id):
     
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
+    if denied := _require_budget_access(request, board):
+        return denied
     
     logs = BudgetImplementationLog.objects.filter(
         recommendation=recommendation
@@ -671,12 +739,15 @@ def recommendation_implementation_details(request, recommendation_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def ai_predict_overrun(request, board_id):
     """
     Get AI prediction for cost overruns
     """
     start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         # Check AI quota
@@ -743,11 +814,14 @@ def ai_predict_overrun(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def ai_learn_patterns(request, board_id):
     """
     Trigger AI pattern learning
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Check AI quota
     has_quota, quota, remaining = check_ai_quota(request.user)
@@ -787,6 +861,8 @@ def budget_api_metrics(request, board_id):
     API endpoint for budget metrics (for AJAX updates)
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         metrics = BudgetAnalyzer.calculate_project_metrics(board)
@@ -821,19 +897,33 @@ def my_timesheet(request, board_id=None):
     
     # Get week parameter or default to current week
     week_offset = int(request.GET.get('week', 0))
-    today = timezone.now().date()
+    today = timezone.localdate()
     # Start of week (Monday)
     start_of_week = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
     end_of_week = start_of_week + timedelta(days=6)
     
-    # MVP Mode: Check if user has any time entries, if not show demo data
-    user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
+    # Check if user has any time entries on demo/sandbox boards in demo mode,
+    # or on real workspace boards otherwise. This prevents a real-workspace entry
+    # from collapsing demo mode and exposing real workspace tasks in the timesheet.
+    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+    if is_demo_mode:
+        # Owner-scoped sandbox boards only (via the canonical helper the dashboard
+        # uses) — NOT every user's sandbox + the demo org. A loose scope let a user
+        # who owned entries on the template AND their sandbox double-count.
+        from kanban.utils.demo_protection import get_user_boards
+        _demo_board_qs = get_user_boards(request.user)
+        user_has_entries = TimeEntry.objects.filter(
+            user=request.user,
+            task__column__board__in=_demo_board_qs,
+        ).exists()
+    else:
+        user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
     showing_demo_data = False
     display_user = request.user
-    
-    if not user_has_entries:
-        # Try to get a demo user with time entries
-        demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+
+    if not user_has_entries and is_demo_mode:
+        # Only show demo user data when explicitly in demo mode
+        demo_usernames = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
         for demo_username in demo_usernames:
             demo_user = User.objects.filter(username=demo_username).first()
             if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
@@ -844,39 +934,45 @@ def my_timesheet(request, board_id=None):
     # Get user's tasks (or demo user's tasks in MVP mode)
     if board_id:
         board = get_object_or_404(Board, id=board_id)
+        check_access_or_403(request.user, board)
         tasks = Task.objects.filter(
             column__board=board,
             assigned_to=display_user
         ).select_related('column', 'column__board')
         boards = [board]
     else:
-        # All boards user has access to (include demo boards in MVP mode)
+        # All boards user has access to (include demo boards in MVP mode).
+        # In demo mode, always scope to demo/sandbox boards regardless of showing_demo_data
+        # to prevent real workspace tasks bleeding through after first demo time entry.
         if showing_demo_data:
-            demo_org = Organization.objects.filter(is_demo=True).first()
-            if demo_org:
-                boards = Board.objects.filter(
-                    models.Q(created_by=request.user) | 
-                    models.Q(members=request.user) |
-                    models.Q(organization=demo_org)
-                ).distinct()
-            else:
-                boards = Board.objects.filter(
-                    models.Q(created_by=request.user) | models.Q(members=request.user)
-                ).distinct()
+            # Persona-fallback data lives on the official demo boards.
+            boards = Board.objects.filter(is_official_demo_board=True).distinct()
+        elif is_demo_mode:
+            # The user's OWN sandbox boards only (matches _resolve_time_scope);
+            # a demo-org-wide scope would span other users' sandboxes + the
+            # template and double-count a user who owns entries on both.
+            from kanban.utils.demo_protection import get_user_boards
+            boards = get_user_boards(request.user)
         else:
             boards = Board.objects.filter(
-                models.Q(created_by=request.user) | models.Q(members=request.user)
+                models.Q(created_by=request.user) | models.Q(memberships__user=request.user),
+                is_sandbox_copy=False,
+                is_official_demo_board=False,
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
             ).distinct()
         tasks = Task.objects.filter(
             column__board__in=boards,
-            assigned_to=display_user
-        ).select_related('column', 'column__board')
+        ).filter(
+            models.Q(assigned_to=display_user) | models.Q(time_entries__user=display_user)
+        ).distinct().select_related('column', 'column__board')
     
-    # Get time entries for the week (for display_user)
+    # Get time entries for the week - scoped to visible boards to prevent cross-workspace bleed
     entries = TimeEntry.objects.filter(
         user=display_user,
         work_date__gte=start_of_week,
-        work_date__lte=end_of_week
+        work_date__lte=end_of_week,
+        task__column__board__in=boards,
     ).select_related('task', 'task__column', 'task__column__board')
     
     # Organize entries by task and date (support multiple entries per task/date)
@@ -932,7 +1028,13 @@ def my_timesheet(request, board_id=None):
         daily_totals.append(round(total, 2))
     
     week_total = round(sum(daily_totals, Decimal('0.00')), 2)
-    
+
+    # Billable / non-billable split for the week
+    billable_total = round(
+        entries.filter(is_billable=True).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00'), 2
+    )
+    non_billable_total = round(week_total - billable_total, 2)
+
     # Previous/next week dates
     prev_week = week_offset - 1
     next_week = week_offset + 1
@@ -945,6 +1047,8 @@ def my_timesheet(request, board_id=None):
         'week_days': week_days,
         'daily_totals': daily_totals,
         'week_total': week_total,
+        'billable_total': billable_total,
+        'non_billable_total': non_billable_total,
         'start_of_week': start_of_week,
         'end_of_week': end_of_week,
         'prev_week': prev_week,
@@ -958,6 +1062,61 @@ def my_timesheet(request, board_id=None):
     return render(request, 'kanban/my_timesheet.html', context)
 
 
+def _resolve_time_scope(request, board_id=None):
+    """Resolve (display_user, boards, board, showing_demo_data) for time-tracking views.
+
+    Single source of truth for board scoping across the dashboard and its AJAX
+    endpoints. Uses the canonical ``get_user_boards()`` helper for demo-vs-real
+    separation (which returns a single sandbox copy per logical board in demo
+    mode and excludes demo/sandbox boards in a real workspace), so time-entry
+    aggregations never double-count tasks or leak demo data into a real
+    workspace.
+
+    The legacy demo-user fallback (showing a seeded demo user's data when the
+    requesting user has none) is only applied in demo mode. Those demo users'
+    entries live on the official demo boards, so the board scope is switched to
+    ``is_official_demo_board=True`` when the fallback fires.
+    """
+    from kanban.utils.demo_protection import get_user_boards
+
+    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+
+    boards = get_user_boards(request.user)
+    board = None
+    if board_id:
+        board = get_object_or_404(Board, id=board_id)
+        check_access_or_403(request.user, board)
+        boards = boards.filter(id=board_id)
+
+    display_user = request.user
+    showing_demo_data = False
+
+    # Only fall back to demo-user data when actually in demo mode and the user
+    # has no entries of their own on the in-context boards.
+    if is_demo_mode:
+        user_has_entries = TimeEntry.objects.filter(
+            user=request.user,
+            task__column__board__in=boards,
+        ).exists()
+        if not user_has_entries:
+            demo_usernames = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
+            for demo_username in demo_usernames:
+                demo_user = User.objects.filter(username=demo_username).first()
+                if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
+                    display_user = demo_user
+                    showing_demo_data = True
+                    break
+
+    # When showing a fallback demo user, scope to the official demo boards their
+    # entries actually live on (the requesting user's sandbox may be empty).
+    if showing_demo_data:
+        boards = Board.objects.filter(is_official_demo_board=True).distinct()
+        if board_id:
+            boards = boards.filter(id=board_id)
+
+    return display_user, boards, board, showing_demo_data
+
+
 @login_required
 def time_tracking_dashboard(request, board_id=None):
     """
@@ -966,54 +1125,20 @@ def time_tracking_dashboard(request, board_id=None):
     """
     from datetime import timedelta
     from django.db.models import Sum, Count, Avg
-    from accounts.models import Organization
-    
-    # MVP Mode: Check if user has any time entries, if not show demo data
-    user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
-    showing_demo_data = False
-    display_user = request.user
-    
-    if not user_has_entries:
-        # Try to get a demo user with time entries
-        demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
-        for demo_username in demo_usernames:
-            demo_user = User.objects.filter(username=demo_username).first()
-            if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
-                display_user = demo_user
-                showing_demo_data = True
-                break
-    
-    # Filter by board if specified
-    if board_id:
-        board = get_object_or_404(Board, id=board_id)
-        boards = [board]
-    else:
-        # MVP Mode: Include demo boards when showing demo data
-        if showing_demo_data:
-            demo_org = Organization.objects.filter(is_demo=True).first()
-            if demo_org:
-                boards = Board.objects.filter(
-                    models.Q(created_by=request.user) | 
-                    models.Q(members=request.user) |
-                    models.Q(organization=demo_org)
-                ).distinct()
-            else:
-                boards = Board.objects.filter(
-                    models.Q(created_by=request.user) | models.Q(members=request.user)
-                ).distinct()
-        else:
-            boards = Board.objects.filter(
-                models.Q(created_by=request.user) | models.Q(members=request.user)
-            ).distinct()
-        board = None
-    
-    # Get time entries for display_user (either request.user or demo user)
-    entries = TimeEntry.objects.filter(user=display_user)
-    if board_id:
-        entries = entries.filter(task__column__board=board)
-    
+
+    # Resolve workspace board scope + display user via the canonical helper so
+    # demo data never leaks into a real workspace and tasks aren't double-counted
+    # across an official demo board and its sandbox copy.
+    display_user, boards, board, showing_demo_data = _resolve_time_scope(request, board_id)
+
+    # Get time entries for display_user, scoped to the in-context boards.
+    entries = TimeEntry.objects.filter(
+        user=display_user,
+        task__column__board__in=boards,
+    )
+
     # Date ranges
-    today = timezone.now().date()
+    today = timezone.localdate()
     week_start = today - timedelta(days=today.weekday())
     month_start = today.replace(day=1)
     
@@ -1045,14 +1170,12 @@ def time_tracking_dashboard(request, board_id=None):
         'task', 'task__column', 'task__column__board'
     ).order_by('-work_date', '-created_at')[:10]
     
-    # Tasks with time logged (use display_user for MVP mode)
+    # Tasks with time logged (use display_user for MVP mode), scoped to the
+    # in-context boards. .distinct() guards against join fan-out before slicing.
     tasks_with_time = Task.objects.filter(
-        time_entries__user=display_user
-    )
-    if board_id:
-        tasks_with_time = tasks_with_time.filter(column__board=board)
-    
-    tasks_with_time = tasks_with_time.annotate(
+        time_entries__user=display_user,
+        column__board__in=boards,
+    ).distinct().annotate(
         total_hours=Sum('time_entries__hours_spent')
     ).order_by('-total_hours')[:10]
     
@@ -1075,19 +1198,22 @@ def time_tracking_dashboard(request, board_id=None):
             'hours': float(round(daily_hours, 2)),
         })
     
-    # My tasks needing time entry (assigned and not done)
+    # My tasks needing time entry (assigned and not done) - scoped to boards in current context
     my_tasks = Task.objects.filter(
         assigned_to=request.user,
-        progress__lt=100
+        progress__lt=100,
+        column__board__in=boards
     )
     if board_id:
         my_tasks = my_tasks.filter(column__board=board)
     
     my_tasks = my_tasks.select_related('column', 'column__board')[:20]
     
-    # AI-powered features
+    # AI-powered features. Build the service with display_user (the user whose
+    # data the cards/plots show) so alerts and suggestions describe the same
+    # user, and scope it to the in-context boards.
     from kanban.time_tracking_ai import TimeTrackingAIService
-    ai_service = TimeTrackingAIService(request.user, board)
+    ai_service = TimeTrackingAIService(display_user, board, boards=boards)
     
     # Get anomaly alerts (warnings about unusual time patterns)
     time_alerts = ai_service.detect_anomalies(days_back=14)
@@ -1095,6 +1221,10 @@ def time_tracking_dashboard(request, board_id=None):
     # Get smart task suggestions
     smart_suggestions = ai_service.suggest_tasks(limit=5)
     suggested_task_ids = [s['task'].id for s in smart_suggestions]
+    suggested_task_ids_set = set(suggested_task_ids)
+
+    # Filter my_tasks to exclude tasks already shown in AI suggestions
+    my_tasks = [t for t in my_tasks if t.id not in suggested_task_ids_set]
     
     # Get missing time reminder (if applicable)
     missing_time_alert = ai_service.get_missing_time_alerts()
@@ -1138,10 +1268,12 @@ def team_timesheet(request, board_id):
     from django.db.models import Sum
     
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Get week parameter
     week_offset = int(request.GET.get('week', 0))
-    today = timezone.now().date()
+    today = timezone.localdate()
     start_of_week = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
     end_of_week = start_of_week + timedelta(days=6)
     
@@ -1227,6 +1359,7 @@ def team_timesheet(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_write_guard
 def quick_time_entry(request, task_id):
     """
     Quick time entry API for inline logging
@@ -1234,11 +1367,16 @@ def quick_time_entry(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
+    # RBAC: user must have edit permission on the board to log time
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+    
     try:
         hours = Decimal(request.POST.get('hours', '0'))
         description = request.POST.get('description', '').strip()
-        work_date_str = request.POST.get('work_date', timezone.now().date().isoformat())
+        work_date_str = request.POST.get('work_date', timezone.localdate().isoformat())
         work_date = timezone.datetime.fromisoformat(work_date_str).date()
+        is_billable = request.POST.get('is_billable', 'true').lower() not in ('false', '0', '')
         
         if hours <= 0:
             return JsonResponse({'success': False, 'error': 'Hours must be greater than 0'}, status=400)
@@ -1266,7 +1404,8 @@ def quick_time_entry(request, task_id):
             user=request.user,
             hours_spent=hours,
             work_date=work_date,
-            description=description
+            description=description,
+            is_billable=is_billable,
         )
         
         # Calculate total time logged on task
@@ -1278,6 +1417,7 @@ def quick_time_entry(request, task_id):
             'success': True,
             'entry_id': entry.id,
             'hours': float(entry.hours_spent),
+            'is_billable': entry.is_billable,
             'total_time': float(total_time),
             'message': f'{entry.hours_spent}h logged successfully'
         })
@@ -1287,12 +1427,65 @@ def quick_time_entry(request, task_id):
 
 
 @login_required
+@require_http_methods(["POST"])
+@demo_write_guard
+def update_time_entry(request, entry_id):
+    """
+    Update an existing time entry (hours, description, is_billable).
+    """
+    entry = get_object_or_404(TimeEntry, id=entry_id)
+    board = entry.task.column.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
+    if entry.user != request.user:
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
+    try:
+        hours = Decimal(request.POST.get('hours', '0'))
+        if hours <= 0:
+            return JsonResponse({'success': False, 'error': 'Hours must be greater than 0'}, status=400)
+        if hours > 16:
+            return JsonResponse({'success': False, 'error': 'Hours cannot exceed 16 per entry'}, status=400)
+
+        hours = Decimal(str(round(float(hours) * 4) / 4))
+
+        # Validate daily total won't exceed 24h (excluding this entry's current hours)
+        existing_hours = TimeEntry.objects.filter(
+            user=request.user,
+            work_date=entry.work_date,
+        ).exclude(id=entry.id).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
+        if existing_hours + hours > 24:
+            return JsonResponse({
+                'success': False,
+                'error': f'Daily total would exceed 24 hours. You already have {existing_hours}h logged for this date.'
+            }, status=400)
+
+        entry.hours_spent = hours
+        entry.description = request.POST.get('description', '').strip()
+        entry.is_billable = request.POST.get('is_billable', 'true').lower() not in ('false', '0', '')
+        entry.save()
+
+        return JsonResponse({'success': True, 'hours': float(entry.hours_spent), 'message': 'Time entry updated'})
+    except Exception as e:
+        logger.error(f"Error updating time entry: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
 @require_http_methods(["DELETE"])
+@demo_write_guard
 def delete_time_entry(request, entry_id):
     """
     Delete a time entry
     """
     entry = get_object_or_404(TimeEntry, id=entry_id)
+    board = entry.task.column.board
+    
+    # RBAC: user must have edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
     
     # Check permissions - user can only delete their own entries
     if entry.user != request.user:
@@ -1330,27 +1523,16 @@ def time_entries_by_date(request):
     except ValueError:
         return JsonResponse({'success': False, 'error': 'Invalid date format'}, status=400)
     
-    # MVP Mode: use demo user when the logged-in user has no entries of their own
-    display_user = request.user
-    user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
-    if not user_has_entries:
-        demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
-        for demo_username in demo_usernames:
-            demo_user = User.objects.filter(username=demo_username).first()
-            if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
-                display_user = demo_user
-                break
-    
-    # Get entries for this date
+    # Resolve display user + board scope consistently with the dashboard so the
+    # drill-down only counts in-context boards (no demo leakage / duplicate tasks).
+    display_user, boards, board, showing_demo_data = _resolve_time_scope(request, board_id)
+
+    # Get entries for this date, scoped to the in-context boards
     entries_qs = TimeEntry.objects.filter(
         user=display_user,
-        work_date=work_date
-    ).select_related('task', 'task__column', 'task__column__board')
-    
-    if board_id:
-        entries_qs = entries_qs.filter(task__column__board_id=board_id)
-    
-    entries_qs = entries_qs.order_by('-hours_spent')
+        work_date=work_date,
+        task__column__board__in=boards,
+    ).select_related('task', 'task__column', 'task__column__board').order_by('-hours_spent')
     
     entries_data = []
     total_hours = Decimal('0.00')
@@ -1389,7 +1571,7 @@ def time_entries_by_period(request):
     if period not in ['today', 'week', 'month', 'all']:
         return JsonResponse({'success': False, 'error': 'Invalid period'}, status=400)
     
-    today = timezone.now().date()
+    today = timezone.localdate()
     
     # Determine date range
     if period == 'today':
@@ -1409,27 +1591,21 @@ def time_entries_by_period(request):
         end_date = None
         period_display = "All Time"
     
-    # MVP Mode: use demo user when the logged-in user has no entries of their own
-    display_user = request.user
-    user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
-    if not user_has_entries:
-        demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
-        for demo_username in demo_usernames:
-            demo_user = User.objects.filter(username=demo_username).first()
-            if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
-                display_user = demo_user
-                break
+    # Resolve display user + board scope consistently with the dashboard so the
+    # breakdown only counts in-context boards (no demo leakage / duplicate tasks).
+    display_user, boards, board, showing_demo_data = _resolve_time_scope(request, board_id)
 
-    # Get entries
-    entries_qs = TimeEntry.objects.filter(user=display_user)
-    
+    # Get entries, scoped to the in-context boards
+    entries_qs = TimeEntry.objects.filter(
+        user=display_user,
+        task__column__board__in=boards,
+    )
+
     if start_date:
         entries_qs = entries_qs.filter(work_date__gte=start_date)
     if end_date:
         entries_qs = entries_qs.filter(work_date__lte=end_date)
-    if board_id:
-        entries_qs = entries_qs.filter(task__column__board_id=board_id)
-    
+
     entries_qs = entries_qs.select_related(
         'task', 'task__column', 'task__column__board'
     ).order_by('-work_date', '-hours_spent')
@@ -1493,9 +1669,8 @@ def search_tasks_for_time_entry(request):
         return JsonResponse({'success': True, 'tasks': []})
     
     # Get boards user has access to
-    boards = Board.objects.filter(
-        models.Q(created_by=request.user) | models.Q(members=request.user)
-    ).distinct()
+    from kanban.utils.demo_protection import get_user_boards
+    boards = get_user_boards(request.user)
     
     if board_id:
         boards = boards.filter(id=board_id)
@@ -1505,8 +1680,6 @@ def search_tasks_for_time_entry(request):
         column__board__in=boards,
         progress__lt=100,
         title__icontains=query
-    ).exclude(
-        assigned_to=request.user  # Don't show assigned tasks here
     ).select_related('column', 'column__board').order_by('title')[:20]
     
     tasks_data = [
@@ -1532,6 +1705,7 @@ def search_tasks_for_time_entry(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def validate_time_entry_api(request):
     """
     AI-powered validation of a proposed time entry.
@@ -1609,94 +1783,128 @@ def validate_time_entry_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_write_guard
 def create_split_time_entries(request):
     """
     Create multiple time entries at once from AI split suggestions.
-    
+
     POST body:
         entries: list - Array of entry objects with:
             - task_id: int
             - hours: float
             - date: str (YYYY-MM-DD)
             - description: str (optional)
-    
+        original_entry_ids: list[int] (optional) - IDs of pre-existing TimeEntry
+            rows being replaced by this split (e.g. the overlogged entry a user
+            is dividing across days). When present, these are deleted so the
+            split entries replace rather than add to the original hours.
+
     Returns:
         JSON with created entries
     """
     from kanban.budget_models import TimeEntry
     from datetime import datetime
-    
+    from django.db import transaction
+
     try:
         data = json.loads(request.body)
         entries_data = data.get('entries', [])
-        
+        original_entry_ids = data.get('original_entry_ids') or []
+
         if not entries_data:
             return JsonResponse({
                 'success': False,
                 'error': 'No entries provided'
             }, status=400)
-        
+
         if len(entries_data) > 10:
             return JsonResponse({
                 'success': False,
                 'error': 'Maximum 10 entries per request'
             }, status=400)
-        
-        created_entries = []
+
+        validated = []
         errors = []
-        
+
         for i, entry_data in enumerate(entries_data):
             try:
                 task_id = entry_data.get('task_id')
                 hours = Decimal(str(entry_data.get('hours', 0)))
                 date_str = entry_data.get('date')
                 description = entry_data.get('description', '')
-                
+
                 # Validate required fields
                 if not all([task_id, hours, date_str]):
                     errors.append(f"Entry {i+1}: Missing required fields")
                     continue
-                
+
                 # Parse date
                 try:
                     work_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                 except ValueError:
                     errors.append(f"Entry {i+1}: Invalid date format")
                     continue
-                
+
                 # Get task
                 try:
                     task = Task.objects.get(id=task_id)
                 except Task.DoesNotExist:
                     errors.append(f"Entry {i+1}: Task not found")
                     continue
-                
+
+                # RBAC: verify user has edit permission on the task's board
+                board = task.column.board
+                if not request.user.has_perm('prizmai.edit_board', board):
+                    errors.append(f"Entry {i+1}: Permission denied for this task's board")
+                    continue
+
                 # Validate hours
                 if hours <= 0 or hours > 16:
                     errors.append(f"Entry {i+1}: Hours must be between 0 and 16")
                     continue
-                
-                # Create the entry
-                entry = TimeEntry.objects.create(
-                    task=task,
-                    user=request.user,
-                    hours_spent=hours,
-                    work_date=work_date,
-                    description=description[:500] if description else ''
-                )
-                
-                created_entries.append({
-                    'id': entry.id,
-                    'task_id': task.id,
-                    'task_title': task.title,
-                    'hours': float(entry.hours_spent),
-                    'date': entry.work_date.isoformat(),
-                    'description': entry.description
+
+                validated.append({
+                    'task': task,
+                    'hours': hours,
+                    'work_date': work_date,
+                    'description': description[:500] if description else ''
                 })
-                
+
             except Exception as e:
                 errors.append(f"Entry {i+1}: {str(e)}")
-        
+
+        created_entries = []
+
+        # Only touch the database if at least one entry validated. When the
+        # caller identifies pre-existing entries being replaced by this split
+        # (e.g. splitting an overlogged day's hours across multiple days),
+        # delete those originals in the same transaction so the split
+        # entries replace rather than add to the original hours.
+        if validated:
+            with transaction.atomic():
+                if original_entry_ids:
+                    TimeEntry.objects.filter(
+                        id__in=original_entry_ids,
+                        user=request.user
+                    ).delete()
+
+                for item in validated:
+                    entry = TimeEntry.objects.create(
+                        task=item['task'],
+                        user=request.user,
+                        hours_spent=item['hours'],
+                        work_date=item['work_date'],
+                        description=item['description']
+                    )
+                    created_entries.append({
+                        'id': entry.id,
+                        'task_id': item['task'].id,
+                        'task_title': item['task'].title,
+                        'hours': float(entry.hours_spent),
+                        'date': entry.work_date.isoformat(),
+                        'description': entry.description
+                    })
+
         return JsonResponse({
             'success': len(created_entries) > 0,
             'created_count': len(created_entries),

@@ -1,4 +1,4 @@
-import pytz
+import zoneinfo
 from django.utils import timezone
 
 
@@ -9,6 +9,16 @@ class TimezoneMiddleware:
     Once activated, all Django template date/time filters and
     ``timezone.localtime()`` calls automatically convert UTC datetimes
     to the user's timezone for the duration of the request.
+
+    Uses ``zoneinfo``, not ``pytz``. Django 5.x removed its special pytz
+    handling from ``timezone.make_aware()`` (no more implicit ``.localize()``
+    call), so activating a raw pytz tzinfo object here made every later
+    ``make_aware()`` call in the app silently attach that zone's *first*
+    historical UTC offset instead of its current one — for Asia/Kolkata that's
+    the pre-1906 +5:53:20 Local Mean Time instead of +5:30 IST, a ~23-minute
+    error on every saved date/time for any user with a timezone preference set.
+    ``zoneinfo.ZoneInfo`` resolves the offset for the actual moment given, so
+    it isn't subject to this trap.
     """
 
     def __init__(self, get_response):
@@ -30,11 +40,142 @@ class TimezoneMiddleware:
 
         if tzname:
             try:
-                timezone.activate(pytz.timezone(tzname))
-            except pytz.UnknownTimeZoneError:
+                timezone.activate(zoneinfo.ZoneInfo(tzname))
+            except zoneinfo.ZoneInfoNotFoundError:
                 timezone.deactivate()
         else:
             timezone.deactivate()
 
         response = self.get_response(request)
         return response
+
+
+class WorkspaceMiddleware:
+    """
+    Resolve ``request.workspace`` from the authenticated user's
+    ``profile.active_workspace``.
+
+    This gives every view access to ``request.workspace`` (a Workspace
+    instance or None).  Views that support workspace-scoping can filter
+    their querysets by ``workspace=request.workspace``.
+
+    The middleware is intentionally lightweight — it does NOT enforce
+    that a workspace must be set, and it does NOT redirect users.  Views
+    decide how to interpret a None workspace.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        request.workspace = None
+
+        if request.user.is_authenticated:
+            try:
+                profile = request.user.profile
+                ws = profile.active_workspace
+
+                # ── Consistency guard ──────────────────────────────────
+                # Detect and auto-repair state corruption where
+                # is_viewing_demo is True but active_workspace is None
+                # or belongs to the wrong workspace type.
+                self._heal_workspace_state(profile)
+
+                ws = profile.active_workspace  # re-read after potential heal
+
+                # ── Ownership guard ─────────────────────────────────────
+                # Workspaces are private to their owner.  A stale
+                # active_workspace pointing at someone else's workspace
+                # (legacy data from the org-based model) is reset to one the
+                # user owns, so they never land inside a foreign workspace.
+                if ws and not ws.is_demo and ws.created_by_id != request.user.id:
+                    from kanban.models import Workspace
+                    owned = Workspace.objects.filter(
+                        created_by=request.user, is_demo=False, is_active=True,
+                    ).order_by('-created_at').first()
+                    profile.active_workspace = owned
+                    profile.save(update_fields=['active_workspace'])
+                    ws = owned
+
+                if ws and ws.is_active:
+                    request.workspace = ws
+                elif profile.organization and not profile.is_viewing_demo:
+                    # User has an org but no active workspace — lazily create one.
+                    # This catches the "manual setup" and import-first paths.
+                    from kanban.workspace_utils import get_or_create_real_workspace
+                    ws = get_or_create_real_workspace(request.user)
+                    if ws:
+                        request.workspace = ws
+            except Exception:
+                pass
+
+        response = self.get_response(request)
+        return response
+
+    @staticmethod
+    def _heal_workspace_state(profile):
+        """Detect and auto-repair demo/workspace state inconsistencies.
+
+        Known corruption patterns:
+          1. is_viewing_demo=True but active_workspace is None
+          2. is_viewing_demo=True but active_workspace.is_demo is False
+          3. is_viewing_demo=False but org is the demo org
+          4. is_viewing_demo=True but org is NOT the demo org (and no demo ws)
+        """
+        import logging
+        _log = logging.getLogger('accounts.middleware')
+
+        try:
+            is_demo = profile.is_viewing_demo
+            ws = profile.active_workspace
+            org = profile.organization
+
+            if is_demo and (ws is None or (ws and not ws.is_demo)):
+                # Pattern 1 & 2: in demo but workspace is wrong/missing
+                from kanban.utils.demo_protection import get_demo_workspace
+                demo_ws = get_demo_workspace()
+                if demo_ws:
+                    profile.active_workspace = demo_ws
+                    profile.save(update_fields=['active_workspace'])
+                    _log.warning(
+                        "Healed workspace state for user %s: set active_workspace to demo",
+                        profile.user_id,
+                    )
+                else:
+                    # No demo workspace exists — exit demo mode
+                    profile.is_viewing_demo = False
+                    profile.save(update_fields=['is_viewing_demo'])
+                    _log.warning(
+                        "Healed workspace state for user %s: exited demo (no demo ws)",
+                        profile.user_id,
+                    )
+
+            elif not is_demo and org and getattr(org, 'is_demo', False):
+                # Pattern 3: not in demo but org is still demo org
+                from kanban.models import Workspace
+                from accounts.models import Organization
+                real_ws = Workspace.objects.filter(
+                    created_by=profile.user, is_demo=False, is_active=True,
+                ).order_by('-created_at').first()
+                real_org = (
+                    real_ws.organization
+                    if real_ws and real_ws.organization and not getattr(real_ws.organization, 'is_demo', False)
+                    else Organization.objects.filter(
+                        created_by=profile.user, is_demo=False,
+                    ).order_by('-id').first()
+                )
+                fields = []
+                if real_org:
+                    profile.organization = real_org
+                    fields.append('organization')
+                if real_ws:
+                    profile.active_workspace = real_ws
+                    fields.append('active_workspace')
+                if fields:
+                    profile.save(update_fields=fields)
+                    _log.warning(
+                        "Healed workspace state for user %s: restored real org/ws",
+                        profile.user_id,
+                    )
+        except Exception:
+            pass  # Never break requests

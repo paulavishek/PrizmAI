@@ -134,6 +134,12 @@
         background-color: rgba(23, 162, 184, 0.2);
         color: #17a2b8;
     }
+
+    .trend-badge.no_data,
+    .trend-badge.insufficient_data {
+        background-color: rgba(108, 117, 125, 0.15);
+        color: var(--text-muted);
+    }
     
     .action-card {
         cursor: pointer;
@@ -168,20 +174,15 @@
                     <h2><i class="fas fa-chart-area me-2"></i>Scope Dashboard</h2>
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb">
-                            {% if is_demo_mode %}
-                            <li class="breadcrumb-item"><a href="{% url 'demo_dashboard' %}">Demo Dashboard</a></li>
-                            <li class="breadcrumb-item"><a href="{% url 'demo_board_detail' board.id %}">{{ board.name }}</a></li>
-                            {% else %}
                             <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
                             <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
-                            {% endif %}
                             <li class="breadcrumb-item active">Scope</li>
                         </ol>
                     </nav>
                 </div>
                 <div>
-                    <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-outline-secondary me-2">
-                        <i class="fas fa-arrow-left me-1"></i> Back
+                    <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back me-2">
+                        <i class="fas fa-arrow-left me-1"></i> Back to Board
                     </a>
                     <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary me-2">
                         <i class="fas fa-chart-pie me-1"></i> Analytics
@@ -198,6 +199,43 @@
             </div>
         </div>
     </div>
+
+    {% if not has_baseline and not board.is_official_demo_board and not board.is_sandbox_copy %}
+    <!-- One-time baseline nudge banner — hidden once dismissed via localStorage -->
+    <div class="row mb-3" id="baselineNudgeBannerRow">
+        <div class="col-12">
+            <div class="alert alert-info d-flex align-items-start gap-3 mb-0 shadow-sm" id="baselineNudgeBanner"
+                 style="border-left: 4px solid #0dcaf0; border-radius: 8px;">
+                <span style="font-size:1.3rem;">💡</span>
+                <div class="flex-grow-1">
+                    <strong>Tip:</strong> Set your baseline <em>before</em> adding tasks to start tracking scope drift
+                    accurately. Once set, the Scope Dashboard will alert you whenever scope grows beyond your starting point.
+                </div>
+                <button type="button" class="btn btn-sm btn-primary ms-2 flex-shrink-0"
+                        data-bs-toggle="modal" data-bs-target="#setBaselineModal">
+                    Set Baseline Now
+                </button>
+                <button type="button" class="btn-close ms-1 flex-shrink-0" aria-label="Dismiss"
+                        id="baselineNudgeDismiss"></button>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function () {
+        var DISMISS_KEY = 'scope_baseline_nudge_dismissed_{{ board.id }}';
+        var row = document.getElementById('baselineNudgeBannerRow');
+        if (!row) return;
+        if (localStorage.getItem(DISMISS_KEY)) {
+            row.style.display = 'none';
+            return;
+        }
+        document.getElementById('baselineNudgeDismiss').addEventListener('click', function () {
+            localStorage.setItem(DISMISS_KEY, '1');
+            row.style.display = 'none';
+        });
+    }());
+    </script>
+    {% endif %}
 
     {% if not has_baseline %}
     <!-- No Baseline Setup -->
@@ -285,7 +323,7 @@
     <!-- Key Metrics -->
     <div class="row mb-4">
         <div class="col-md-3">
-            <div class="card stat-card success">
+            <div class="card stat-card success h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-2">Baseline</h6>
                     <h3 class="mb-0">{{ scope_status.baseline_tasks }}</h3>
@@ -297,7 +335,7 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card stat-card info">
+            <div class="card stat-card info h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-2">Current</h6>
                     <h3 class="mb-0">{{ scope_status.current_tasks }}</h3>
@@ -309,13 +347,13 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card stat-card 
+            <div class="card stat-card h-100
                 {% if scope_status.scope_change_percentage > 30 %}danger
                 {% elif scope_status.scope_change_percentage > 15 %}warning
                 {% else %}info{% endif %}">
                 <div class="card-body">
                     <h6 class="text-muted mb-2">Scope Change</h6>
-                    <h3 class="mb-0 
+                    <h3 class="mb-0
                         {% if scope_status.scope_change_percentage > 30 %}text-danger
                         {% elif scope_status.scope_change_percentage > 15 %}text-warning
                         {% else %}text-info{% endif %}">
@@ -328,7 +366,7 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card stat-card">
+            <div class="card stat-card h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-2">Baseline Set</h6>
                     <p class="mb-0">{{ scope_status.baseline_date|date:"M d, Y" }}</p>
@@ -342,14 +380,16 @@
     {% if velocity %}
     <div class="row mb-4">
         <div class="col-md-4">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-2"><i class="fas fa-tachometer-alt me-2"></i>Scope Velocity</h6>
                     <h4 class="mb-0">{{ velocity.avg_tasks_added_per_week|floatformat:1 }}</h4>
                     <small class="text-muted">tasks added per week</small>
                     <div class="mt-2">
-                        <span class="trend-badge {{ velocity.trend }}">
-                            {% if velocity.trend == 'rapidly_increasing' %}
+                        <span class="trend-badge {% if velocity.trend == 'insufficient_data' or velocity.avg_tasks_added_per_week == 0 %}no_data{% else %}{{ velocity.trend }}{% endif %}">
+                            {% if velocity.trend == 'insufficient_data' or velocity.avg_tasks_added_per_week == 0 %}
+                                <i class="fas fa-minus-circle me-1"></i>No data yet
+                            {% elif velocity.trend == 'rapidly_increasing' %}
                                 <i class="fas fa-arrow-up me-1"></i>Rapidly Increasing
                             {% elif velocity.trend == 'increasing' %}
                                 <i class="fas fa-arrow-up me-1"></i>Increasing
@@ -364,7 +404,7 @@
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-2"><i class="fas fa-chart-bar me-2"></i>Complexity Velocity</h6>
                     <h4 class="mb-0">{{ velocity.avg_complexity_added_per_week|floatformat:1 }}</h4>
@@ -373,7 +413,7 @@
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-2"><i class="fas fa-clock me-2"></i>Analysis Period</h6>
                     <h4 class="mb-0">{{ velocity.weeks_analyzed|floatformat:0 }}</h4>
@@ -487,6 +527,11 @@
                     </a>
                 </div>
                 <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <strong>Complexity</strong> = sum of complexity scores across all tasks &nbsp;|&nbsp;
+                        <strong>Avg</strong> = average complexity score per task (Complexity &divide; Tasks)
+                    </p>
                     {% if snapshots %}
                     <div class="timeline">
                         {% for snapshot in snapshots|slice:":10" %}
@@ -521,10 +566,10 @@
                                     <small class="text-muted">Tasks:</small> <strong>{{ snapshot.total_tasks }}</strong>
                                 </div>
                                 <div class="col-md-4">
-                                    <small class="text-muted">Complexity:</small> <strong>{{ snapshot.total_complexity_points }} pts</strong>
+                                    <small class="text-muted" title="Sum of complexity scores across all tasks">Complexity:</small> <strong>{{ snapshot.total_complexity_points }} pts</strong>
                                 </div>
                                 <div class="col-md-4">
-                                    <small class="text-muted">Avg:</small> <strong>{{ snapshot.avg_complexity|floatformat:1 }}</strong>
+                                    <small class="text-muted" title="Average complexity score per task">Avg:</small> <strong>{{ snapshot.avg_complexity|floatformat:1 }}</strong>
                                 </div>
                             </div>
                             {% if snapshot.notes %}
@@ -558,6 +603,9 @@
                             <i class="fas fa-wand-magic-sparkles me-2"></i>Run AI Analysis
                         </button>
                     </form>
+                    <a href="{% url 'scope_autopsy_dashboard' board.id %}" class="btn btn-outline-secondary w-100 mb-3 quick-action-btn">
+                        🔍 Scope Autopsy
+                    </a>
                     <button type="button" class="btn btn-outline-warning w-100 mb-3 quick-action-btn"
                             data-bs-toggle="modal" data-bs-target="#setBaselineModal">
                         <i class="fas fa-flag me-2"></i>Set Baseline
@@ -565,6 +613,45 @@
                     <a href="{% url 'triple_constraint_dashboard' board.id %}" class="btn btn-outline-info w-100 quick-action-btn">
                         <i class="fas fa-balance-scale me-2"></i>Triple Constraint
                     </a>
+                </div>
+            </div>
+
+            <!-- Last Autopsy Summary -->
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="fas fa-microscope me-2 text-muted"></i>Last Autopsy</h6>
+                </div>
+                <div class="card-body">
+                    {% if latest_autopsy %}
+                    <p class="text-muted small mb-3">
+                        <i class="fas fa-clock me-1"></i>Run on {{ latest_autopsy.created_at|date:"M d, Y" }}
+                    </p>
+                    <div class="row text-center mb-3">
+                        <div class="col-4">
+                            <div class="fw-semibold">{{ latest_autopsy.baseline_task_count }}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">Baseline</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="fw-semibold">{{ latest_autopsy.final_task_count }}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">Final</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="fw-semibold {% if latest_autopsy.total_scope_growth_percentage > 30 %}text-danger{% elif latest_autopsy.total_scope_growth_percentage > 15 %}text-warning{% else %}text-info{% endif %}">
+                                +{{ latest_autopsy.total_scope_growth_percentage|floatformat:1 }}%
+                            </div>
+                            <div class="text-muted" style="font-size: 0.75rem;">Growth</div>
+                        </div>
+                    </div>
+                    <a href="{% url 'scope_autopsy_dashboard' board.id %}" class="btn btn-sm btn-outline-secondary w-100">
+                        View Full Report →
+                    </a>
+                    {% else %}
+                    <p class="text-muted small mb-1 fw-semibold">No autopsy run yet</p>
+                    <p class="text-muted mb-3" style="font-size: 0.8rem;">Run a Scope Autopsy to see a forensic breakdown of how your project's scope has grown.</p>
+                    <a href="{% url 'scope_autopsy_dashboard' board.id %}" class="btn btn-sm btn-outline-secondary w-100">
+                        Run Scope Autopsy →
+                    </a>
+                    {% endif %}
                 </div>
             </div>
 
@@ -633,7 +720,16 @@
                     </div>
                     <div class="mb-3">
                         <div class="d-flex justify-content-between mb-1">
-                            <small>Completed</small>
+                            <small>In Review</small>
+                            <small>{{ current_metrics.in_review_tasks }}</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-info" style="width: {% widthratio current_metrics.in_review_tasks current_metrics.total_tasks 100 %}%"></div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small>Done</small>
                             <small>{{ current_metrics.completed_tasks }}</small>
                         </div>
                         <div class="progress" style="height: 8px;">
@@ -793,8 +889,8 @@
                                             {% if snap.is_baseline %}selected{% endif %}>
                                         {{ snap.snapshot_date|date:"M d, Y H:i" }}
                                         {% if snap.is_baseline %}(current baseline){% endif %}
-                                        — {{ snap.total_tasks }} tasks, {{ snap.total_complexity_points }} pts
-                                        {% if snap.notes %} — {{ snap.notes|truncatechars:40 }}{% endif %}
+                                        &mdash; {{ snap.total_tasks }} tasks, {{ snap.total_complexity_points }} pts
+                                        {% if snap.notes %} &mdash; {{ snap.notes|truncatechars:40 }}{% endif %}
                                     </option>
                                     {% endfor %}
                                 </select>
@@ -849,15 +945,15 @@
                                 <div class="row">
                                     <div class="col-4 text-center">
                                         <small class="text-muted">Tasks</small>
-                                        <div class="fw-bold fs-5" id="previewTasks">—</div>
+                                        <div class="fw-bold fs-5" id="previewTasks">&mdash;</div>
                                     </div>
                                     <div class="col-4 text-center">
                                         <small class="text-muted">Complexity</small>
-                                        <div class="fw-bold fs-5" id="previewComplexity">—</div>
+                                        <div class="fw-bold fs-5" id="previewComplexity">&mdash;</div>
                                     </div>
                                     <div class="col-4 text-center">
                                         <small class="text-muted">Avg Complexity</small>
-                                        <div class="fw-bold fs-5" id="previewAvg">—</div>
+                                        <div class="fw-bold fs-5" id="previewAvg">&mdash;</div>
                                     </div>
                                 </div>
                             </div>
@@ -890,7 +986,7 @@ function updateManualPreview() {
         preview.style.display = 'block';
         document.getElementById('previewTasks').textContent = tasks;
         document.getElementById('previewComplexity').textContent = complexity + ' pts';
-        document.getElementById('previewAvg').textContent = tasks > 0 ? (complexity / tasks).toFixed(1) : '—';
+        document.getElementById('previewAvg').textContent = tasks > 0 ? (complexity / tasks).toFixed(1) : '\u2014';
     } else {
         preview.style.display = 'none';
     }
@@ -944,9 +1040,4 @@ function updateManualPreview() {
 {% endblock %}
 
 {% block extra_js %}
-<script>
-function goBack() {
-    window.history.back();
-}
-</script>
 {% endblock %}

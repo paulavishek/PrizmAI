@@ -33,6 +33,13 @@ app.conf.beat_schedule = {
         'task': 'kanban.refresh_demo_dates',
         'schedule': crontab(hour=3, minute=0),  # Daily at 3:00 AM
     },
+    # Reclaim abandoned demo sandboxes - runs daily at 4 AM (offset from the
+    # 3 AM demo-date refresh). Deletes sandboxes idle for STALE_SANDBOX_DAYS
+    # (default 90) so demo storage doesn't grow unbounded in production.
+    'cleanup-stale-sandboxes-daily': {
+        'task': 'kanban.cleanup_stale_sandboxes',
+        'schedule': crontab(hour=4, minute=0),  # Daily at 4:00 AM
+    },
     # Time tracking reminder - runs at 5 PM on weekdays
     'time-tracking-reminder': {
         'task': 'kanban.send_time_tracking_reminders',
@@ -43,15 +50,41 @@ app.conf.beat_schedule = {
         'task': 'kanban.detect_time_anomalies',
         'schedule': crontab(hour=9, minute=0),  # Daily at 9:00 AM
     },
-    # Weekly time summary - runs Monday at 8 AM
+    # Weekly time summary - runs Monday at 8:30 AM (offset off the daily 08:00
+    # executive briefing so they never fire in the same Monday tick).
     'weekly-time-summary': {
         'task': 'kanban.weekly_time_summary',
-        'schedule': crontab(hour=8, minute=0, day_of_week='1'),  # Monday at 8 AM
+        'schedule': crontab(hour=8, minute=30, day_of_week='1'),  # Monday at 8:30 AM
     },
     # Due-date approaching automations - runs every hour
     'due-date-approaching-automations': {
         'task': 'kanban.run_due_date_approaching_automations',
         'schedule': crontab(minute=30),  # Every hour at :30 (offset from conflict detection)
+    },
+    # Overdue task automations - runs every hour to catch tasks whose due date just passed
+    'overdue-task-automations': {
+        'task': 'kanban.run_overdue_task_automations',
+        'schedule': crontab(minute=45),  # Every hour at :45 (offset from other automation tasks)
+    },
+    # Idle-task automations - hourly sweep, offset from other automation tasks
+    'idle-task-automations': {
+        'task': 'kanban.run_idle_task_automations',
+        'schedule': crontab(minute=15),  # Every hour at :15
+    },
+    # Start-date-reached automations - daily check shortly after midnight local time
+    'start-date-reached-automations': {
+        'task': 'kanban.run_start_date_reached_automations',
+        'schedule': crontab(hour=0, minute=5),  # Daily at 00:05
+    },
+    # Predicted-late automations - daily check (heavier query, runs once/day)
+    'predicted-late-automations': {
+        'task': 'kanban.run_predicted_late_automations',
+        'schedule': crontab(hour=1, minute=5),  # Daily at 01:05
+    },
+    # Dependency-overdue automations - hourly sweep, offset from other automations
+    'dependency-overdue-automations': {
+        'task': 'kanban.run_dependency_overdue_automations',
+        'schedule': crontab(minute=50),  # Every hour at :50
     },
     # Daily executive briefing - 08:00 IST (CELERY_TIMEZONE = 'Asia/Kolkata')
     'daily-executive-briefing': {
@@ -69,15 +102,17 @@ app.conf.beat_schedule = {
         'task': 'kanban.generate_coaching_suggestions',
         'schedule': crontab(hour=7, minute=0),
     },
-    # Train priority models weekly on Sunday at 2:00 AM
+    # Train priority models weekly on Sunday at 2:30 AM (offset off the daily
+    # 02:00 conflict cleanup so they never fire in the same Sunday tick).
     'train-priority-models-weekly': {
         'task': 'kanban.train_priority_models_periodic',
-        'schedule': crontab(hour=2, minute=0, day_of_week='0'),  # Sunday 2 AM
+        'schedule': crontab(hour=2, minute=30, day_of_week='0'),  # Sunday 2:30 AM
     },
-    # Analyze feedback text weekly on Wednesday at 3:00 AM
+    # Analyze feedback text weekly on Wednesday at 3:30 AM (offset off the daily
+    # 03:00 demo-date refresh so they never fire in the same Wednesday tick).
     'analyze-feedback-text-weekly': {
         'task': 'kanban.analyze_feedback_text',
-        'schedule': crontab(hour=3, minute=0, day_of_week='3'),  # Wednesday 3 AM
+        'schedule': crontab(hour=3, minute=30, day_of_week='3'),  # Wednesday 3:30 AM
     },
     # Aggregate org-level learning daily at 6:00 AM (before PM metrics)
     'aggregate-org-learning-daily': {
@@ -89,10 +124,11 @@ app.conf.beat_schedule = {
         'schedule': crontab(hour=4, minute=0, day_of_week=0),  # Sunday 4 AM
     },
     # --- Knowledge Graph Tasks ---
-    # Generate memory connections weekly on Sunday at 5:00 AM
+    # Generate memory connections weekly on Sunday at 5:30 AM (offset off the
+    # daily 05:00 analytics report so they never fire in the same Sunday tick).
     'kg-generate-connections-weekly': {
         'task': 'knowledge_graph.generate_memory_connections',
-        'schedule': crontab(hour=5, minute=0, day_of_week=0),  # Sunday 5 AM
+        'schedule': crontab(hour=5, minute=30, day_of_week=0),  # Sunday 5:30 AM
     },
     # Check missed deadlines daily at 1:00 AM
     'kg-check-missed-deadlines-daily': {
@@ -115,22 +151,44 @@ app.conf.beat_schedule = {
         'task': 'decision_center.generate_decision_briefing',
         'schedule': crontab(hour=7, minute=30),  # Daily 7:30 AM
     },
+    # Send digest emails every 30 min (honours per-user preferred time).
+    # Offset to :05/:35 so it does not dispatch in the same tick as the hourly
+    # conflict sweep (:00) and the :30 automation cluster — keeps any single
+    # second from flooding the solo worker with write-heavy jobs.
+    'dc-send-digest-emails': {
+        'task': 'decision_center.send_daily_digest_emails',
+        'schedule': crontab(minute='5,35'),  # Every 30 minutes, offset
+    },
     # --- Exit Protocol Tasks ---
     # Monitor board health daily at 2:15 AM
     'monitor-board-health-daily': {
         'task': 'exit_protocol.tasks.monitor_all_boards_health',
         'schedule': crontab(hour=2, minute=15),  # Daily 2:15 AM
     },
-    # --- Living Commitment Protocol Tasks ---
-    # Apply Bayesian confidence decay every 4 hours
-    'run-commitment-decay': {
-        'task': 'kanban.run_commitment_decay_all',
-        'schedule': crontab(minute=0, hour='*/4'),  # Every 4 hours
+    # --- Project Confidence Score ---
+    # Compute auto confidence scores for all boards every 6 hours.
+    # Offset to :40 so it does not collide with the due-date sweep at :30.
+    'compute-board-confidence': {
+        'task': 'kanban.compute_all_board_confidence',
+        'schedule': crontab(minute=40, hour='*/6'),  # Every 6 hours at :40
     },
-    # Refill credibility tokens every Monday at midnight
-    'reset-commitment-tokens': {
-        'task': 'kanban.reset_weekly_tokens',
-        'schedule': crontab(hour=0, minute=0, day_of_week='1'),  # Mon 00:00
+    # --- Analytics Tasks ---
+    # Clean up user sessions older than 90 days (daily at 4:30 AM)
+    'analytics-cleanup-old-sessions': {
+        'task': 'analytics.tasks.cleanup_old_sessions',
+        'schedule': crontab(hour=4, minute=30),
+    },
+    # Generate daily analytics report (daily at 5:00 AM)
+    'analytics-daily-report': {
+        'task': 'analytics.tasks.generate_daily_analytics_report',
+        'schedule': crontab(hour=5, minute=0),
+    },
+    # --- Webhook Maintenance ---
+    # Purge webhook delivery logs older than 30 days (daily at 4:15 AM) so the
+    # WebhookDelivery table doesn't grow unbounded.
+    'cleanup-old-webhook-deliveries': {
+        'task': 'webhooks.tasks.cleanup_old_deliveries',
+        'schedule': crontab(hour=4, minute=15),
     },
 }
 
@@ -138,6 +196,17 @@ app.conf.beat_schedule = {
 # compete with user-facing operations (auth, data saves, conflict detection).
 app.conf.task_routes = {
     'kanban.ai_summary.*': {'queue': 'summaries'},
+    'kanban.ai_streaming.*': {'queue': 'ai_tasks'},
+    # User-triggered, latency-sensitive work (Reset Demo / sandbox provisioning)
+    # goes to a dedicated 'interactive' queue consumed by its own worker so it
+    # never queues behind the burst of heavy scheduled tasks that Celery Beat's
+    # DatabaseScheduler fires on startup (detect_conflicts, the daily Gemini
+    # executive briefing, commitment decay, digest emails — all on 'celery').
+    # NB: the task name is 'kanban.sandbox_provisioning.provision_sandbox'
+    # (see provision_sandbox_task's @shared_task name=), NOT 'provision_sandbox_task'.
+    'kanban.sandbox_provisioning.*': {'queue': 'interactive'},
+    # NB: migration routing lives in settings.CELERY_TASK_ROUTES (the effective
+    # config) — see there, not here.
 }
 
 
@@ -154,6 +223,19 @@ def _catchup_daily_tasks(sender, **kwargs):
     celery was down during the scheduled window.
     """
     import threading
+
+    # Stagger the catch-up jobs a few minutes into the future instead of firing
+    # them the instant the worker boots. On a single (solo) worker every task
+    # runs one-at-a-time, so enqueueing these heavy AI jobs immediately floods
+    # the worker for 2–3 minutes and makes any interactive job started right
+    # after startup — most visibly "Reset Demo" — wait in line behind them.
+    # These are daily summaries with no minute-level deadline, so a short delay
+    # is harmless and leaves the worker free for interactive work straight after
+    # startup. Staggering (not all at the same ETA) also leaves idle gaps
+    # between them so a reset fired a little later still slots in quickly.
+    CATCHUP_BRIEFING_DELAY = 180       # 3 min
+    CATCHUP_DC_COLLECT_DELAY = 210     # 3.5 min
+    CATCHUP_DC_BRIEFING_DELAY = 240    # 4 min
 
     def _run_catchup():
         import django
@@ -176,8 +258,11 @@ def _catchup_daily_tasks(sender, **kwargs):
                 ai_summary_generated_at__date=today,
             ).exists()
             if stale:
-                _logger.info("Missed daily executive briefing — enqueueing now")
-                app.send_task('kanban.ai_summary.generate_daily_executive_briefing')
+                _logger.info("Missed daily executive briefing — scheduling in %ss", CATCHUP_BRIEFING_DELAY)
+                app.send_task(
+                    'kanban.ai_summary.generate_daily_executive_briefing',
+                    countdown=CATCHUP_BRIEFING_DELAY,
+                )
             else:
                 _logger.info("Daily executive briefing already ran today — skipping")
         except Exception as exc:
@@ -189,8 +274,11 @@ def _catchup_daily_tasks(sender, **kwargs):
             cache_key = f'dc_collect_ran_{today.isoformat()}'
             already_ran = _cache.get(cache_key)
             if not already_ran:
-                _logger.info("Missed decision item collection — enqueueing now")
-                app.send_task('decision_center.collect_decision_items')
+                _logger.info("Missed decision item collection — scheduling in %ss", CATCHUP_DC_COLLECT_DELAY)
+                app.send_task(
+                    'decision_center.collect_decision_items',
+                    countdown=CATCHUP_DC_COLLECT_DELAY,
+                )
                 _cache.set(cache_key, True, 86400)  # expires in 24h
             else:
                 _logger.info("Decision item collection already ran today — skipping")
@@ -204,8 +292,11 @@ def _catchup_daily_tasks(sender, **kwargs):
                 generated_at__date=today,
             ).exists()
             if not has_today_briefing:
-                _logger.info("Missed decision center briefing — enqueueing now")
-                app.send_task('decision_center.generate_decision_briefing')
+                _logger.info("Missed decision center briefing — scheduling in %ss", CATCHUP_DC_BRIEFING_DELAY)
+                app.send_task(
+                    'decision_center.generate_decision_briefing',
+                    countdown=CATCHUP_DC_BRIEFING_DELAY,
+                )
             else:
                 _logger.info("Decision center briefing already ran today — skipping")
         except Exception as exc:

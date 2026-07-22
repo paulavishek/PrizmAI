@@ -23,6 +23,7 @@ from ai_assistant.models import (
 )
 from kanban.models import Board, Task
 from accounts.models import Organization
+from accounts.demo_personas import DEMO_PERSONAS, LEGACY_DEMO_USERNAMES
 
 
 class Command(BaseCommand):
@@ -43,9 +44,9 @@ class Command(BaseCommand):
         # Get demo organization
         try:
             demo_org = Organization.objects.get(name='Demo - Acme Corporation')
-            self.stdout.write(self.style.SUCCESS(f'✓ Found organization: {demo_org.name}'))
+            self.stdout.write(self.style.SUCCESS(f'[OK] Found organization: {demo_org.name}'))
         except Organization.DoesNotExist:
-            self.stdout.write(self.style.ERROR('✗ Demo - Acme Corporation not found!'))
+            self.stdout.write(self.style.ERROR('[FAIL] Demo - Acme Corporation not found!'))
             self.stdout.write('  Please run: python manage.py create_demo_organization')
             return
 
@@ -61,7 +62,7 @@ class Command(BaseCommand):
             pass
         
         if not demo_users.exists():
-            self.stdout.write(self.style.ERROR('✗ No demo users found!'))
+            self.stdout.write(self.style.ERROR('[FAIL] No demo users found!'))
             return
 
         self.stdout.write(f'  Found {demo_users.count()} demo users')
@@ -96,7 +97,7 @@ class Command(BaseCommand):
         # Summary
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS('=' * 80))
-        self.stdout.write(self.style.SUCCESS('✓ AI ASSISTANT DEMO DATA COMPLETE'))
+        self.stdout.write(self.style.SUCCESS('[OK] AI ASSISTANT DEMO DATA COMPLETE'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
         self.stdout.write(f'  User Preferences: {prefs_count}')
         self.stdout.write(f'  Chat Sessions: {sessions_count}')
@@ -124,7 +125,7 @@ class Command(BaseCommand):
         rec_deleted = AITaskRecommendation.objects.filter(board__in=demo_boards).delete()
         self.stdout.write(f'  Deleted {rec_deleted[0]} recommendations')
         
-        self.stdout.write(self.style.SUCCESS('  ✓ AI data reset complete'))
+        self.stdout.write(self.style.SUCCESS('  [OK] AI data reset complete'))
 
     def create_user_preferences(self, demo_users):
         """Create user preferences for demo users"""
@@ -154,10 +155,7 @@ class Command(BaseCommand):
         """Create demo chat sessions with Q&A messages"""
         self.stdout.write('\n2. Creating Chat Sessions & Q&A...')
         
-        # Prioritize demo_admin_solo for solo demo mode, fall back to alex_chen_demo
-        primary_user = demo_users.filter(username='demo_admin_solo').first() or \
-                       demo_users.filter(username='alex_chen_demo').first() or \
-                       demo_users.first()
+        primary_user = self._primary_demo_user(demo_users)
         secondary_user = demo_users.exclude(pk=primary_user.pk).first()
         
         # Get boards
@@ -186,17 +184,33 @@ class Command(BaseCommand):
             else:
                 board = None
             
-            # Create session
-            session = AIAssistantSession.objects.create(
+            # Create-or-get session. Using ``get_or_create`` keyed on
+            # (user, board, title, is_demo=True) prevents this seeder from
+            # producing duplicate demo sessions on repeated runs without
+            # ``--reset`` - the cause of the 6x-duplicated demo titles seen
+            # in the sidebar before May 2026.
+            workspace = getattr(board, 'workspace', None) if board else None
+            session, created = AIAssistantSession.objects.get_or_create(
                 user=user,
                 board=board,
                 title=session_data['title'],
-                description=session_data.get('description', ''),
-                is_active=session_data.get('is_active', False),
-                is_demo=True,  # Mark as demo session visible to all users
-                message_count=len(session_data['messages']),
-                total_tokens_used=random.randint(500, 3000),
+                is_demo=True,
+                defaults={
+                    'workspace': workspace,
+                    'description': session_data.get('description', ''),
+                    'is_active': session_data.get('is_active', False),
+                    'message_count': len(session_data['messages']),
+                    'total_tokens_used': random.randint(500, 3000),
+                },
             )
+            if not created:
+                # Refresh fields that might have drifted, but keep the existing pk.
+                session.description = session_data.get('description', '')
+                session.is_active = session_data.get('is_active', False)
+                session.message_count = len(session_data['messages'])
+                if session.workspace_id is None and workspace is not None:
+                    session.workspace = workspace
+                session.save()
             
             # Backdate the session - use update() to bypass auto_now
             days_ago = session_data.get('days_ago', 0)
@@ -263,7 +277,7 @@ Key Objectives:
 - Continuous improvement through retrospectives
 
 Current Status: Active
-Team Size: {board.members.count()} members
+Team Size: {board.memberships.count()} members
 Total Tasks: {Task.objects.filter(column__board=board).count()}
 """,
                 'summary': f'Overview of the {board.name} project including objectives, methodology, and current status.',
@@ -277,7 +291,7 @@ Total Tasks: {Task.objects.filter(column__board=board).count()}
                 'content': f"""Resource Plan for {board.name}
 
 Team Members:
-{chr(10).join([f"- {m.get_full_name() or m.username}" for m in board.members.all()])}
+{chr(10).join([f"- {m.get_full_name() or m.username}" for m in User.objects.filter(board_memberships__board=board)])}
 
 Capacity: 40 hours/week per team member
 Current Sprint Allocation: Balanced workload distribution
@@ -330,38 +344,63 @@ Mitigation Strategies:
         self.stdout.write(f'  Created {count} knowledge base entries')
         return count
 
+    def _primary_demo_user(self, demo_users):
+        """Resolve the primary demo user the seeded AI data is attributed to.
+
+        Prefers the legacy solo-admin if it still exists, otherwise the current
+        lead persona (priya.sharma). Falls back to any demo user. Kept as a
+        single source so sessions and analytics are always owned by the SAME
+        user — the analytics seeder counts that user's seeded messages.
+        """
+        return (
+            demo_users.filter(username='demo_admin_solo').first()
+            or demo_users.filter(username=DEMO_PERSONAS['lead']['username']).first()
+            or demo_users.first()
+        )
+
     def create_analytics(self, demo_users, demo_boards):
         """Create analytics data - realistic summary records matching demo sessions"""
         self.stdout.write('\n4. Creating Analytics Data...')
-        
-        # Delete existing analytics for demo users
+
+        # Delete existing analytics for the current demo users AND any left over
+        # from a previous persona generation in the demo workspaces, so repeated
+        # seeds don't accumulate duplicate/stale rows.
         AIAssistantAnalytics.objects.filter(user__in=demo_users).delete()
-        
+        AIAssistantAnalytics.objects.filter(
+            user__username__in=LEGACY_DEMO_USERNAMES,
+            workspace__is_demo=True,
+        ).delete()
+
         count = 0
-        # Get demo_admin_solo as the primary demo user
-        demo_admin_solo = demo_users.filter(username='demo_admin_solo').first()
-        
-        if not demo_admin_solo:
-            self.stdout.write('  Skipped (no demo_admin_solo user found)')
+        # Attribute analytics to the same primary user the sessions belong to.
+        # (Previously keyed on the now-removed ``demo_admin_solo``, which made
+        # this a no-op after the persona swap.)
+        primary_user = self._primary_demo_user(demo_users)
+
+        if not primary_user:
+            self.stdout.write('  Skipped (no demo user found)')
             return 0
-        
+
         # Count actual messages for this user to base analytics on real data
         from ai_assistant.models import AIAssistantMessage, AIAssistantSession
-        user_sessions = AIAssistantSession.objects.filter(user=demo_admin_solo)
-        
+        user_sessions = AIAssistantSession.objects.filter(user=primary_user)
+
         # Create per-board analytics with realistic values based on actual data
         boards_list = list(demo_boards)
         for board in boards_list:
             # Get sessions for this board
             board_sessions = user_sessions.filter(board=board)
             board_messages = AIAssistantMessage.objects.filter(session__in=board_sessions).count()
-            
+
             if board_messages == 0:
                 board_messages = 2  # Minimum for display purposes
-            
+
             analytics = AIAssistantAnalytics.objects.create(
-                user=demo_admin_solo,
+                user=primary_user,
                 board=board,
+                # Workspace MUST be set: the analytics dashboard scopes strictly
+                # by request.workspace, so a NULL workspace = invisible row.
+                workspace=getattr(board, 'workspace', None),
                 sessions_created=max(1, board_sessions.count()),
                 messages_sent=board_messages,
                 gemini_requests=board_messages // 2 + 1,
@@ -375,15 +414,22 @@ Mitigation Strategies:
                 avg_response_time_ms=random.randint(900, 1400),
             )
             count += 1
-        
+
         # Create a record for sessions without a specific board (general queries)
         sessions_without_board = user_sessions.filter(board__isnull=True)
         general_messages = AIAssistantMessage.objects.filter(session__in=sessions_without_board).count()
-        
+
         if general_messages > 0:
+            # General (board-less) sessions still belong to a workspace. Reuse the
+            # demo board's workspace so the row is visible in the demo dashboard.
+            general_ws = next(
+                (getattr(b, 'workspace', None) for b in boards_list if getattr(b, 'workspace', None)),
+                None,
+            )
             analytics = AIAssistantAnalytics.objects.create(
-                user=demo_admin_solo,
+                user=primary_user,
                 board=None,  # General analytics for non-board sessions
+                workspace=general_ws,
                 sessions_created=sessions_without_board.count(),
                 messages_sent=general_messages,
                 gemini_requests=general_messages // 2 + 1,
@@ -397,7 +443,7 @@ Mitigation Strategies:
                 avg_response_time_ms=1100,
             )
             count += 1
-        
+
         self.stdout.write(f'  Created {count} analytics records')
         return count
 
@@ -598,31 +644,31 @@ Would you like me to create subtasks for this parallel approach?""",
 
 | Team Member | Assigned Tasks | Est. Hours | Utilization |
 |-------------|----------------|------------|-------------|
-| Sam Rivera | 11 tasks | 44 hours | ⚠️ 110% |
-| Jordan Taylor | 12 tasks | 38 hours | ✅ 95% |
-| Alex Chen | 7 tasks | 28 hours | ✅ 70% |
+| Marcus Chen | 11 tasks | 44 hours | [WARN] 110% |
+| Elena Vasquez | 12 tasks | 38 hours | [OK] 95% |
+| Priya Sharma | 7 tasks | 28 hours | [OK] 70% |
 
-**⚠️ Alert: Sam Rivera is overloaded**
+**[WARN] Alert: Marcus Chen is overloaded**
 
-Sam has 11 active implementation tasks with an estimated 44 hours of work, which exceeds their 40-hour weekly capacity.
+Marcus has 11 active implementation tasks with an estimated 44 hours of work, which exceeds their 40-hour weekly capacity.
 
 **Recommended Actions:**
 
-1. **Immediate:** Reassign 1-2 tasks from Sam to Jordan or Alex (who have capacity)
+1. **Immediate:** Reassign 1-2 tasks from Marcus to Elena or Priya (who have capacity)
 2. **Tasks to consider moving:**
-   - "Error Tracking & Monitoring" (Medium priority, 3 hours) → Jordan
-   - "Security Audit & Fixes" (Medium priority, 4 hours) → Jordan
+   - "Error Tracking & Monitoring" (Medium priority, 3 hours) -> Elena
+   - "Security Audit & Fixes" (Medium priority, 4 hours) -> Elena
 
-3. **Long-term:** 
+3. **Long-term:**
    - Review task estimation accuracy
-   - Consider breaking down Sam's complex tasks
+   - Consider breaking down Marcus's complex tasks
 
 Would you like me to suggest specific task reassignments?""",
                         'is_helpful': True,
                     },
                     {
                         'role': 'user',
-                        'content': 'Yes, please suggest which tasks to move to Jordan',
+                        'content': 'Yes, please suggest which tasks to move to Elena',
                     },
                     {
                         'role': 'assistant',
@@ -630,32 +676,32 @@ Would you like me to suggest specific task reassignments?""",
 
 **Recommended Reassignments:**
 
-**1. "Error Tracking & Monitoring" → Jordan**
-- **Current Owner:** Sam Rivera
+**1. "Error Tracking & Monitoring" -> Elena**
+- **Current Owner:** Marcus Chen
 - **Estimated Hours:** 3 hours
 - **Priority:** Medium
-- **Why Jordan:** 
-  - Monitoring setup aligns with Jordan's QA skills
+- **Why Elena:**
+  - Monitoring setup aligns with Elena's DevOps/QA skills
   - Task is well-defined with clear scope
   - No technical blockers
 
-**2. "Security Audit & Fixes" → Jordan**
-- **Current Owner:** Sam Rivera  
+**2. "Security Audit & Fixes" -> Elena**
+- **Current Owner:** Marcus Chen
 - **Estimated Hours:** 4 hours
 - **Priority:** Medium
-- **Why Jordan:**
-  - Jordan has strong Quality Assurance skills
+- **Why Elena:**
+  - Elena has strong Quality Assurance skills
   - Testing-adjacent task, natural fit
-  - Sam can provide context on security patterns
+  - Marcus can provide context on UX impact
 
 **After Reassignment:**
 
 | Team Member | Tasks | Hours | Utilization |
 |-------------|-------|-------|-------------|
-| Sam Rivera | 9 | 37h | ✅ 92% |
-| Jordan Taylor | 14 | 45h | ✅ 95% (shared across test/doc tasks) |
+| Marcus Chen | 9 | 37h | [OK] 92% |
+| Elena Vasquez | 14 | 45h | [OK] 95% (shared across test/doc tasks) |
 
-**New Team Balance:** ✅ Healthy distribution
+**New Team Balance:** [OK] Healthy distribution
 
 Would you like me to help draft a message to the team about these changes?""",
                         'is_helpful': True,
@@ -747,17 +793,17 @@ Would you like detailed mitigation plans for any of these risks?""",
 
 **Gantt Chart Features:**
 
-📊 **Timeline View:**
+ **Timeline View:**
 - See all tasks laid out on a timeline
 - View start and end dates visually
 - Identify overlapping work
 
-🔗 **Dependencies:**
+ **Dependencies:**
 - Arrows show task dependencies
 - Easily spot blocking relationships
 - Drag to adjust timelines
 
-👥 **Resource View:**
+ **Resource View:**
 - Toggle to see tasks by assignee
 - Identify workload conflicts
 - Plan resource allocation
@@ -810,7 +856,7 @@ Sprint 45: █████████░░░░░░░ 18 pts (in progress)
 **Key Metrics:**
 - **Average Velocity:** 26 story points/sprint
 - **Current Sprint:** 18 pts completed (69% of average)
-- **Trend:** 📉 Declining for 3 sprints
+- **Trend:**  Declining for 3 sprints
 
 **Analysis:**
 
@@ -855,7 +901,7 @@ Would you like suggestions for improving velocity?""",
                         'role': 'assistant',
                         'content': """Based on agile best practices and research, here are the key elements of effective sprint retrospectives:
 
-**🎯 Structure (60-90 minutes)**
+** Structure (60-90 minutes)**
 
 1. **Set the Stage (5 min)**
    - Check-in activity
@@ -863,9 +909,9 @@ Would you like suggestions for improving velocity?""",
    - Ensure psychological safety
 
 2. **Gather Data (15-20 min)**
-   - What went well? ✅
-   - What didn't go well? ❌
-   - What can we improve? 💡
+   - What went well? [OK]
+   - What didn't go well? [FAIL]
+   - What can we improve? 
 
 3. **Generate Insights (15-20 min)**
    - Identify patterns
@@ -882,7 +928,7 @@ Would you like suggestions for improving velocity?""",
    - Appreciation round
    - Rate the retro
 
-**💡 Best Practices:**
+** Best Practices:**
 
 - **Rotate facilitators** - Fresh perspectives
 - **Limit action items** - Max 2-3 per sprint
@@ -899,7 +945,7 @@ Would you like suggestions for improving velocity?""",
 - Same people dominating
 - Blaming individuals
 
-**📈 Success Metrics:**
+** Success Metrics:**
 - Team satisfaction scores improving
 - Recurring issues decreasing
 - Action items completed rate > 80%
@@ -932,7 +978,7 @@ Would you like a template for your next retrospective?""",
                         'role': 'assistant',
                         'content': """Based on your current board progress and remaining tasks, here's a recommended release timeline:
 
-**📅 Software Release Timeline**
+** Software Release Timeline**
 
 **Phase 1: Complete Core Features (Weeks 1-2)**
 - [ ] Finish Authentication System (currently 80%)
@@ -966,13 +1012,13 @@ Would you like a template for your next retrospective?""",
 - [ ] Post-launch monitoring
 
 **Key Milestones:**
-🎯 Week 2: Core Authentication Ready
-🎯 Week 4: API Layer Complete
-🎯 Week 6: Beta Release Checkpoint
-🎯 Week 9: Go-Live Authorization
+ Week 2: Core Authentication Ready
+ Week 4: API Layer Complete
+ Week 6: Beta Release Checkpoint
+ Week 9: Go-Live Authorization
 
 **Risk Assessment:**
-- Authentication tasks are critical path — any delay impacts everything downstream
+- Authentication tasks are critical path - any delay impacts everything downstream
 - Sam's workload needs redistribution before Phase 2
 - Security audit should not be skipped for timeline pressure
 
@@ -999,16 +1045,16 @@ Would you like me to create a detailed task breakdown for any of these phases?""
                         'role': 'assistant',
                         'content': """Based on your current project metrics, here's a stakeholder communication strategy:
 
-**📊 Current Project Status Summary**
+** Current Project Status Summary**
 
 | Metric | Value | Status |
 |--------|-------|--------|
 | Tasks Completed | 7/30 | 🟡 23% |
-| In Progress | 5/30 | ✅ On Track |
-| Budget Spent | ~35% | ✅ On Track |
+| In Progress | 5/30 | [OK] On Track |
+| Budget Spent | ~35% | [OK] On Track |
 | Timeline | Phase 1 closing | 🟡 Minor delays |
 
-**🎯 Recommended Communication Framework**
+** Recommended Communication Framework**
 
 **1. Executive Summary (for Sarah Johnson, Product Owner)**
 - Lead with outcomes, not activity
@@ -1037,10 +1083,10 @@ Would you like me to create a detailed task breakdown for any of these phases?""
 > **Subject: Software Development - Week Update**
 >
 > **Progress:** 7 of 30 tasks complete (Phase 1: 70% done)
-> **On Track:** ✅ Budget, Architecture, Environment
-> **Attention Needed:** Authentication System (80% → targeting completion this week)
+> **On Track:** [OK] Budget, Architecture, Environment
+> **Attention Needed:** Authentication System (80% -> targeting completion this week)
 > **Next Week:** Complete auth, begin Phase 2 core features
-> **Risks:** Sam's workload at 112% — redistribution planned
+> **Risks:** Sam's workload at 112% - redistribution planned
 
 Would you like me to draft the full stakeholder email?""",
                         'is_helpful': True,
@@ -1065,7 +1111,7 @@ Would you like me to draft the full stakeholder email?""",
                         'role': 'assistant',
                         'content': """I've analyzed your codebase activity and task history to assess technical debt:
 
-**📊 Technical Debt Assessment**
+** Technical Debt Assessment**
 
 **Debt Category 1: Authentication Module (High Priority)**
 - **Severity:** 🔴 High
@@ -1108,7 +1154,7 @@ Would you like a detailed action plan for reducing this debt?""",
                         'role': 'assistant',
                         'content': """Here's a comprehensive plan for addressing the authentication technical debt:
 
-**🎯 Authentication Module Refactoring Plan**
+** Authentication Module Refactoring Plan**
 
 **Phase 1: Assessment & Planning (Day 1)**
 - [ ] Document current auth flow and pain points
@@ -1135,15 +1181,15 @@ Would you like a detailed action plan for reducing this debt?""",
 - [ ] Update API documentation
 
 **Assignment Recommendation:**
-- **Lead:** Sam Rivera (Django/Python expert)
-- **Review:** Alex Chen (project oversight)
-- **Testing:** Jordan Taylor (business validation)
+- **Lead:** Priya Sharma (Django/Python expert)
+- **Review:** Marcus Chen (UX & API review)
+- **Testing:** Elena Vasquez (QA validation)
 
 **Success Metrics:**
-- ✅ Zero security vulnerabilities in auth module
-- ✅ Token refresh working without user disruption
-- ✅ 95%+ test coverage on auth code
-- ✅ Response time < 200ms for auth endpoints
+- [OK] Zero security vulnerabilities in auth module
+- [OK] Token refresh working without user disruption
+- [OK] 95%+ test coverage on auth code
+- [OK] Response time < 200ms for auth endpoints
 
 **Estimated Total Effort:** 5 developer-days
 **Expected Impact:** 40% reduction in auth-related issues

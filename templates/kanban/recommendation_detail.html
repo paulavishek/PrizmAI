@@ -11,7 +11,7 @@
     }
 
     .detail-header {
-        background: white;
+        background: var(--card-bg);
         padding: 20px;
         border-radius: 6px;
         margin-bottom: 20px;
@@ -20,7 +20,7 @@
 
     .detail-breadcrumb {
         font-size: 0.9rem;
-        color: #7f8c8d;
+        color: var(--text-muted);
         margin-bottom: 15px;
     }
 
@@ -43,7 +43,7 @@
     .detail-title {
         font-size: 1.8rem;
         font-weight: 600;
-        color: #2c3e50;
+        color: var(--text-primary);
     }
 
     .detail-type-badge {
@@ -89,19 +89,19 @@
 
     .meta-label {
         font-size: 0.85rem;
-        color: #7f8c8d;
+        color: var(--text-muted);
         margin-bottom: 3px;
         font-weight: 500;
     }
 
     .meta-value {
         font-size: 1rem;
-        color: #2c3e50;
+        color: var(--text-primary);
         font-weight: 500;
     }
 
     .detail-section {
-        background: white;
+        background: var(--card-bg);
         padding: 20px;
         border-radius: 6px;
         margin-bottom: 20px;
@@ -111,7 +111,7 @@
     .section-title {
         font-size: 1.2rem;
         font-weight: 600;
-        color: #2c3e50;
+        color: var(--text-primary);
         margin-bottom: 15px;
         padding-bottom: 10px;
         border-bottom: 2px solid #ecf0f1;
@@ -124,7 +124,7 @@
     }
 
     .info-box {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         padding: 15px;
         border-left: 4px solid #3498db;
         border-radius: 4px;
@@ -147,7 +147,7 @@
     }
 
     .task-item {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         padding: 12px;
         margin-bottom: 8px;
         border-radius: 4px;
@@ -159,7 +159,7 @@
 
     .task-name {
         font-weight: 500;
-        color: #2c3e50;
+        color: var(--text-primary);
     }
 
     .task-priority {
@@ -167,7 +167,7 @@
         padding: 2px 6px;
         border-radius: 3px;
         background: #ecf0f1;
-        color: #7f8c8d;
+        color: var(--text-muted);
     }
 
     .user-list {
@@ -181,11 +181,11 @@
         padding: 6px 12px;
         border-radius: 4px;
         font-size: 0.9rem;
-        color: #2c3e50;
+        color: var(--text-primary);
     }
 
     .action-panel {
-        background: white;
+        background: var(--card-bg);
         padding: 20px;
         border-radius: 6px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -237,7 +237,7 @@
 
     .btn-back {
         background: #ecf0f1;
-        color: #2c3e50;
+        color: var(--text-primary);
         text-decoration: none;
         display: inline-block;
     }
@@ -275,7 +275,7 @@
     }
 
     .impact-card {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         padding: 15px;
         border-radius: 4px;
         text-align: center;
@@ -289,7 +289,7 @@
 
     .impact-label {
         font-size: 0.85rem;
-        color: #7f8c8d;
+        color: var(--text-muted);
         margin-top: 8px;
     }
 
@@ -491,16 +491,12 @@
 
     <!-- Back Button -->
     <div class="action-buttons">
-        <button onclick="goBack()" class="action-btn btn-back">← Back</button>
+        <a href="{% url 'workload_recommendations' board.id %}" class="btn-prizm-back"><i class="fas fa-arrow-left"></i> Back to Recommendations</a>
     </div>
 
 </div>
 
 <script>
-function goBack() {
-    window.history.back();
-}
-
 // Render confidence badges and meters
 function initConfidenceUI() {
     function getConfColor(pct) {

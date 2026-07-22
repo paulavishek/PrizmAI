@@ -6,31 +6,40 @@
 {% block extra_css %}
 <style>
     .stat-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        background: var(--card-bg);
+        color: var(--text-primary);
+        border: 1px solid #dee2e6;
         border-radius: 10px;
         padding: 20px;
         margin-bottom: 20px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     }
     
     .stat-card h3 {
         font-size: 2.5rem;
         font-weight: bold;
         margin-bottom: 5px;
+        color: var(--text-muted);
+    }
+    
+    .stat-card p, .stat-card small {
+        color: var(--text-muted);
     }
     
     .stat-card.warning {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        border-left: 4px solid #dc3545;
     }
+    .stat-card.warning h3 { color: #dc3545; }
     
     .stat-card.success {
-        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        border-left: 4px solid #0d6efd;
     }
+    .stat-card.success h3 { color: #0d6efd; }
     
     .stat-card.info {
-        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        border-left: 4px solid #198754;
     }
+    .stat-card.info h3 { color: #198754; }
     
     .gap-card, .plan-card {
         border-left: 4px solid #6c757d;
@@ -59,7 +68,7 @@
     }
     
     .skill-matrix-table th {
-        background-color: #f8f9fa;
+        background-color: var(--bg-tertiary);
         font-weight: 600;
     }
     
@@ -75,7 +84,7 @@
     .empty-state {
         text-align: center;
         padding: 60px 20px;
-        color: #6c757d;
+        color: var(--text-muted);
     }
     
     .empty-state i {
@@ -90,6 +99,21 @@
 <!-- CSRF Token for AJAX requests -->
 {% csrf_token %}
 <div class="container-fluid">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">Skill Gap Analysis</li>
+        </ol>
+    </nav>
+
+    <div class="mb-3">
+        <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back">
+            <i class="fas fa-arrow-left"></i> Back to Board
+        </a>
+    </div>
+
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
@@ -100,13 +124,21 @@
             <p class="text-muted mb-0">{{ board.name }}</p>
         </div>
         <div class="btn-group">
-            <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-outline-secondary">
+            <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back">
                 <i class="fas fa-arrow-left me-1"></i> Back to Board
             </a>
             <button class="btn btn-primary" onclick="runSkillAnalysis()">
                 <i class="fas fa-sync-alt me-1"></i> Run Analysis
             </button>
         </div>
+    </div>
+    {% if team_profile and team_profile.last_analysis %}
+    <div class="text-muted small mb-2"><i class="fas fa-clock me-1"></i>Last run: {{ team_profile.last_analysis|timesince }} ago</div>
+    {% endif %}
+    <div id="skill-gap-loading" style="display:none;" data-prizm-variant="spectra" data-prizm-messages="skillGap"></div>
+    <div id="skill-gap-status" class="text-center text-muted small mt-1 mb-2" style="display:none;">
+        <i class="fas fa-circle-notch fa-spin me-1 text-primary"></i>
+        <span id="skill-gap-status-text">Generating AI recommendations…</span>
     </div>
 
     <!-- Summary Cards -->
@@ -115,14 +147,14 @@
             <div class="stat-card warning">
                 <h3>{{ skill_gaps.count }}</h3>
                 <p class="mb-0"><i class="fas fa-exclamation-triangle me-1"></i> Active Skill Gaps</p>
-                <small>{{ critical_gaps }} Critical • {{ high_gaps }} High</small>
+                <small>{{ critical_gaps }} Critical &bull; {{ high_gaps }} High</small>
             </div>
         </div>
         <div class="col-md-3">
             <div class="stat-card info">
                 <h3>{{ development_plans.count }}</h3>
                 <p class="mb-0"><i class="fas fa-graduation-cap me-1"></i> Development Plans</p>
-                <small>{{ active_plans }} Active • {{ proposed_plans }} Proposed</small>
+                <small>{{ active_plans }} Active &bull; {{ proposed_plans }} Proposed</small>
             </div>
         </div>
         <div class="col-md-3">
@@ -136,7 +168,7 @@
             <div class="stat-card {% if team_profile.utilization_percentage > 90 %}warning{% elif team_profile.utilization_percentage > 75 %}info{% else %}success{% endif %}">
                 <h3>{% if team_profile %}{{ team_profile.utilization_percentage|floatformat:0 }}%{% else %}0%{% endif %}</h3>
                 <p class="mb-0"><i class="fas fa-chart-line me-1"></i> Team Utilization</p>
-                <small>Current capacity usage</small>
+                <small>{% if team_profile.utilization_percentage > 100 %}Overallocated{% else %}Current capacity usage{% endif %}</small>
             </div>
         </div>
     </div>
@@ -168,7 +200,7 @@
                                         <span class="badge bg-secondary ms-2">{{ gap.proficiency_level }}</span>
                                     </h6>
                                     <small class="text-muted">
-                                        Need {{ gap.gap_count }} more • {{ gap.affected_tasks.count }} tasks affected
+                                        Need {{ gap.gap_count }} more &bull; {{ gap.affected_tasks.count }} tasks affected
                                     </small>
                                 </div>
                                 <div class="text-end">
@@ -207,9 +239,15 @@
                                 <button class="btn btn-sm btn-outline-primary" onclick="viewGapDetails({{ gap.id }})">
                                     <i class="fas fa-eye me-1"></i> View Details
                                 </button>
+                                {% if gap.development_plans.exists %}
+                                <button class="btn btn-sm btn-outline-info" onclick="viewGapDetails({{ gap.id }})">
+                                    <i class="fas fa-clipboard-check me-1"></i> View Plan
+                                </button>
+                                {% else %}
                                 <button class="btn btn-sm btn-outline-success" onclick="createPlanForGap({{ gap.id }})">
                                     <i class="fas fa-plus me-1"></i> Create Plan
                                 </button>
+                                {% endif %}
                             </div>
                         </div>
                         {% endfor %}
@@ -289,8 +327,8 @@
                             
                             <div class="d-flex justify-content-between align-items-center">
                                 <small class="text-muted">
-                                    {{ plan.target_users.count }} team member(s)
-                                    {% if plan.estimated_hours %} • {{ plan.estimated_hours }}h{% endif %}
+                                    {% if plan.target_users.count == 0 %}No team members assigned{% else %}{{ plan.target_users.count }} team member{{ plan.target_users.count|pluralize }}{% endif %}
+                                    {% if plan.estimated_hours %} &bull; {{ plan.estimated_hours|floatformat:0 }}h{% endif %}
                                 </small>
                                 <div>
                                     <button class="btn btn-sm btn-outline-primary" onclick="viewPlanDetails({{ plan.id }})">
@@ -416,12 +454,12 @@
 </div>
 
 <!-- Plan Details Modal -->
-<div class="modal fade" id="planDetailsModal" tabindex="-1">
+<div class="modal fade" id="planDetailsModal" tabindex="-1" aria-labelledby="planDetailsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Development Plan Details</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="planDetailsModalLabel">Development Plan Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="planDetailsContent">
                 <div class="text-center py-4">
@@ -463,16 +501,13 @@
             showLoadingOverlay('Running skill gap analysis...');
             window.skillGapAnalyzer.analyzeGaps(14).then((data) => {
                 hideLoadingOverlay();
-                
-                // Check if recommendations are pending
+
+                // analyzeGaps() already fires showNotification for completion;
+                // only start polling if recommendations are still being generated.
                 const pendingCount = data.gaps.filter(g => g.recommendations_pending).length;
                 if (pendingCount > 0) {
-                    showToast(`Analysis complete! AI generating ${pendingCount} recommendation(s)...`, 'info');
-                    // Poll for completion instead of fixed wait
                     pollForRecommendations(data.gaps.filter(g => g.recommendations_pending).map(g => g.id));
                 } else {
-                    showToast('Analysis complete!', 'success');
-                    // Update UI immediately without reload
                     updateGapsDisplay(data.gaps);
                 }
             }).catch(error => {
@@ -484,14 +519,20 @@
 
     // Poll for recommendation completion (max 5 attempts, 2 seconds apart)
     async function pollForRecommendations(gapIds, attempt = 1, maxAttempts = 5) {
+        var statusEl = document.getElementById('skill-gap-status');
+        var statusText = document.getElementById('skill-gap-status-text');
+
+        if (attempt === 1 && statusEl) statusEl.style.display = '';
+
         if (attempt > maxAttempts) {
+            if (statusEl) statusEl.style.display = 'none';
             showToast('Recommendations still generating. Refresh page later to see them.', 'info');
             updateGapsDisplay(window.skillGapAnalyzer.gaps);
             return;
         }
-        
+
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-        
+
         try {
             // Check if recommendations are ready
             const response = await fetch(`/api/skill-gaps/list/${boardId}/`, {
@@ -501,23 +542,25 @@
                     'X-CSRFToken': getCsrfToken()
                 }
             });
-            
+
             if (response.ok) {
                 const data = await response.json();
-                const stillPending = data.gaps.filter(g => 
+                const stillPending = data.gaps.filter(g =>
                     gapIds.includes(g.id) && (!g.ai_recommendations || g.ai_recommendations.length === 0)
                 );
-                
+
                 if (stillPending.length === 0) {
+                    if (statusEl) statusEl.style.display = 'none';
                     showToast('All recommendations ready!', 'success');
                     updateGapsDisplay(data.gaps);
                 } else {
-                    showToast(`Waiting for ${stillPending.length} recommendation(s)... (${attempt}/${maxAttempts})`, 'info');
+                    if (statusText) statusText.textContent = `Generating AI recommendations… (${attempt}/${maxAttempts})`;
                     pollForRecommendations(gapIds, attempt + 1, maxAttempts);
                 }
             }
         } catch (error) {
             console.error('Error polling for recommendations:', error);
+            if (statusEl) statusEl.style.display = 'none';
             updateGapsDisplay(window.skillGapAnalyzer.gaps);
         }
     }
@@ -571,7 +614,7 @@
                         <h5>${gap.skill_name} <span class="badge bg-secondary">${gap.proficiency_level}</span></h5>
                         <div class="row mt-3">
                             <div class="col-md-6">
-                                <p><strong>Gap Size:</strong> Need ${gap.gap_count} more team member(s)</p>
+                                <p><strong>Gap Size:</strong> Need ${gap.gap_count} more team member${gap.gap_count === 1 ? '' : 's'}</p>
                                 <p><strong>Currently Available:</strong> ${gap.available_count}</p>
                                 <p><strong>Required:</strong> ${gap.required_count}</p>
                             </div>
@@ -610,9 +653,13 @@
                             ${gap.ai_recommendations.map(rec => `
                                 <div class="card mb-2">
                                     <div class="card-body">
-                                        <h6 class="card-title">${rec.action || rec.title || 'Recommendation'}</h6>
-                                        <p class="card-text">${rec.description || rec.rationale || ''}</p>
-                                        ${rec.estimated_time ? `<small class="text-muted"><i class="fas fa-clock me-1"></i>Estimated time: ${rec.estimated_time}</small>` : ''}
+                                        <h6 class="card-title">${rec.title || rec.action || 'Recommendation'}</h6>
+                                        <p class="card-text">${rec.description || rec.expected_impact || rec.rationale || ''}</p>
+                                        <div class="d-flex flex-wrap gap-2">
+                                            ${rec.timeframe_days ? `<small class="text-muted"><i class="fas fa-clock me-1"></i>${rec.timeframe_days} days</small>` : ''}
+                                            ${rec.cost_estimate ? `<small class="text-muted"><i class="fas fa-dollar-sign me-1"></i>Cost: ${rec.cost_estimate}</small>` : ''}
+                                            ${rec.type ? `<span class="badge bg-light text-dark"><i class="fas fa-tag me-1"></i>${rec.type.replace('_', ' ')}</span>` : ''}
+                                        </div>
                                     </div>
                                 </div>
                             `).join('')}
@@ -778,9 +825,9 @@
                     
                     <div class="mb-3">
                         <small class="text-muted">
-                            <i class="fas fa-user me-1"></i>Created by: ${plan.created_by} • 
+                            <i class="fas fa-user me-1"></i>Created by: ${plan.created_by} &bull; 
                             <i class="fas fa-calendar ms-2 me-1"></i>${new Date(plan.created_at).toLocaleDateString()}
-                            ${plan.ai_suggested ? ' • <i class="fas fa-robot ms-2 me-1"></i>AI Suggested' : ''}
+                            ${plan.ai_suggested ? ' &bull; <i class="fas fa-robot ms-2 me-1"></i>AI Suggested' : ''}
                         </small>
                     </div>
                 </div>
@@ -893,10 +940,10 @@
                 console.log('Updated summary card count to:', remainingPlans);
             }
             
-            // Update the subtitle in the summary card (Active • Proposed)
+            // Update the subtitle in the summary card (Active / Proposed)
             const summarySubtitle = document.querySelector('.stat-card.info small');
             if (summarySubtitle) {
-                summarySubtitle.textContent = `${activeCount} Active • ${proposedCount} Proposed`;
+                summarySubtitle.textContent = `${activeCount} Active \u2022 ${proposedCount} Proposed`;
                 console.log('Updated summary card subtitle');
             }
             
@@ -1244,7 +1291,7 @@
             document.getElementById('planGapId').value = gap.id;
             document.getElementById('planSkillName').value = `${gap.skill_name} (${gap.proficiency_level})`;
             document.getElementById('planTitle').value = `Develop ${gap.skill_name} Skills`;
-            document.getElementById('planDescription').value = `Address skill gap: Need ${gap.gap_count} more team member(s) with ${gap.proficiency_level} level ${gap.skill_name} skills.`;
+            document.getElementById('planDescription').value = `Address skill gap: Need ${gap.gap_count} more team member${gap.gap_count === 1 ? '' : 's'} with ${gap.proficiency_level} level ${gap.skill_name} skills.`;
             
             // Show modal
             const modal = new bootstrap.Modal(planModal);
@@ -1332,27 +1379,13 @@
 
     // Utility functions
     window.showLoadingOverlay = function(message) {
-        const overlay = document.createElement('div');
-        overlay.id = 'loadingOverlay';
-        overlay.className = 'position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center';
-        overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
-        overlay.style.zIndex = '9999';
-        overlay.innerHTML = `
-            <div class="text-center text-white">
-                <div class="spinner-border mb-3" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <p>${message}</p>
-            </div>
-        `;
-        document.body.appendChild(overlay);
+        var loadingEl = document.getElementById('skill-gap-loading');
+        if (loadingEl) loadingEl.style.display = '';
     };
 
     window.hideLoadingOverlay = function() {
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) {
-            overlay.remove();
-        }
+        var loadingEl = document.getElementById('skill-gap-loading');
+        if (loadingEl) loadingEl.style.display = 'none';
     };
 
     window.showToast = function(message, type = 'info') {
@@ -1368,23 +1401,8 @@
         }, 3000);
     };
 
-    // Handle back navigation
-    function goBack() {
-        // Check if there's a previous page in history
-        if (document.referrer && document.referrer !== window.location.href) {
-            window.history.back();
-        } else {
-            // Fallback to board detail if no history (demo-aware)
-            {% if is_demo_mode %}
-            window.location.href = '{% url "demo_board_detail" board.id %}';
-            {% else %}
-            window.location.href = '{% url "board_detail" board.id %}';
-            {% endif %}
-        }
-    }
-    
-    // Track skill gap analysis page view as a feature (for demo nudges)
-    {% if is_demo_mode %}
+    // Track skill gap analysis page view as a feature (for demo analytics)
+    {% if is_viewing_demo %}
     setTimeout(function() {
         fetch('/demo/track-event/', {
             method: 'POST',
@@ -1402,7 +1420,7 @@
             })
         })
         .then(response => response.json())
-        .then(data => console.log('📊 Feature tracked: skill_gap_analysis'))
+        .then(data => console.log('ðŸ“Š Feature tracked: skill_gap_analysis'))
         .catch(error => console.error('Error tracking feature:', error));
     }, 3000); // Track after 3 seconds of viewing
     {% endif %}

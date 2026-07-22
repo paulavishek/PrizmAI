@@ -15,6 +15,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import DecisionCenterBriefing, DecisionCenterSettings, DecisionItem
+from kanban.decorators import demo_write_guard
+from kanban.utils.demo_protection import get_user_boards, user_is_demo
 
 
 # ---------------------------------------------------------------------------
@@ -58,33 +60,36 @@ def decision_center_view(request):
     user = request.user
     settings_obj = _get_settings(user)
 
-    # Respect the user's current viewing mode — only show items relevant to
-    # their active workspace (demo boards vs real boards)
-    try:
-        is_demo_mode = getattr(user.profile, 'is_viewing_demo', False)
-    except Exception:
-        is_demo_mode = False
-    is_demo_account = '_demo' in user.username
+    # Un-snooze any items whose timer has expired so they reappear immediately
+    # on page load rather than waiting for the next 7:15 AM Celery run.
+    now = timezone.now()
+    DecisionItem.objects.filter(
+        created_for=user,
+        status='snoozed',
+        snoozed_until__lte=now,
+    ).update(status='pending', snoozed_until=None)
 
-    pending = DecisionItem.objects.filter(created_for=user, status='pending')
-    if is_demo_mode or is_demo_account:
-        pending = pending.filter(board__is_official_demo_board=True)
-    else:
-        pending = pending.filter(
-            board__is_official_demo_board=False
+    # Respect the user's current viewing mode — only show items relevant to
+    # their active workspace (demo boards vs real boards).  Uses the
+    # canonical ``get_user_boards()`` so sandbox users see sandbox items
+    # (not template-board items, which caused duplicates).
+    user_boards = get_user_boards(user)
+    pending = (
+        DecisionItem.objects.filter(
+            created_for=user, status='pending', board__in=user_boards,
         ) | DecisionItem.objects.filter(
-            created_for=user, status='pending', board__isnull=True
+            created_for=user, status='pending', board__isnull=True,
         )
-        pending = pending.distinct()
+    ).distinct()
 
     action_required = list(pending.filter(priority_level='action_required'))
-    awareness = list(pending.filter(priority_level='awareness'))
-    quick_wins = list(pending.filter(priority_level='quick_win'))
+    awareness = list(pending.filter(priority_level='awareness')) if settings_obj.show_awareness_items else []
+    quick_wins = list(pending.filter(priority_level='quick_win')) if settings_obj.show_quick_wins else []
 
     today = timezone.localdate()
     briefing = (
         DecisionCenterBriefing.objects
-        .filter(user=user, generated_at__date=today)
+        .filter(user=user, generated_at__date=today, is_demo=user_is_demo(user))
         .first()
     )
 
@@ -92,6 +97,69 @@ def decision_center_view(request):
         i.estimated_minutes
         for i in action_required + awareness + quick_wins
     )
+
+    # If the briefing's item count is stale (e.g. items were cleaned up since
+    # it was generated, or the user switched workspace mode), patch it so the
+    # headline and top_priority_board match what we actually display.
+    actual_total = len(action_required) + len(awareness) + len(quick_wins)
+    if briefing:
+        stored_total = sum(briefing.item_counts.values()) if briefing.item_counts else 0
+        if stored_total != actual_total:
+            briefing.headline = f"You have {actual_total} item{'s' if actual_total != 1 else ''} in your decision queue today."
+            new_counts = {
+                'action_required': len(action_required),
+                'awareness': len(awareness),
+                'quick_win': len(quick_wins),
+            }
+            briefing.item_counts = new_counts
+            briefing.estimated_minutes = total_est
+
+            # Re-derive top_priority_board from the current visible items so
+            # that a briefing generated in demo mode doesn't leak a stale board
+            # name into the real workspace (or vice-versa).
+            from collections import Counter
+            board_counter = Counter(
+                item.board.name
+                for item in action_required
+                if item.board_id is not None
+            )
+            briefing.top_priority_board = board_counter.most_common(1)[0][0] if board_counter else ''
+
+            parts = []
+            if new_counts['action_required']:
+                parts.append(f"{new_counts['action_required']} decision{'s' if new_counts['action_required'] != 1 else ''} need your attention.")
+            if new_counts['awareness']:
+                parts.append(f"{new_counts['awareness']} awareness item{'s' if new_counts['awareness'] != 1 else ''}.")
+            if new_counts['quick_win']:
+                parts.append(f"{new_counts['quick_win']} quick win{'s' if new_counts['quick_win'] != 1 else ''}.")
+            parts.append(f"Estimated review time: {total_est} minutes.")
+            briefing.briefing = ' '.join(parts)
+            briefing.save()
+
+    # Snoozed items – scoped to current workspace boards, ordered soonest first
+    snoozed_items = (
+        DecisionItem.objects.filter(
+            created_for=user, status='snoozed', board__in=user_boards,
+        ) | DecisionItem.objects.filter(
+            created_for=user, status='snoozed', board__isnull=True,
+        )
+    ).distinct().order_by('snoozed_until')
+
+    # Archive – last 30 days, scoped to current workspace boards
+    archive_cutoff = now - timedelta(days=30)
+    archive_items = (
+        DecisionItem.objects.filter(
+            created_for=user,
+            archived_at__isnull=False,
+            archived_at__gte=archive_cutoff,
+            board__in=user_boards,
+        ) | DecisionItem.objects.filter(
+            created_for=user,
+            archived_at__isnull=False,
+            archived_at__gte=archive_cutoff,
+            board__isnull=True,
+        )
+    ).distinct().order_by('-archived_at')
 
     # Last resolved timestamp
     last_resolved = (
@@ -102,10 +170,15 @@ def decision_center_view(request):
         .first()
     )
 
+    inbox_count = actual_total
+
     context = {
         'action_required': action_required,
         'awareness': awareness,
         'quick_wins': quick_wins,
+        'snoozed_items': snoozed_items,
+        'archive_items': archive_items,
+        'inbox_count': inbox_count,
         'briefing': briefing,
         'total_est': total_est,
         'last_resolved': last_resolved,
@@ -132,40 +205,49 @@ def decision_center_widget_data(request):
         is_demo_mode = getattr(user.profile, 'is_viewing_demo', False)
     except Exception:
         is_demo_mode = False
-    is_demo_account = '_demo' in user.username
-    effective_demo = is_demo_mode or is_demo_account
+    effective_demo = is_demo_mode or '_demo' in user.username
 
     cache_key = _widget_cache_key(user.id, demo_mode=effective_demo)
     data = cache.get(cache_key)
     if data is not None:
         return JsonResponse(data)
 
-    pending = DecisionItem.objects.filter(created_for=user, status='pending')
-    if effective_demo:
-        pending = pending.filter(board__is_official_demo_board=True)
-    else:
-        pending = (
-            pending.filter(board__is_official_demo_board=False)
-            | DecisionItem.objects.filter(
-                created_for=user, status='pending', board__isnull=True
-            )
-        ).distinct()
+    # Un-snooze expired items before computing counts so the badge stays accurate.
+    now = timezone.now()
+    DecisionItem.objects.filter(
+        created_for=user,
+        status='snoozed',
+        snoozed_until__lte=now,
+    ).update(status='pending', snoozed_until=None)
+
+    user_boards = get_user_boards(user)
+    pending = (
+        DecisionItem.objects.filter(
+            created_for=user, status='pending', board__in=user_boards,
+        ) | DecisionItem.objects.filter(
+            created_for=user, status='pending', board__isnull=True,
+        )
+    ).distinct()
+
+    settings_obj = _get_settings(user)
     counts = {
         'action_required_count': pending.filter(
             priority_level='action_required',
         ).count(),
-        'awareness_count': pending.filter(
-            priority_level='awareness',
-        ).count(),
-        'quick_win_count': pending.filter(
-            priority_level='quick_win',
-        ).count(),
+        'awareness_count': (
+            pending.filter(priority_level='awareness').count()
+            if settings_obj.show_awareness_items else 0
+        ),
+        'quick_win_count': (
+            pending.filter(priority_level='quick_win').count()
+            if settings_obj.show_quick_wins else 0
+        ),
     }
 
     today = timezone.localdate()
     briefing = (
         DecisionCenterBriefing.objects
-        .filter(user=user, generated_at__date=today)
+        .filter(user=user, generated_at__date=today, is_demo=user_is_demo(user))
         .values_list('headline', flat=True)
         .first()
     )
@@ -201,14 +283,18 @@ def decision_center_widget_data(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def resolve_decision_item(request, item_id):
-    """Mark a single item as resolved."""
+    """Mark a single item as resolved and move it to Archive."""
     item = _get_item_or_404(request.user, item_id)
     now = timezone.now()
     item.status = 'resolved'
     item.resolved_at = now
     item.resolved_by = request.user
-    item.save(update_fields=['status', 'resolved_at', 'resolved_by'])
+    item.archived_at = now
+    item.archive_reason = 'resolved'
+    item.snoozed_until = None
+    item.save(update_fields=['status', 'resolved_at', 'resolved_by', 'archived_at', 'archive_reason', 'snoozed_until'])
 
     _invalidate_widget_cache(request.user.id)
 
@@ -228,12 +314,14 @@ def resolve_decision_item(request, item_id):
 
     return JsonResponse({
         'success': True,
+        'archived_at': item.archived_at.isoformat(),
         'pending_count': _pending_count(request.user),
     })
 
 
 @login_required
 @require_POST
+@demo_write_guard
 def snooze_decision_item(request, item_id):
     """Snooze an item for 24, 48, or 168 hours."""
     item = _get_item_or_404(request.user, item_id)
@@ -253,17 +341,23 @@ def snooze_decision_item(request, item_id):
     _invalidate_widget_cache(request.user.id)
     return JsonResponse({
         'success': True,
+        'snoozed_until': item.snoozed_until.isoformat(),
         'pending_count': _pending_count(request.user),
     })
 
 
 @login_required
 @require_POST
+@demo_write_guard
 def dismiss_decision_item(request, item_id):
-    """Dismiss a single item."""
+    """Dismiss a single item and move it to Archive."""
     item = _get_item_or_404(request.user, item_id)
+    now = timezone.now()
     item.status = 'dismissed'
-    item.save(update_fields=['status'])
+    item.archived_at = now
+    item.archive_reason = 'dismissed'
+    item.snoozed_until = None
+    item.save(update_fields=['status', 'archived_at', 'archive_reason', 'snoozed_until'])
 
     _invalidate_widget_cache(request.user.id)
 
@@ -282,12 +376,14 @@ def dismiss_decision_item(request, item_id):
 
     return JsonResponse({
         'success': True,
+        'archived_at': item.archived_at.isoformat(),
         'pending_count': _pending_count(request.user),
     })
 
 
 @login_required
 @require_POST
+@demo_write_guard
 def resolve_all_quick_wins(request):
     """Bulk-resolve every pending quick-win item for the user."""
     now = timezone.now()
@@ -300,6 +396,8 @@ def resolve_all_quick_wins(request):
         status='resolved',
         resolved_at=now,
         resolved_by=request.user,
+        archived_at=now,
+        archive_reason='resolved',
     )
 
     _invalidate_widget_cache(request.user.id)
@@ -310,11 +408,55 @@ def resolve_all_quick_wins(request):
     })
 
 
+@login_required
+@require_POST
+@demo_write_guard
+def restore_decision_item(request, item_id):
+    """Restore an archived item back to the Inbox (pending)."""
+    item = _get_item_or_404(request.user, item_id)
+    item.status = 'pending'
+    item.archived_at = None
+    item.archive_reason = None
+    item.snoozed_until = None
+    item.save(update_fields=['status', 'archived_at', 'archive_reason', 'snoozed_until'])
+    _invalidate_widget_cache(request.user.id)
+    return JsonResponse({'success': True})
+
+
+@login_required
+@require_POST
+@demo_write_guard
+def change_snooze_decision_item(request, item_id):
+    """Update the snooze duration for an already-snoozed item."""
+    item = _get_item_or_404(request.user, item_id)
+    if item.status != 'snoozed':
+        return JsonResponse({'error': 'Item is not snoozed'}, status=400)
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        body = {}
+    duration = body.get('duration')
+    try:
+        duration = int(duration)
+    except (TypeError, ValueError):
+        duration = None
+    if duration not in (24, 48, 168):
+        return JsonResponse({'error': 'Invalid duration'}, status=400)
+    new_snoozed_until = timezone.now() + timedelta(hours=duration)
+    item.snoozed_until = new_snoozed_until
+    item.save(update_fields=['snoozed_until'])
+    return JsonResponse({
+        'success': True,
+        'new_snoozed_until': new_snoozed_until.isoformat(),
+    })
+
+
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
 
 @login_required
+@demo_write_guard
 def decision_center_settings_view(request):
     """GET: return current settings. POST: update them."""
     settings_obj = _get_settings(request.user)
@@ -381,6 +523,7 @@ def decision_center_settings_view(request):
 
     if changed:
         settings_obj.save()
+        _invalidate_widget_cache(request.user.id)
         try:
             from kanban.audit_utils import log_audit
             log_audit(

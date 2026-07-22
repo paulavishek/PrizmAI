@@ -35,7 +35,7 @@
             <span id="ai-stale-details"></span>
             <div class="mt-2">
                 <button type="button" id="refresh-ai-analysis-btn" class="btn btn-sm btn-warning" title="Refresh all AI analyses">
-                    <span id="refresh-ai-spinner" class="spinner-border spinner-border-sm d-none me-1" role="status"></span>
+                    <span id="refresh-ai-spinner" class="prizm-spinner prizm-spinner--sm d-none me-1 align-middle"></span>
                     <i class="fas fa-sync-alt me-1"></i> Refresh AI Analysis
                 </button>
             </div>
@@ -45,23 +45,20 @@
 </div>
 
 <div class="row">
-    <div class="col-md-8">
+    <div class="col-md-8" style="min-height:100%;background-color:var(--card-bg);border-radius:8px;padding:16px;">
         <!-- ═══════ TASK HEADER (compact) ═══════ -->
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div class="d-flex align-items-center gap-2">
                 {% include 'partials/favorite_toggle.html' with favorite_type='task' object_id=task.id is_favorited=is_favorited %}
-                <button onclick="goBack()" class="btn btn-sm btn-outline-secondary" title="Back">
+                <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back btn-sm" title="Back to board">
                     <i class="fas fa-arrow-left"></i>
-                </button>
-                {% if is_demo_mode %}
-                <a href="{% url 'demo_board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-primary" title="View Board">
-                    <i class="fas fa-columns"></i>
                 </a>
-                {% else %}
-                <a href="{% url 'board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-primary" title="View Board">
-                    <i class="fas fa-columns"></i>
-                </a>
+                {% if task.is_epic %}
+                <span class="badge bg-warning text-dark" style="font-size:0.8em;"><i class="fas fa-crown me-1"></i>Epic</span>
                 {% endif %}
+                <a href="{% url 'board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-secondary" title="View on board">
+                    <i class="fas fa-columns"></i>
+                </a>
             </div>
             <!-- 3-dot menu (Delete, Export) -->
             <div class="dropdown">
@@ -86,7 +83,8 @@
         </ul>
 
         <!-- Single form wrapping all tabs (so Save always works) -->
-        <form method="post" class="task-form" id="taskDetailForm">
+        <!-- novalidate: browser validation can't focus required fields in hidden tabs; Django validates server-side -->
+        <form method="post" class="task-form" id="taskDetailForm" novalidate>
             {% csrf_token %}
             <input type="hidden" name="next" id="next-url" value="">
 
@@ -115,25 +113,43 @@
                         <!-- Description with AI Generation -->
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                <label for="{{ form.description.id_for_label }}" class="form-label mb-0">Description</label>
+                                <label class="form-label mb-0">Description</label>
                                 <button type="button" id="generate-ai-description" class="btn btn-sm btn-outline-primary"
                                         data-task-id="{{ task.id }}">
                                     <i class="fas fa-robot me-1"></i> Generate with AI
                                 </button>
                             </div>
-                            {{ form.description }}
-                            <div id="ai-spinner" class="d-none text-center mt-2">
-                                <div class="spinner-border spinner-border-sm text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <span class="ms-2 text-muted">Generating description with AI...</span>
-                            </div>
+                            {# Hidden textarea — Quill syncs its HTML content here on form submit #}
+                            <div style="display:none;">{{ form.description }}</div>
+                            {# Quill editor mount point — Quill injects its toolbar + editable area here #}
+                            <div id="quill-editor-container"></div>
+                            <div id="ai-spinner" class="d-none" data-prizm-variant="spectra" data-prizm-messages="aiDescription"></div>
                             {% if form.description.errors %}
                                 <div class="invalid-feedback d-block">{{ form.description.errors }}</div>
                             {% endif %}
                         </div>
                         
                         <!-- Progress (editable on detail page) -->
+                        {% if task.is_epic %}
+                        <!-- Epic: progress is rolled up from child tasks (read-only). The
+                             manual field is kept hidden so form submits don't reset it. -->
+                        <div class="mb-3">
+                            <label class="form-label">
+                                <i class="fas fa-tasks text-info me-1"></i> Progress
+                                <span class="badge bg-secondary ms-1" style="font-size:0.7em;">Rolled up from child tasks</span>
+                            </label>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress flex-grow-1" style="height:14px;">
+                                    <div class="progress-bar bg-success" role="progressbar"
+                                         style="width: {{ epic_rollup.progress_pct }}%;"
+                                         aria-valuenow="{{ epic_rollup.progress_pct }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <small class="text-muted text-nowrap">{{ epic_rollup.completed }} of {{ epic_rollup.total }} done · {{ epic_rollup.progress_pct }}%</small>
+                            </div>
+                            <small class="form-text text-muted">Auto-calculated from completed child tasks — not editable directly.</small>
+                            <div class="d-none">{{ form.progress }}</div>
+                        </div>
+                        {% else %}
                         <div class="mb-3">
                             <label for="{{ form.progress.id_for_label }}" class="form-label">
                                 <i class="fas fa-tasks text-info me-1"></i> Progress
@@ -144,29 +160,163 @@
                                 <div class="invalid-feedback d-block">{{ form.progress.errors }}</div>
                             {% endif %}
                         </div>
+                        {% endif %}
 
                         <!-- Assignee (moved from Section 2 into Overview for quick access) -->
                         <div class="mb-3">
                             <label for="{{ form.assigned_to.id_for_label }}" class="form-label">
+                                {% if task.is_epic %}
+                                <i class="fas fa-user-check me-1"></i> Epic Owner
+                                {% else %}
                                 <i class="fas fa-user-check me-1"></i> Assigned To
+                                {% endif %}
                             </label>
                             {{ form.assigned_to }}
+                            {% if task.is_epic %}
+                            <small class="form-text text-muted">Accountable owner of the Epic — the actual work spans the contributors below.</small>
+                            {% endif %}
                             {% if form.assigned_to.errors %}
                                 <div class="invalid-feedback d-block">{{ form.assigned_to.errors }}</div>
                             {% endif %}
                         </div>
-                        
-                        <!-- Labels -->
-                        {% if form.labels.field.queryset.exists %}
+
+                        {% if task.is_epic %}
+                        <!-- Epic Contributors: distinct assignees across the child tasks (read-only) -->
                         <div class="mb-3">
-                            <label for="{{ form.labels.id_for_label }}" class="form-label">
-                                <i class="fas fa-tags me-1"></i> Tags/Labels
+                            <label class="form-label">
+                                <i class="fas fa-users me-1"></i> Contributors
+                                <span class="badge bg-secondary ms-1" style="font-size:0.7em;">{{ epic_rollup.contributors|length }}</span>
                             </label>
-                            {{ form.labels }}
+                            {% if epic_rollup.contributors %}
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for user in epic_rollup.contributors %}
+                                <span class="badge bg-light text-dark border d-inline-flex align-items-center" style="font-size:0.85em;padding:0.4em 0.6em;">
+                                    <i class="fas fa-user-circle me-1 text-secondary"></i>{{ user.get_full_name|default:user.username }}
+                                </span>
+                                {% endfor %}
+                            </div>
+                            <small class="form-text text-muted">Everyone assigned to this Epic's child tasks.</small>
+                            {% else %}
+                            <small class="text-muted fst-italic">No contributors yet — no child tasks have an assignee.</small>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Labels (badge picker, mirrors the sidebar AJAX panel) -->
+                        <div class="mb-3" id="detail-labels-section">
+                            <label class="form-label">
+                                <i class="fas fa-tags me-1"></i> Tags/Labels <small class="text-muted">(Optional)</small>
+                            </label>
+                            <div style="display:none;">{{ form.labels }}</div>
                             {% if form.labels.errors %}
                                 <div class="invalid-feedback d-block">{{ form.labels.errors }}</div>
                             {% endif %}
+                            <div id="detail-form-badge-area" class="d-flex flex-wrap gap-1 mb-2"></div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="detail-form-toggle-new-label-btn">
+                                <i class="fas fa-plus me-1"></i> New label
+                            </button>
+                            <div id="detail-form-new-label-form" class="mt-2 d-none">
+                                <div class="d-flex gap-2 align-items-center flex-wrap">
+                                    <input type="text" id="detail-form-new-label-name" class="form-control form-control-sm" style="max-width:180px;" placeholder="Label name" maxlength="50">
+                                    <input type="color" id="detail-form-new-label-color" class="form-control form-control-color form-control-sm" value="#3B82F6" style="width:40px;">
+                                    <button type="button" class="btn btn-sm btn-primary" id="detail-form-save-new-label-btn">Add</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="detail-form-cancel-new-label-btn">Cancel</button>
+                                </div>
+                            </div>
                         </div>
+                        <script>
+                        (function () {
+                            const boardId = {{ task.column.board.id }};
+                            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                            const hiddenSelect = document.querySelector('#id_labels');
+                            const badgeArea = document.getElementById('detail-form-badge-area');
+
+                            function syncHidden(labelId, select) {
+                                if (!hiddenSelect) return;
+                                const opt = hiddenSelect.querySelector(`option[value="${labelId}"]`);
+                                if (opt) opt.selected = select;
+                            }
+
+                            function renderBadge(label, selected) {
+                                const span = document.createElement('span');
+                                span.className = 'badge label-badge' + (selected ? ' label-badge-selected' : '');
+                                span.dataset.labelId = label.id;
+                                span.style.cssText = `background-color:${label.color};cursor:pointer;opacity:${selected ? 1 : 0.45};`;
+                                span.title = label.name;
+                                span.textContent = label.name;
+                                span.addEventListener('click', toggleBadge);
+                                return span;
+                            }
+
+                            function addOptionToHidden(label) {
+                                if (!hiddenSelect) return;
+                                if (hiddenSelect.querySelector(`option[value="${label.id}"]`)) return;
+                                const opt = document.createElement('option');
+                                opt.value = label.id;
+                                opt.textContent = label.name;
+                                hiddenSelect.appendChild(opt);
+                            }
+
+                            function toggleBadge(e) {
+                                const span = e.currentTarget;
+                                const id = parseInt(span.dataset.labelId);
+                                const nowSelected = !span.classList.contains('label-badge-selected');
+                                span.classList.toggle('label-badge-selected', nowSelected);
+                                span.style.opacity = nowSelected ? '1' : '0.45';
+                                syncHidden(id, nowSelected);
+                            }
+
+                            badgeArea.querySelectorAll('.label-badge').forEach(b => b.addEventListener('click', toggleBadge));
+
+                            document.getElementById('detail-form-toggle-new-label-btn').addEventListener('click', function () {
+                                document.getElementById('detail-form-new-label-form').classList.toggle('d-none');
+                            });
+                            document.getElementById('detail-form-cancel-new-label-btn').addEventListener('click', function () {
+                                document.getElementById('detail-form-new-label-form').classList.add('d-none');
+                            });
+
+                            document.getElementById('detail-form-save-new-label-btn').addEventListener('click', function () {
+                                const name = document.getElementById('detail-form-new-label-name').value.trim();
+                                const color = document.getElementById('detail-form-new-label-color').value;
+                                if (!name) { alert('Please enter a label name.'); return; }
+                                this.disabled = true;
+                                fetch(`/boards/${boardId}/quick-create-label/`, {
+                                    method: 'POST',
+                                    headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded'},
+                                    body: new URLSearchParams({name, color}),
+                                })
+                                .then(r => r.json())
+                                .then(label => {
+                                    if (label.error) { alert(label.error); return; }
+                                    addOptionToHidden(label);
+                                    const badge = renderBadge(label, true);
+                                    badgeArea.appendChild(badge);
+                                    syncHidden(label.id, true);
+                                    document.getElementById('detail-form-new-label-name').value = '';
+                                    document.getElementById('detail-form-new-label-form').classList.add('d-none');
+                                })
+                                .catch(() => {})
+                                .finally(() => { this.disabled = false; });
+                            });
+                        })();
+                        </script>
+
+                        <!-- Phase Selection (hidden for Epics — an Epic spans phases; value preserved) -->
+                        {% if form.phase %}
+                        {% if task.is_epic %}
+                        <input type="hidden" name="{{ form.phase.html_name }}" value="{{ form.phase.value|default_if_none:'' }}">
+                        {% else %}
+                        <div class="mb-3">
+                            <label for="{{ form.phase.id_for_label }}" class="form-label">
+                                <i class="fas fa-layer-group text-primary me-1"></i> Phase <span class="text-danger">*</span>
+                            </label>
+                            {{ form.phase }}
+                            <small class="form-text text-muted">Project phase for Gantt chart organization</small>
+                            {% if form.phase.errors %}
+                                <div class="invalid-feedback d-block">{{ form.phase.errors }}</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
                         {% endif %}
 
                         <!-- Scheduling -->
@@ -213,7 +363,33 @@
                             </div>
                         </div>
 
-                        <!-- Lean Six Sigma Classification -->
+                        {% if task.is_epic %}
+                        <!-- Epic: dates above are the TARGET; show the actual span derived from child tasks -->
+                        <div class="alert {% if epic_rollup.deadline_conflicts %}alert-warning{% else %}alert-light border{% endif %} py-2 px-3 mb-3">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-calendar-week me-2 mt-1"></i>
+                                <div>
+                                    <strong class="d-block">Child-task span</strong>
+                                    <small class="text-muted">
+                                        Earliest start: <strong>{% if epic_rollup.earliest_start %}{{ epic_rollup.earliest_start|date:"M d, Y" }}{% else %}—{% endif %}</strong>
+                                        &nbsp;→&nbsp;
+                                        Latest due: <strong>{% if epic_rollup.latest_due %}{{ epic_rollup.latest_due|date:"M d, Y" }}{% else %}—{% endif %}</strong>
+                                    </small>
+                                    {% if epic_rollup.deadline_conflicts %}
+                                    <div class="mt-1"><small class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>
+                                        {{ epic_rollup.deadline_conflicts|length }} child task{{ epic_rollup.deadline_conflicts|length|pluralize }} due after the Epic's target due date above.
+                                    </small></div>
+                                    {% else %}
+                                    <div class="mt-1"><small class="text-success"><i class="fas fa-check me-1"></i>All child tasks fit within the Epic's target dates.</small></div>
+                                    {% endif %}
+                                    <small class="text-muted d-block fst-italic mt-1">The dates above are your Epic target — they're not auto-synced to children.</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Lean Six Sigma Classification (task-level only — not meaningful for an Epic container) -->
+                        {% if not task.is_epic %}
                         <div class="card border-primary mb-3">
                             <div class="card-body">
                                 <label class="form-label mb-2">
@@ -250,10 +426,57 @@
                                 {% endif %}
                             </div>
                         </div>
+                        {% endif %}
                     </div><!-- /tab-overview -->
 
                     <!-- ═══════ TAB 3: DETAILS (Constraints) ═══════ -->
                     <div class="tab-pane fade" id="tab-details" role="tabpanel">
+                        {% if task.is_epic %}
+                        <!-- Epic Aggregates: rolled-up totals across all child tasks -->
+                        <div class="card border-warning mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="fas fa-layer-group text-warning me-2"></i>Epic Aggregates
+                                    <span class="badge bg-secondary ms-2">across {{ epic_rollup.total }} child task{{ epic_rollup.total|pluralize }}</span>
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-md-3 col-6 mb-3">
+                                        <div class="text-muted small">Child Tasks</div>
+                                        <div class="fs-4 fw-bold">{{ epic_rollup.total }}</div>
+                                        <div class="small text-success">{{ epic_rollup.completed }} done</div>
+                                    </div>
+                                    <div class="col-md-3 col-6 mb-3">
+                                        <div class="text-muted small">Total Est. Hours</div>
+                                        <div class="fs-4 fw-bold">{{ epic_rollup.total_estimated_hours|floatformat:"0" }}h</div>
+                                    </div>
+                                    <div class="col-md-3 col-6 mb-3">
+                                        <div class="text-muted small">Total Est. Cost</div>
+                                        <div class="fs-4 fw-bold">${{ epic_rollup.total_estimated_cost|floatformat:"2" }}</div>
+                                    </div>
+                                    <div class="col-md-3 col-6 mb-3">
+                                        <div class="text-muted small">Contributors</div>
+                                        <div class="fs-4 fw-bold">{{ epic_rollup.contributors|length }}</div>
+                                    </div>
+                                </div>
+                                <hr class="my-2">
+                                <div class="small">
+                                    <span class="text-muted me-2"><i class="fas fa-shield-alt me-1"></i>Combined risk:</span>
+                                    {% if epic_rollup.risk_breakdown.critical %}<span class="badge bg-dark me-1">{{ epic_rollup.risk_breakdown.critical }} critical</span>{% endif %}
+                                    {% if epic_rollup.risk_breakdown.high %}<span class="badge bg-danger me-1">{{ epic_rollup.risk_breakdown.high }} high</span>{% endif %}
+                                    {% if epic_rollup.risk_breakdown.medium %}<span class="badge bg-warning text-dark me-1">{{ epic_rollup.risk_breakdown.medium }} medium</span>{% endif %}
+                                    {% if epic_rollup.risk_breakdown.low %}<span class="badge bg-success me-1">{{ epic_rollup.risk_breakdown.low }} low</span>{% endif %}
+                                    {% if epic_rollup.risk_breakdown.none %}<span class="badge bg-light text-dark border me-1">{{ epic_rollup.risk_breakdown.none }} unrated</span>{% endif %}
+                                </div>
+                                {% if epic_rollup.deadline_conflicts %}
+                                <div class="alert alert-warning py-1 px-2 mt-2 mb-0 small">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                    {{ epic_rollup.deadline_conflicts|length }} child task{{ epic_rollup.deadline_conflicts|length|pluralize }} due after the Epic's own due date.
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
                         <div class="card border-secondary">
                             <div class="card-header bg-light">
                                 <h6 class="mb-0">
@@ -265,7 +488,12 @@
                                     
                                     <!-- 🛡️ Risk Assessment Section -->
                                     <div class="mb-4">
+                                        {% if task.is_epic %}
+                                        <h6><i class="fas fa-shield-alt text-warning"></i> Program-Level Risk Assessment</h6>
+                                        <small class="text-muted d-block mb-2">Overall risk for the Epic as a whole — distinct from the rolled-up child-task risk shown in Epic Aggregates above.</small>
+                                        {% else %}
                                         <h6><i class="fas fa-shield-alt text-warning"></i> Risk Assessment</h6>
+                                        {% endif %}
                                         <div class="row">
                                             <div class="col-md-4 mb-3">
                                                 <label for="{{ form.risk_likelihood.id_for_label }}" class="form-label">Risk Likelihood</label>
@@ -299,7 +527,10 @@
 
                                     <hr>
                                     
-                                    <!-- 📊 Manual Complexity Score -->
+                                    <!-- 📊 Manual Complexity Score (per-task — hidden for Epics; value preserved) -->
+                                    {% if task.is_epic %}
+                                    <input type="hidden" name="complexity_score" id="id_complexity_score" value="{{ task.complexity_score|default:5 }}">
+                                    {% else %}
                                     <div class="mb-4">
                                         <h6><i class="fas fa-chart-line text-warning"></i> Task Complexity</h6>
                                         <div class="mb-3">
@@ -309,18 +540,19 @@
                                             </label>
                                             <div class="d-flex align-items-center gap-3">
                                                 <small class="text-muted">Simple (1)</small>
-                                                <input type="range" name="complexity_score" id="id_complexity_score" 
-                                                       class="form-range" min="1" max="10" step="1" 
+                                                <input type="range" name="complexity_score" id="id_complexity_score"
+                                                       class="form-range" min="1" max="10" step="1"
                                                        value="{{ task.complexity_score|default:5 }}"
                                                        title="Task complexity from 1 (simple) to 10 (very complex)">
                                                 <small class="text-muted">Complex (10)</small>
                                             </div>
                                             <small class="form-text text-muted">Rate the task complexity from 1 (simple) to 10 (very complex).</small>
                                         </div>
-                                        
+
                                     </div>
 
                                     <hr>
+                                    {% endif %}
 
                                     <!-- 📦 Resource Information -->
                                     <div class="mb-4">
@@ -349,7 +581,7 @@
                                     <div class="mb-4">
                                         <h6><i class="fas fa-dollar-sign text-success"></i> Budget & Cost Estimation</h6>
                                         <div class="alert alert-info py-2 mb-3">
-                                            <small><i class="fas fa-info-circle me-1"></i> Cost estimates help track project budget and enable AI-powered budget recommendations.</small>
+                                            <small><i class="fas fa-info-circle me-1"></i> Cost estimates help track project budget and enable AI-powered budget recommendations. <strong>Estimated Cost</strong> is the overall task budget. <strong>Estimated Labor Cost</strong> is auto-calculated from Hours × Rate.</small>
                                         </div>
                                         <div class="row">
                                             <div class="col-md-4 mb-3">
@@ -360,7 +592,7 @@
                                                     <span class="input-group-text">$</span>
                                                     {{ form.estimated_cost }}
                                                 </div>
-                                                <small class="form-text text-muted">{{ form.estimated_cost.help_text }}</small>
+                                                <small class="form-text text-muted">Estimated cost for completing this task</small>
                                                 {% if form.estimated_cost.errors %}
                                                     <div class="invalid-feedback d-block">{{ form.estimated_cost.errors }}</div>
                                                 {% endif %}
@@ -410,6 +642,41 @@
 
                                     <hr>
 
+                                    <!-- 🛠️ Required Skills (Chip UI) — per-task; hidden for Epics (value preserved) -->
+                                    <div class="mb-4">
+                                        {# Hidden textarea — keeps JSON value for form submission (both task & epic) #}
+                                        <div class="d-none">{{ form.required_skills }}</div>
+                                        {% if not task.is_epic %}
+                                        <h6><i class="fas fa-tools text-secondary"></i> Required Skills</h6>
+                                        {# Chip display area #}
+                                        <div id="skills-chip-container"
+                                             class="d-flex flex-wrap gap-1 p-2 border rounded bg-light mb-2"
+                                             style="min-height: 42px;">
+                                        </div>
+                                        {# Inline add form #}
+                                        <div class="d-flex gap-2 align-items-center flex-wrap">
+                                            <input type="text" id="skill-name-input"
+                                                   class="form-control form-control-sm"
+                                                   placeholder="Skill name"
+                                                   style="max-width: 180px;" autocomplete="off">
+                                            <select id="skill-level-select" class="form-select form-select-sm" style="max-width: 150px;">
+                                                <option value="">-- Level --</option>
+                                                <option value="Beginner">Beginner</option>
+                                                <option value="Intermediate">Intermediate</option>
+                                                <option value="Advanced">Advanced</option>
+                                                <option value="Expert">Expert</option>
+                                            </select>
+                                            <button type="button" id="add-skill-btn" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-plus me-1"></i> Add
+                                            </button>
+                                        </div>
+                                        <small class="form-text text-muted mt-1 d-block">Add the skills required for this task. Click &times; on a chip to remove it.</small>
+                                        {% if form.required_skills.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.required_skills.errors }}</div>
+                                        {% endif %}
+                                        {% endif %}{# /not task.is_epic — Required Skills #}
+                                    </div>
+
                                     <!-- Task Relationships → moved to Relationships tab -->
                             </div>
                         </div>
@@ -417,6 +684,67 @@
 
                     <!-- ═══════ TAB 4: RELATIONSHIPS ═══════ -->
                     <div class="tab-pane fade" id="tab-relationships" role="tabpanel">
+                        {% if task.is_epic %}
+                        <!-- Epic: child-task summary (status, assignee, due date, health) -->
+                        <div class="mb-4">
+                            <h6><i class="fas fa-sitemap text-warning me-1"></i> Child Tasks
+                                <span class="badge bg-secondary ms-1">{{ epic_rollup.total }}</span>
+                            </h6>
+                            <small class="text-muted d-block mb-2">All tasks rolled up under this Epic, with status and health at a glance.</small>
+                            {% if epic_rollup.children %}
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr class="text-muted" style="font-size:0.8rem;">
+                                            <th style="width:32px;"></th>
+                                            <th>Task</th>
+                                            <th>Assignee</th>
+                                            <th>Due</th>
+                                            <th>Health</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for child in epic_rollup.children %}
+                                        <tr>
+                                            <td>
+                                                {% if child.progress >= 100 or child.completed_at %}
+                                                    <i class="fas fa-circle-check text-success" title="Done"></i>
+                                                {% elif child.progress > 0 %}
+                                                    <i class="fas fa-circle-half-stroke text-primary" title="In progress"></i>
+                                                {% else %}
+                                                    <i class="far fa-circle text-secondary" title="Not started"></i>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <a href="{% url 'task_detail' child.id %}" class="text-decoration-none">
+                                                    <span class="badge bg-light text-dark border me-1" style="font-size:0.7em;">{{ board.get_task_prefix }}-{{ child.id }}</span>
+                                                    {{ child.title }}
+                                                </a>
+                                            </td>
+                                            <td><small>{% if child.assigned_to %}{{ child.assigned_to.username }}{% else %}<span class="text-muted fst-italic">Unassigned</span>{% endif %}</small></td>
+                                            <td><small>{% if child.due_date %}{{ child.due_date|date:"M d" }}{% else %}—{% endif %}</small></td>
+                                            <td>
+                                                {% if child.progress_status == 'late' %}
+                                                    <span class="badge bg-danger" style="font-size:0.7em;">Overdue</span>
+                                                {% elif child.risk_level == 'critical' or child.risk_level == 'high' %}
+                                                    <span class="badge bg-warning text-dark" style="font-size:0.7em;">{{ child.risk_level|capfirst }} risk</span>
+                                                {% elif child.progress_status == 'at_risk' %}
+                                                    <span class="badge bg-warning text-dark" style="font-size:0.7em;">At risk</span>
+                                                {% else %}
+                                                    <span class="badge bg-success" style="font-size:0.7em;">On track</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-muted fst-italic small py-2">No child tasks linked to this Epic yet.</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
                         <!-- Task Relationships -->
                         <div class="mb-4">
                             <h6><i class="fas fa-project-diagram text-info me-1"></i> Task Relationships</h6>
@@ -439,76 +767,50 @@
                             </div>
                         </div>
                         
-                        <hr>
-                        
-                        <!-- Required Skills (Chip UI) -->
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">
-                                <i class="fas fa-tools me-1"></i> Required Skills
-                            </label>
-                            {# Hidden textarea — keeps JSON value for form submission #}
-                            <div class="d-none">{{ form.required_skills }}</div>
-                            {# Chip display area #}
-                            <div id="skills-chip-container"
-                                 class="d-flex flex-wrap gap-1 p-2 border rounded bg-light mb-2"
-                                 style="min-height: 42px;">
-                            </div>
-                            {# Inline add form #}
-                            <div class="d-flex gap-2 align-items-center flex-wrap">
-                                <input type="text" id="skill-name-input"
-                                       class="form-control form-control-sm"
-                                       placeholder="Skill name"
-                                       style="max-width: 180px;" autocomplete="off">
-                                <select id="skill-level-select" class="form-select form-select-sm" style="max-width: 150px;">
-                                    <option value="">-- Level --</option>
-                                    <option value="Beginner">Beginner</option>
-                                    <option value="Intermediate">Intermediate</option>
-                                    <option value="Advanced">Advanced</option>
-                                    <option value="Expert">Expert</option>
-                                </select>
-                                <button type="button" id="add-skill-btn" class="btn btn-sm btn-outline-primary">
-                                    <i class="fas fa-plus me-1"></i> Add
-                                </button>
-                            </div>
-                            <small class="form-text text-muted mt-1 d-block">Add the skills required for this task. Click &times; on a chip to remove it.</small>
-                            {% if form.required_skills.errors %}
-                                <div class="invalid-feedback d-block">{{ form.required_skills.errors }}</div>
-                            {% endif %}
-                        </div>
 
-                        <!-- Phase Selection -->
-                        {% if form.phase %}
-                        <div class="mb-3">
-                            <label for="{{ form.phase.id_for_label }}" class="form-label">
-                                <i class="fas fa-layer-group text-primary me-1"></i> Phase
-                            </label>
-                            {{ form.phase }}
-                            <small class="form-text text-muted">Project phase for Gantt chart organization</small>
-                            {% if form.phase.errors %}
-                                <div class="invalid-feedback d-block">{{ form.phase.errors }}</div>
-                            {% endif %}
-                        </div>
-                        {% endif %}
                     </div><!-- /tab-relationships -->
 
                     <!-- ═══════ TAB 2: AI INSIGHTS ═══════ -->
                     <div class="tab-pane fade" id="tab-ai" role="tabpanel">
 
-                        <!-- AI Insights Verification Note -->
-                        <div class="alert alert-light border-start border-4 border-primary mb-3" role="alert">
+                        {% if task.is_epic %}
+                        <!-- ═══ EPIC-LEVEL AI: collective health of all child tasks ═══ -->
+                        <div class="alert alert-light border-start border-4 border-warning mb-3" role="alert">
                             <div class="d-flex align-items-start">
-                                <i class="fas fa-info-circle text-primary me-2 mt-1"></i>
+                                <i class="fas fa-info-circle text-warning me-2 mt-1"></i>
                                 <div>
-                                    <strong class="d-block mb-1">Why do these AI insights overlap with your inputs?</strong>
+                                    <strong class="d-block mb-1">Epic-level AI insights</strong>
                                     <small class="text-muted">
-                                        AI Insights aren't just for generating suggestions — they also serve as a <strong>second opinion</strong> to verify your decisions.
-                                        When you assign a team member, set a priority, or choose a deadline, you may not always account for factors like assignee workload,
-                                        task complexity, skill gaps, or hidden dependencies. AI considers all the data you've provided across the Overview, Details, and
-                                        Relationships tabs to surface insights you might have missed — helping you confirm or reconsider your choices with confidence.
+                                        Unlike a single task, an Epic is analyzed across <strong>all its child tasks</strong>. The Epic Health report looks at
+                                        cross-task risk, conflicts between the Epic's due date and its children's, how work is distributed across contributors,
+                                        and which child tasks are blocking others.
                                     </small>
                                 </div>
                             </div>
                         </div>
+
+                        <div class="card border-warning mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1"><i class="fas fa-heart-pulse text-warning me-1"></i> Epic Health Analysis</h6>
+                                        <small class="text-muted">AI review of collective child-task health: risk, deadline conflicts, workload &amp; blockers</small>
+                                    </div>
+                                    <button type="button" id="analyze-epic-health-btn" class="btn btn-sm btn-outline-warning"
+                                            data-epic-id="{{ task.id }}" title="Analyze the collective health of this Epic's child tasks">
+                                        <i class="fas fa-heart-pulse me-1"></i> Analyze Epic Health
+                                    </button>
+                                </div>
+                                <div id="epic-health-spinner" class="d-none" data-prizm-variant="spectra" data-prizm-messages="epicHealth"></div>
+                                <div id="epic-health-result" class="mt-3"></div>
+                                {% if not epic_rollup.total %}
+                                <div class="alert alert-light border mt-3 mb-0 small text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>This Epic has no child tasks yet. Add child tasks to get a health analysis.
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% else %}
 
                         <!-- 1. AI Task Complexity Analysis & Breakdown (first: produces complexity score used by other AI features) -->
                         <div class="card border-success mb-3">
@@ -532,12 +834,7 @@
                                     </span>
                                 </div>
                                 {% endif %}
-                                <div id="breakdown-ai-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-success" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <span class="ms-2 text-muted">Analyzing task complexity...</span>
-                                </div>
+                                <div id="breakdown-ai-spinner" class="d-none" data-prizm-variant="spectra" data-prizm-messages="complexity"></div>
                                 <div id="task-breakdown-result" class="d-none mt-2"></div>
                             </div>
                         </div>
@@ -607,12 +904,7 @@
                                         <i class="fas fa-robot me-1"></i> Suggest LSS
                                     </button>
                                 </div>
-                                <div id="classify-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-primary" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <span class="ms-2 text-muted">Analyzing with AI...</span>
-                                </div>
+                                <div id="classify-spinner" class="d-none" data-prizm-variant="spectra" data-prizm-messages="classification"></div>
                                 <div id="lss-suggestion-container" class="alert alert-info mb-3 d-none">
                                     <div class="d-flex align-items-start">
                                         <i class="fas fa-robot mt-1 me-2"></i>
@@ -656,12 +948,7 @@
                                         <i class="fas fa-user-cog me-1"></i> AI Suggest
                                     </button>
                                 </div>
-                                <div id="assignee-ai-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-info" role="status">
-                                        <span class="visually-hidden">Analyzing team members...</span>
-                                    </div>
-                                    <span class="ms-2 text-muted"><i class="fas fa-wand-magic-sparkles me-1"></i>Analyzing team skills, workload & performance...</span>
-                                </div>
+                                <div id="assignee-ai-spinner" class="d-none" data-prizm-variant="spectra" data-prizm-messages="assignee"></div>
                                 <div id="assignee-suggestion-result" class="d-none mt-2"></div>
                                 {% if task.assigned_to %}
                                 <div class="p-2 bg-light rounded mt-2">
@@ -669,9 +956,8 @@
                                     <strong>{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}</strong>
                                 </div>
                                 {% else %}
-                                <div class="text-muted text-center py-3">
-                                    <i class="fas fa-user fa-2x mb-2 d-block"></i>
-                                    <small>No assignee yet. Click "AI Suggest" to find the best match.</small>
+                                <div class="text-muted py-2" style="font-size:13px;color:#6B7280;">
+                                    No assignee assigned yet — click AI Suggest to find the best match.
                                 </div>
                                 {% endif %}
                             </div>
@@ -692,12 +978,7 @@
                                     </button>
                                 </div>
                                 <div id="priority-suggestion-container" class="mb-2"></div>
-                                <div id="priority-ai-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-warning" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <span class="ms-2 text-muted">Analyzing optimal priority...</span>
-                                </div>
+                                <div id="priority-ai-spinner" class="d-none" data-prizm-variant="spectra" data-prizm-messages="priority"></div>
                                 {% if task.priority %}
                                 <div class="p-2 bg-light rounded mt-2">
                                     <small class="text-muted">Current Priority: </small>
@@ -724,12 +1005,7 @@
                                 <small id="predict-assignee-hint" class="form-text text-warning d-none">
                                     <i class="fas fa-exclamation-circle me-1"></i>Please select an assignee on the Overview tab to enable AI prediction.
                                 </small>
-                                <div id="deadline-ai-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-info" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <span class="ms-2 text-muted">Predicting optimal deadline...</span>
-                                </div>
+                                <div id="deadline-ai-spinner" class="d-none" data-prizm-variant="spectra" data-prizm-messages="deadline"></div>
                                 <div id="deadline-prediction-result" class="d-none mt-2"></div>
                                 {% if task.due_date %}
                                 <div class="p-2 bg-light rounded mt-2">
@@ -758,12 +1034,7 @@
                                         <i class="fas fa-wand-magic-sparkles me-1"></i> Generate Summary
                                     </button>
                                 </div>
-                                <div id="task-summary-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-primary" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <span class="ms-2 text-muted">Generating comprehensive summary...</span>
-                                </div>
+                                <div id="task-summary-spinner" class="d-none" data-prizm-variant="spectra" data-prizm-messages="summary"></div>
                                 <div id="task-summary-result" class="mt-2">
                                     {% if task.ai_summary %}
                                     <div class="bg-light rounded p-3">
@@ -781,6 +1052,7 @@
                                 </div>
                             </div>
                         </div>
+                        {% endif %}{# /not task.is_epic — AI Insights #}
                     </div><!-- /tab-ai -->
 
                     <!-- ═══════ TAB 5: ACTIVITY ═══════ -->
@@ -806,16 +1078,11 @@
                                                 <strong>Comment Summary:</strong>
                                                 <button id="export-summary-pdf" class="btn btn-sm btn-outline-primary d-none me-4" title="Export summary as PDF">
                                                     <i class="fas fa-file-pdf me-1"></i> Export PDF
-                                                    <span id="pdf-export-spinner" class="spinner-border spinner-border-sm ms-1 d-none" role="status"></span>
+                                                    <span id="pdf-export-spinner" class="prizm-spinner prizm-spinner--sm ms-1 d-none align-middle"></span>
                                                 </button>
                                             </div>
                                             <p id="comment-summary-text" class="mb-1"></p>
-                                            <div id="summary-spinner" class="d-none">
-                                                <div class="spinner-border spinner-border-sm text-primary" role="status">
-                                                    <span class="visually-hidden">Loading...</span>
-                                                </div>
-                                                <span class="ms-2 text-muted">Generating summary...</span>
-                                            </div>
+                                            <div id="summary-spinner" class="d-none" data-prizm-variant="spectra" data-prizm-messages="summary"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -986,6 +1253,11 @@
                     </div><!-- /tab-activity -->
                 </div><!-- /tab-content -->
 
+                {# Workspace-defined custom fields (typed metadata). #}
+                {# form_id ties inputs to taskDetailForm even though they sit outside it in the DOM #}
+                {# (nested <form> tags on this page cause the outer form to close early per HTML5 parsing). #}
+                {% include 'kanban/custom_fields/_task_widget.html' with form_id="taskDetailForm" %}
+
                 <!-- Sticky Save button (visible on Overview/Details/Relationships tabs) -->
                 <div class="border-top pt-3 mt-3 sticky-bottom bg-white pb-3" id="stickyFormActions">
                     <div class="d-flex justify-content-end">
@@ -1083,147 +1355,6 @@
                 {% endif %}
                 {% endwith %}
 
-                <!-- 🔮 AI Predicted Completion Date -->
-                {% if task.progress < 100 %}
-                <div class="mb-3">
-                    <label class="text-muted d-flex align-items-center">
-                        <i class="fas fa-wand-magic-sparkles text-primary me-2"></i> Predicted Completion
-                        <button type="button" class="btn btn-sm btn-link p-0 ms-2" id="refresh-prediction" data-task-id="{{ task.id }}" title="Refresh prediction">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
-                    </label>
-                    <div id="prediction-container" class="p-2 bg-light rounded">
-                        {% if prediction %}
-                            <div class="prediction-content">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div>
-                                        <strong class="d-block {% if prediction.is_likely_late %}text-danger{% else %}text-success{% endif %}">
-                                            {{ prediction.predicted_date|date:"M d, Y" }}
-                                        </strong>
-                                        <small class="text-muted">
-                                            Range: {{ prediction.early_date|date:"M d" }} - {{ prediction.late_date|date:"M d" }}
-                                        </small>
-                                    </div>
-                                    <span class="badge {% if prediction.confidence >= 0.7 %}bg-success{% elif prediction.confidence >= 0.5 %}bg-warning{% else %}bg-secondary{% endif %}">
-                                        {{ prediction.confidence_percentage }}% confidence
-                                    </span>
-                                </div>
-                                {% if prediction.is_likely_late %}
-                                    <div class="alert alert-warning alert-sm mb-2 py-1 px-2">
-                                        <i class="fas fa-exclamation-triangle me-1"></i>
-                                        <small>Likely to miss due date</small>
-                                    </div>
-                                {% endif %}
-                                <div class="mt-2">
-                                    <small class="text-muted d-block">
-                                        <i class="fas fa-chart-line me-1"></i>Based on {{ prediction.based_on_tasks }} similar task{{ prediction.based_on_tasks|pluralize }}
-                                    </small>
-                                    
-                                    <!-- Prediction Source Transparency -->
-                                    {% if prediction.factors.data_quality %}
-                                        <div class="alert alert-sm py-1 px-2 mt-2 mb-1 {% if prediction.factors.data_quality == 'high' %}alert-success{% elif prediction.factors.data_quality == 'medium' %}alert-info{% else %}alert-warning{% endif %}">
-                                            <small>
-                                                <i class="fas fa-info-circle me-1"></i>
-                                                <strong>Prediction Source:</strong>
-                                                {% if prediction.factors.data_quality == 'high' %}
-                                                    Based on <strong>{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}'s</strong> past performance on similar tasks
-                                                    <span class="badge bg-success ms-1">High Confidence</span>
-                                                {% elif prediction.factors.data_quality == 'medium' %}
-                                                    Based on <strong>team-level</strong> data from this board
-                                                    <span class="badge bg-info ms-1">Medium Confidence</span>
-                                                {% else %}
-                                                    Based on <strong>organization-wide</strong> historical data
-                                                    <span class="badge bg-warning text-dark ms-1">Lower Confidence</span>
-                                                {% endif %}
-                                            </small>
-                                        </div>
-                                    {% endif %}
-                                    
-                                    <!-- Similar Tasks List -->
-                                    {% if prediction.similar_tasks %}
-                                        <button type="button" class="btn btn-outline-info btn-sm mt-1 w-100" data-bs-toggle="collapse" data-bs-target="#similar-tasks-list">
-                                            <i class="fas fa-tasks me-1"></i>View {{ prediction.similar_tasks|length }} Similar Task{{ prediction.similar_tasks|length|pluralize }} 
-                                            <i class="fas fa-chevron-down ms-1"></i>
-                                        </button>
-                                        <div class="collapse mt-2" id="similar-tasks-list">
-                                            <div class="card card-body py-2 px-2 bg-white border-info">
-                                                <small class="text-primary mb-2"><strong><i class="fas fa-info-circle me-1"></i>Tasks used for prediction:</strong></small>
-                                                <div class="list-group list-group-flush">
-                                                    {% for similar_task in prediction.similar_tasks %}
-                                                    <a href="{% url 'task_detail' similar_task.id %}" class="list-group-item list-group-item-action py-2 px-2 small border-start border-info border-3" target="_blank">
-                                                        <div class="d-flex justify-content-between align-items-start">
-                                                            <div class="flex-grow-1">
-                                                                <i class="fas fa-check-circle text-success me-1"></i>
-                                                                <strong>{{ similar_task.title|truncatewords:8 }}</strong>
-                                                            </div>
-                                                            <span class="badge bg-primary ms-2">{{ similar_task.actual_duration_days|floatformat:1 }} days</span>
-                                                        </div>
-                                                        <div class="text-muted mt-1" style="font-size: 0.85em;">
-                                                            <span class="me-2">
-                                                                <i class="fas fa-layer-group"></i> Complexity: {{ similar_task.complexity_score }}/10
-                                                                <span class="badge {% if similar_task.complexity_score >= 8 %}bg-danger{% elif similar_task.complexity_score >= 5 %}bg-warning text-dark{% else %}bg-success{% endif %} ms-1" style="font-size: 0.75em;">
-                                                                    {% if similar_task.complexity_score >= 8 %}High{% elif similar_task.complexity_score >= 5 %}Medium{% else %}Low{% endif %}
-                                                                </span>
-                                                            </span>
-                                                            <span class="me-2">
-                                                                <i class="fas fa-flag"></i> Priority: 
-                                                                <span class="badge {% if similar_task.priority == 'urgent' %}bg-danger{% elif similar_task.priority == 'high' %}bg-warning text-dark{% elif similar_task.priority == 'medium' %}bg-info{% else %}bg-secondary{% endif %}" style="font-size: 0.75em;">
-                                                                    {{ similar_task.priority|title }}
-                                                                </span>
-                                                            </span>
-                                                            <span>
-                                                                <i class="fas fa-calendar-check"></i> {{ similar_task.completed_at|date:"M d, Y" }}
-                                                            </span>
-                                                        </div>
-                                                    </a>
-                                                    {% endfor %}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    {% else %}
-                                        <div class="alert alert-info py-2 px-2 mt-2 mb-0">
-                                            <small class="mb-0">
-                                                <i class="fas fa-info-circle me-1"></i>
-                                                <strong>Refresh prediction to see similar tasks</strong>
-                                                <br>Click the <i class="fas fa-sync-alt"></i> button above to reload prediction data.
-                                            </small>
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                
-                                <button type="button" class="btn btn-link btn-sm p-0 mt-1" data-bs-toggle="collapse" data-bs-target="#prediction-details">
-                                    <small>View details <i class="fas fa-chevron-down"></i></small>
-                                </button>
-                                <div class="collapse mt-2" id="prediction-details">
-                                    <div class="card card-body py-2 px-2 bg-white">
-                                        <small class="text-muted">
-                                            <strong>Factors considered:</strong><br>
-                                            {% if prediction.factors.complexity_score %}
-                                            • Complexity: {{ prediction.factors.complexity_score }}/10<br>
-                                            {% endif %}
-                                            {% if prediction.factors.priority %}
-                                            • Priority: {{ prediction.factors.priority|title }}<br>
-                                            {% endif %}
-                                            {% if prediction.factors.team_member_velocity %}
-                                            • Team velocity: {{ prediction.factors.team_member_velocity }}x<br>
-                                            {% endif %}
-                                            • Historical avg: {{ prediction.factors.historical_avg_days|floatformat:1 }} days<br>
-                                            • Method: {{ prediction.prediction_method|title|cut:"_" }}
-                                        </small>
-                                    </div>
-                                </div>
-                            </div>
-                        {% else %}
-                            <div class="text-muted text-center py-2 prediction-placeholder">
-                                <i class="fas fa-wand-magic-sparkles mb-2"></i>
-                                <small class="d-block">No prediction available yet</small>
-                                <small class="d-block text-muted">Set a start date to enable predictions</small>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endif %}
-
                 <div class="mb-3">
                     <label class="text-muted">Priority</label>
                     <div class="p-2 bg-light rounded">
@@ -1232,27 +1363,47 @@
                 </div>
 
                 <!-- Task Progress Section -->
+                {% if task.is_epic %}
+                <!-- Epic: rolled-up progress (read-only, no manual +/- control) -->
+                <div class="mb-3">
+                    <label class="text-muted">Progress <span class="badge bg-secondary ms-1" style="font-size:0.7em;">Rolled up</span></label>
+                    <div class="p-2 bg-light rounded">
+                        <div class="progress" style="height: 15px;">
+                            <div class="progress-bar bg-success" role="progressbar"
+                                 style="--progress-width: {{ epic_rollup.progress_pct }}%; width: var(--progress-width);"
+                                 aria-valuenow="{{ epic_rollup.progress_pct }}" aria-valuemin="0" aria-valuemax="100">
+                            </div>
+                        </div>
+                        <div class="text-center mt-1">
+                            <span>{{ epic_rollup.completed }} of {{ epic_rollup.total }} child tasks done · {{ epic_rollup.progress_pct }}%</span>
+                            {% if not epic_rollup.total %}
+                            <div class="mt-1"><small class="text-muted"><i class="fas fa-info-circle me-1"></i>No child tasks yet — add child tasks to track Epic progress.</small></div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
                 <div class="mb-3">
                     <label class="text-muted">Progress</label>
                     <div class="p-2 bg-light rounded">
                         <div class="task-progress-container">
                             <div class="d-flex justify-content-between align-items-center">
-                                <button type="button" class="btn btn-sm btn-outline-secondary progress-btn decrease-progress" 
+                                <button type="button" class="btn btn-sm btn-outline-secondary progress-btn decrease-progress"
                                         data-task-id="{{ task.id }}" title="Decrease progress by 10%">
                                     <i class="fas fa-minus"></i>
                                 </button>
-                                
+
                                 <div class="progress flex-grow-1 mx-1" style="height: 15px;">
-                                    <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}" 
-                                         role="progressbar" 
-                                         style="--progress-width: {{ task.progress }}%; width: var(--progress-width);" 
-                                         aria-valuenow="{{ task.progress }}" 
-                                         aria-valuemin="0" 
+                                    <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         role="progressbar"
+                                         style="--progress-width: {{ task.progress }}%; width: var(--progress-width);"
+                                         aria-valuenow="{{ task.progress }}"
+                                         aria-valuemin="0"
                                          aria-valuemax="100">
                                     </div>
                                 </div>
-                                
-                                <button type="button" class="btn btn-sm btn-outline-secondary progress-btn increase-progress" 
+
+                                <button type="button" class="btn btn-sm btn-outline-secondary progress-btn increase-progress"
                                         data-task-id="{{ task.id }}" title="Increase progress by 10%">
                                     <i class="fas fa-plus"></i>
                                 </button>
@@ -1265,7 +1416,8 @@
                             </div>
                         </div>
                     </div>
-                </div>                <!--  Stakeholder Involvement Section -->
+                </div>
+                {% endif %}                <!--  Stakeholder Involvement Section -->
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <label class="text-muted mb-0">👥 Stakeholders</label>
@@ -1321,11 +1473,6 @@
                     </div>
                     {% endif %}
                 </div>
-                
-                <!-- Store board stakeholders data for AI suggestions -->
-                <script type="application/json" id="board-stakeholders-data">
-                    [{% for sh in board_stakeholders %}{"id": {{ sh.id }}, "name": "{{ sh.name|escapejs }}", "role": "{{ sh.role|default:''|escapejs }}", "organization": "{{ sh.organization|default:''|escapejs }}", "influence_level": "{{ sh.get_influence_level_display|default:'Medium'|escapejs }}", "interest_level": "{{ sh.get_interest_level_display|default:'Medium'|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
-                </script>
 
                 <!-- 📋 Dependencies & Requirements Section - Always show -->
                 <div class="mb-3">
@@ -1392,14 +1539,21 @@
                     <div class="p-2 bg-light rounded mb-2">
                         <div class="mb-2">
                             <small class="text-muted d-block mb-1"><strong><i class="fas fa-sitemap me-1"></i>Task Hierarchy</strong></small>
+                            {% if task.is_epic %}
+                            <small class="text-muted fst-italic">This is an <strong>Epic</strong> — it groups child tasks but does not appear on the board itself.</small>
+                            {% else %}
                             <small class="text-muted fst-italic">Parent-child relationships for task organization</small>
+                            {% endif %}
                         </div>
                         
                         {% if task.parent_task %}
                         <div class="mb-2">
                             <small class="text-muted">Parent Task:</small>
                             <div class="p-2 bg-white rounded border-start border-3 border-primary">
-                                <a href="{% url 'task_detail' task.parent_task.id %}" class="text-decoration-none"><strong>{{ task.parent_task.title }}</strong></a>
+                                <a href="{% url 'task_detail' task.parent_task.id %}" class="text-decoration-none">
+                                    <strong>{{ task.parent_task.title }}</strong>
+                                    {% if task.parent_task.is_epic %}<span class="badge bg-warning text-dark ms-1" style="font-size:0.7em;">Epic</span>{% endif %}
+                                </a>
                             </div>
                         </div>
                         {% else %}
@@ -1425,7 +1579,143 @@
                         </div>
                         {% endif %}
                     </div>
-                    
+
+                    <!-- 📋 Linked Requirements -->
+                    <div class="p-2 bg-light rounded mb-2">
+                        <div class="mb-2">
+                            <small class="text-muted d-block mb-1"><strong><i class="fas fa-clipboard-list me-1"></i>Linked Requirements</strong></small>
+                            <small class="text-muted fst-italic">Requirements this task satisfies, for traceability</small>
+                        </div>
+
+                        {% if linked_requirements %}
+                        <div class="mb-2">
+                            {% for req in linked_requirements %}
+                            <div class="p-2 bg-white rounded border-start border-3 border-info mb-1 d-flex justify-content-between align-items-center">
+                                <a href="{% url 'requirements:requirement_detail' board.id req.id %}" class="text-decoration-none">
+                                    <small class="text-muted">{{ req.identifier }}</small> <strong>{{ req.title }}</strong>
+                                </a>
+                                <form method="post" action="{% url 'requirements:unlink_task' board.id req.id %}" class="ms-2">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="task_id" value="{{ task.id }}">
+                                    <input type="hidden" name="next" value="task">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Unlink"><i class="fas fa-times"></i></button>
+                                </form>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="mb-2">
+                            <small class="text-muted d-block fst-italic">No requirements linked to this task yet.</small>
+                        </div>
+                        {% endif %}
+
+                        {% if available_requirements %}
+                        <form method="post" action="" class="d-flex gap-2" id="linkRequirementForm"
+                              data-url-template="{% url 'requirements:link_task' board.id 999999 %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="task_id" value="{{ task.id }}">
+                            <input type="hidden" name="next" value="task">
+                            <select name="requirement_pk" class="form-select form-select-sm" id="linkRequirementSelect" required>
+                                <option value="">Link a requirement...</option>
+                                {% for req in available_requirements %}
+                                <option value="{{ req.id }}">{{ req.identifier }} — {{ req.title|truncatewords:6 }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="fas fa-link"></i></button>
+                        </form>
+                        <script>
+                        (function() {
+                            var form = document.getElementById('linkRequirementForm');
+                            if (!form) return;
+                            form.addEventListener('submit', function(e) {
+                                var pk = document.getElementById('linkRequirementSelect').value;
+                                if (!pk) { e.preventDefault(); return; }
+                                form.action = form.dataset.urlTemplate.replace('999999', pk);
+                            });
+                        })();
+                        </script>
+                        {% endif %}
+                    </div>
+
+                    <!-- ✅ Checklist / Sub-task Items (hidden for Epics — child tasks ARE the Epic's checklist) -->
+                    {% if not task.is_epic %}
+                    <div class="p-2 bg-light rounded mb-2" id="checklist-section" data-task-id="{{ task.id }}">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <small class="text-muted d-block mb-1"><strong><i class="fas fa-tasks me-1"></i>Checklist</strong></small>
+                                {% with cl=task.checklist_progress %}
+                                {% if cl %}
+                                <small class="text-muted fst-italic">{{ cl.completed }}/{{ cl.total }} completed</small>
+                                {% else %}
+                                <small class="text-muted fst-italic">No checklist items yet</small>
+                                {% endif %}
+                                {% endwith %}
+                            </div>
+                            <button type="button" class="btn btn-outline-success btn-sm" onclick="toggleAddChecklistInput()" title="Add checklist item">
+                                <i class="fas fa-plus me-1"></i>Add
+                            </button>
+                        </div>
+
+                        {% with cl=task.checklist_progress %}
+                        {% if cl %}
+                        <div class="progress mb-2" style="height:6px;">
+                            <div class="progress-bar {% if cl.completed == cl.total %}bg-success{% else %}bg-info{% endif %}"
+                                 style="width:{% widthratio cl.completed cl.total 100 %}%;"></div>
+                        </div>
+                        {% endif %}
+                        {% endwith %}
+
+                        <div id="checklist-items-list">
+                        {% for item in task.checklist_items.all %}
+                        <div class="d-flex align-items-start gap-2 p-2 bg-white rounded mb-1 checklist-item-row" data-item-id="{{ item.id }}">
+                            <input type="checkbox" class="form-check-input mt-1 checklist-toggle"
+                                   data-item-id="{{ item.id }}"
+                                   {% if item.is_completed %}checked{% endif %}
+                                   onchange="toggleChecklistItem({{ item.id }})"
+                                   style="cursor:pointer;">
+                            <div class="flex-grow-1 min-w-0">
+                                <small class="{% if item.is_completed %}text-decoration-line-through text-muted{% endif %}">
+                                    {{ item.title }}
+                                </small>
+                                {% if item.estimated_effort %}
+                                <small class="text-muted ms-1">({{ item.estimated_effort }})</small>
+                                {% endif %}
+                                {% if item.source == 'ai_generated' %}
+                                <span class="badge bg-info ms-1" style="font-size:0.6em;vertical-align:middle;">AI</span>
+                                {% endif %}
+                            </div>
+                            <span class="badge bg-{% if item.priority == 'high' or item.priority == 'urgent' %}danger{% elif item.priority == 'medium' %}warning text-dark{% else %}secondary{% endif %}" style="font-size:0.65em;">{{ item.priority }}</span>
+                            <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1" onclick="deleteChecklistItem({{ item.id }})" title="Remove">
+                                <i class="fas fa-times" style="font-size:0.75em;"></i>
+                            </button>
+                        </div>
+                        {% empty %}
+                        <small class="text-muted fst-italic d-block" id="checklist-empty-msg">Use the AI Analyze &amp; Break Down feature or the Add button to create checklist items.</small>
+                        {% endfor %}
+                        </div>
+
+                        <!-- Inline add form (hidden by default) -->
+                        <div id="add-checklist-form" class="d-none mt-2">
+                            <div class="input-group input-group-sm">
+                                <input type="text" id="new-checklist-title" class="form-control" placeholder="New checklist item…"
+                                       onkeydown="if(event.key==='Enter'){addManualChecklistItem();event.preventDefault();}">
+                                <select id="new-checklist-priority" class="form-select flex-grow-0" style="width:auto;" title="Priority">
+                                    <option value="low" selected>Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                    <option value="urgent">Urgent</option>
+                                </select>
+                                <button class="btn btn-success" type="button" onclick="addManualChecklistItem()">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button class="btn btn-outline-secondary" type="button" onclick="toggleAddChecklistInput()">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}{# /not task.is_epic — Checklist #}
+
                     <!-- 📎 Additional Information -->
                     <div class="p-2 bg-light rounded">
                         <div class="mb-2">
@@ -1445,6 +1735,7 @@
                             {% endif %}
                         </div>
                         
+                        {% if not task.is_epic %}
                         <div class="mb-2">
                             <small class="text-muted">Required Skills:</small>
                             {% if task.required_skills %}
@@ -1459,26 +1750,42 @@
                             <small class="text-muted d-block fst-italic">Not specified. Edit task to add required skills.</small>
                             {% endif %}
                         </div>
-                        
+                        {% endif %}
+
                         <div class="mt-2">
+                            {% if task.is_epic %}
+                            {# Epic: a single complexity score is meaningless on a container — show the child average. #}
+                            <small class="text-muted d-block mb-1">Child Complexity (avg):</small>
+                            {% if epic_rollup.avg_complexity %}
+                            <div class="progress" style="height: 10px;">
+                                <div class="progress-bar {% if epic_rollup.avg_complexity >= 8 %}bg-danger{% elif epic_rollup.avg_complexity >= 5 %}bg-warning{% else %}bg-success{% endif %}"
+                                     role="progressbar" style="width: {% widthratio epic_rollup.avg_complexity 10 100 %}%;"></div>
+                            </div>
+                            <small class="text-muted">avg {{ epic_rollup.avg_complexity }}/10 · max {{ epic_rollup.max_complexity }}/10 across {{ epic_rollup.total }} child task{{ epic_rollup.total|pluralize }}</small>
+                            {% else %}
+                            <small class="text-muted fst-italic">No child complexity scores set yet.</small>
+                            {% endif %}
+                            {% else %}
                             <small class="text-muted d-block mb-1">Complexity Score:</small>
                             {% if task.complexity_score %}
                             <div class="progress" style="height: 10px;">
-                                <div class="progress-bar {% if task.complexity_score >= 8 %}bg-danger{% elif task.complexity_score >= 5 %}bg-warning{% else %}bg-success{% endif %}" 
-                                     role="progressbar" 
+                                <div class="progress-bar {% if task.complexity_score >= 8 %}bg-danger{% elif task.complexity_score >= 5 %}bg-warning{% else %}bg-success{% endif %}"
+                                     role="progressbar"
                                      style="width: {{ task.complexity_score }}0%;"></div>
                             </div>
-                            <small class="text-muted">{{ task.complexity_score }}/10 
+                            <small class="text-muted">{{ task.complexity_score }}/10
                                 {% if task.complexity_score >= 8 %}(Very Complex){% elif task.complexity_score >= 5 %}(Moderate){% else %}(Simple){% endif %}
                             </small>
                             {% else %}
                             <small class="text-muted fst-italic">Not assessed. Edit task to set complexity.</small>
                             {% endif %}
+                            {% endif %}
                         </div>
                     </div>
                 </div>
 
-                <!-- 📦 Resource Information - Always show -->
+                {% if not task.is_epic %}
+                <!-- 📦 Resource Information (per-assignee — hidden for Epics) -->
                 <div class="mb-3">
                     <label class="text-muted">📦 Resource Information</label>
                     <div class="p-2 bg-light rounded">
@@ -1493,7 +1800,7 @@
                             <small class="text-muted d-block fst-italic">Not calculated. Assign skills and an assignee to calculate.</small>
                             {% endif %}
                         </div>
-                        
+
                         <div class="mb-2">
                             <small class="text-muted">Workload Impact: </small>
                             {% if task.workload_impact %}
@@ -1502,7 +1809,7 @@
                             <span class="badge bg-secondary">Not Set</span>
                             {% endif %}
                         </div>
-                        
+
                         <div>
                             <small class="text-muted"><i class="fas fa-users me-1"></i>Collaboration Required: </small>
                             {% if task.collaboration_required %}
@@ -1513,9 +1820,26 @@
                         </div>
                     </div>
                 </div>
+                {% endif %}
 
                 <!-- 💰 Budget & Cost Information -->
                 <div class="mb-3">
+                    {% if task.is_epic %}
+                    <label class="text-muted">💰 Budget & Cost <span class="badge bg-secondary ms-1" style="font-size:0.7em;">Rolled up</span></label>
+                    <div class="p-2 bg-light rounded">
+                        <div class="row">
+                            <div class="col-6">
+                                <small class="text-muted d-block">Total Est. Cost</small>
+                                <strong class="text-success">${{ epic_rollup.total_estimated_cost|floatformat:2 }}</strong>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted d-block">Total Est. Hours</small>
+                                <strong>{{ epic_rollup.total_estimated_hours|floatformat:1 }}h</strong>
+                            </div>
+                        </div>
+                        <small class="text-muted d-block mt-1 fst-italic">Summed across {{ epic_rollup.total }} child task{{ epic_rollup.total|pluralize }}.</small>
+                    </div>
+                    {% else %}
                     <label class="text-muted">💰 Budget & Cost</label>
                     <div class="p-2 bg-light rounded">
                         {% with task.cost as task_cost %}
@@ -1562,30 +1886,208 @@
                         {% endif %}
                         {% endwith %}
                     </div>
+                    {% endif %}
                 </div>
 
-                {% if task.labels.all %}                <div>
-                    <div class="d-flex justify-content-between align-items-center">
-                        <label class="text-muted mb-0">Labels
-                            <button type="button" class="btn btn-sm p-0" data-bs-toggle="modal" data-bs-target="#leanLabelsInfoModal">
-                                <i class="fas fa-info-circle text-primary" title="Learn about Lean Six Sigma labels"></i>
-                            </button>
-                        </label>
+                <!-- Labels — inline add/remove panel -->
+                <div id="task-labels-panel">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="text-muted mb-0"><i class="fas fa-tags me-1"></i>Labels</label>
                     </div>
-                    
-                    <div class="p-2 bg-light rounded">{% for label in task.labels.all %}
-                            {% if label.category == 'lean' %}
-                            <span class="task-label lean-label" style="--label-color: {{ label.color }}" 
-                                  title="Lean Six Sigma: {{ label.name }}">
-                                <i class="fas fa-chart-line"></i> {{ label.name }}
-                            </span>
-                            {% else %}
-                            <span class="task-label" style="--label-color: {{ label.color }}">{{ label.name }}</span>
-                            {% endif %}
+                    <div id="task-label-badges" class="d-flex flex-wrap gap-1 mb-1">
+                        {% for label in task.labels.all %}
+                        {% if label.category == 'lean' %}
+                        <span class="task-label lean-label" style="--label-color: {{ label.color }}"
+                              title="Lean Six Sigma: {{ label.name }}">
+                            <i class="fas fa-chart-line"></i> {{ label.name }}
+                        </span>
+                        {% else %}
+                        <span class="badge d-inline-flex align-items-center gap-1 label-badge label-badge-selected"
+                              data-label-id="{{ label.id }}"
+                              style="background-color:{{ label.color }};opacity:1;">
+                            {{ label.name }}
+                            <button type="button" class="btn-close btn-close-white btn-sm ms-1 remove-label-btn"
+                                    style="font-size:0.6rem;" aria-label="Remove"
+                                    data-label-id="{{ label.id }}"></button>
+                        </span>
+                        {% endif %}
                         {% endfor %}
                     </div>
+
+                    {# Add label dropdown #}
+                    <div class="dropdown d-inline-block">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                                id="add-label-dropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-plus me-1"></i> Add label
+                        </button>
+                        <ul class="dropdown-menu p-2" style="min-width:220px;" aria-labelledby="add-label-dropdown">
+                            <li>
+                                <div id="board-label-list">
+                                    {% for label in task.column.board.labels.all %}
+                                    {% if label.category == 'regular' and label not in task.labels.all %}
+                                    <button type="button" class="dropdown-item add-label-btn d-flex align-items-center gap-2"
+                                            data-label-id="{{ label.id }}" data-label-name="{{ label.name }}" data-label-color="{{ label.color }}">
+                                        <span class="badge" style="background-color:{{ label.color }};">{{ label.name }}</span>
+                                    </button>
+                                    {% endif %}
+                                    {% empty %}
+                                    <span class="dropdown-item-text text-muted small" id="no-board-labels-msg">No labels on this board yet.</span>
+                                    {% endfor %}
+                                </div>
+                            </li>
+                            <li><hr class="dropdown-divider my-1"></li>
+                            <li>
+                                <button type="button" class="dropdown-item text-primary small" id="detail-load-presets-btn">
+                                    <i class="fas fa-magic me-1"></i> Load preset labels
+                                </button>
+                            </li>
+                            <li>
+                                <button type="button" class="dropdown-item text-primary small" id="detail-toggle-new-label-btn">
+                                    <i class="fas fa-plus me-1"></i> New label…
+                                </button>
+                            </li>
+                            <li id="detail-new-label-form" class="d-none px-2 pb-1">
+                                <div class="d-flex gap-1 align-items-center mt-1">
+                                    <input type="text" id="detail-new-label-name" class="form-control form-control-sm"
+                                           style="max-width:130px;" placeholder="Name" maxlength="50">
+                                    <input type="color" id="detail-new-label-color" class="form-control form-control-color form-control-sm"
+                                           value="#3B82F6" style="width:36px;">
+                                    <button type="button" class="btn btn-sm btn-primary" id="detail-save-new-label-btn">Add</button>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
-                {% endif %}
+
+                <script>
+                (function () {
+                    const taskId = {{ task.id }};
+                    const boardId = {{ task.column.board.id }};
+                    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+                                      document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='))?.split('=')[1] || '';
+
+                    function postJson(url, body) {
+                        return fetch(url, {
+                            method: 'POST',
+                            headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded'},
+                            body: new URLSearchParams(body),
+                        }).then(r => r.json());
+                    }
+
+                    function buildAssignedBadge(labelId, labelName, labelColor) {
+                        const span = document.createElement('span');
+                        span.className = 'badge d-inline-flex align-items-center gap-1 label-badge label-badge-selected';
+                        span.dataset.labelId = labelId;
+                        span.style.cssText = `background-color:${labelColor};opacity:1;`;
+                        span.textContent = labelName + ' ';
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'btn-close btn-close-white btn-sm ms-1 remove-label-btn';
+                        btn.style.fontSize = '0.6rem';
+                        btn.setAttribute('aria-label', 'Remove');
+                        btn.dataset.labelId = labelId;
+                        btn.addEventListener('click', handleRemove);
+                        span.appendChild(btn);
+                        return span;
+                    }
+
+                    // Remove label
+                    function handleRemove(e) {
+                        e.stopPropagation();
+                        const labelId = this.dataset.labelId;
+                        postJson(`/tasks/${taskId}/toggle-label/`, {label_id: labelId})
+                            .then(data => {
+                                if (data.action === 'removed') {
+                                    document.querySelector(`#task-label-badges [data-label-id="${labelId}"]`)?.remove();
+                                }
+                            });
+                    }
+                    document.querySelectorAll('.remove-label-btn').forEach(b => b.addEventListener('click', handleRemove));
+
+                    // Add label from dropdown
+                    document.querySelectorAll('.add-label-btn').forEach(btn => {
+                        btn.addEventListener('click', function () {
+                            const id = this.dataset.labelId;
+                            const name = this.dataset.labelName;
+                            const color = this.dataset.labelColor;
+                            postJson(`/tasks/${taskId}/toggle-label/`, {label_id: id})
+                                .then(data => {
+                                    if (data.action === 'added') {
+                                        document.getElementById('task-label-badges').appendChild(buildAssignedBadge(id, name, color));
+                                        this.closest('li, button')?.remove();
+                                    }
+                                });
+                        });
+                    });
+
+                    // Load preset labels
+                    document.getElementById('detail-load-presets-btn').addEventListener('click', function () {
+                        this.disabled = true;
+                        postJson(`/boards/${boardId}/load-preset-labels/`, {})
+                            .then(data => {
+                                const list = document.getElementById('board-label-list');
+                                const noMsg = document.getElementById('no-board-labels-msg');
+                                if (noMsg) noMsg.remove();
+                                const assignedIds = Array.from(
+                                    document.querySelectorAll('#task-label-badges [data-label-id]')
+                                ).map(el => parseInt(el.dataset.labelId));
+                                data.labels.forEach(label => {
+                                    if (assignedIds.includes(label.id)) return;
+                                    if (list.querySelector(`[data-label-id="${label.id}"]`)) return;
+                                    const btn = document.createElement('button');
+                                    btn.type = 'button';
+                                    btn.className = 'dropdown-item add-label-btn d-flex align-items-center gap-2';
+                                    btn.dataset.labelId = label.id;
+                                    btn.dataset.labelName = label.name;
+                                    btn.dataset.labelColor = label.color;
+                                    btn.innerHTML = `<span class="badge" style="background-color:${label.color};">${label.name}</span>`;
+                                    btn.addEventListener('click', function () {
+                                        postJson(`/tasks/${taskId}/toggle-label/`, {label_id: label.id})
+                                            .then(data => {
+                                                if (data.action === 'added') {
+                                                    document.getElementById('task-label-badges').appendChild(
+                                                        buildAssignedBadge(label.id, label.name, label.color)
+                                                    );
+                                                    btn.remove();
+                                                }
+                                            });
+                                    });
+                                    list.appendChild(btn);
+                                });
+                                this.textContent = 'Presets loaded';
+                                this.disabled = true;
+                            });
+                    });
+
+                    // New label mini-form in dropdown
+                    document.getElementById('detail-toggle-new-label-btn').addEventListener('click', function () {
+                        document.getElementById('detail-new-label-form').classList.toggle('d-none');
+                    });
+
+                    document.getElementById('detail-save-new-label-btn').addEventListener('click', function () {
+                        const name = document.getElementById('detail-new-label-name').value.trim();
+                        const color = document.getElementById('detail-new-label-color').value;
+                        if (!name) return;
+                        this.disabled = true;
+                        postJson(`/boards/${boardId}/quick-create-label/`, {name, color})
+                            .then(label => {
+                                if (label.error) { alert(label.error); return; }
+                                // Assign immediately
+                                return postJson(`/tasks/${taskId}/toggle-label/`, {label_id: label.id})
+                                    .then(data => {
+                                        if (data.action === 'added') {
+                                            document.getElementById('task-label-badges').appendChild(
+                                                buildAssignedBadge(label.id, label.name, label.color)
+                                            );
+                                        }
+                                        document.getElementById('detail-new-label-name').value = '';
+                                        document.getElementById('detail-new-label-form').classList.add('d-none');
+                                    });
+                            })
+                            .finally(() => { this.disabled = false; });
+                    });
+                })();
+                </script>
             </div>
         </div>
 
@@ -1600,6 +2102,15 @@
                 </a>
             </div>
             <div class="card-body">
+                {% if task.is_epic %}
+                <!-- Epic: time is logged on child tasks — show rolled-up total, no manual logging here. -->
+                <div class="mb-2 p-3 bg-light rounded text-center">
+                    <div class="text-muted mb-1">Total Time Logged <span class="badge bg-secondary ms-1" style="font-size:0.7em;">Rolled up</span></div>
+                    <h3 class="mb-0 text-primary">{{ epic_time_logged|floatformat:2 }}h</h3>
+                    <small class="text-muted">across {{ epic_rollup.total }} child task{{ epic_rollup.total|pluralize }}</small>
+                </div>
+                <small class="text-muted fst-italic d-block">Log time on individual child tasks — an Epic groups work rather than holding it directly.</small>
+                {% else %}
                 <!-- Total Time Logged -->
                 <div class="mb-3 p-3 bg-light rounded text-center">
                     <div class="text-muted mb-1">Total Time Logged</div>
@@ -1632,8 +2143,13 @@
                         <textarea class="form-control form-control-sm" id="time-description" 
                                   rows="2" placeholder="What did you work on?"></textarea>
                     </div>
-                    
-                    <button type="submit" class="btn btn-primary btn-sm w-100">
+
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="time-is-billable" checked>
+                        <label class="form-check-label small" for="time-is-billable">Billable</label>
+                    </div>
+
+                    <button type="submit" class="btn btn-sm w-100" style="background:var(--card-bg);color:#378ADD;border:1px solid #378ADD;border-radius:6px;">
                         <i class="fas fa-plus"></i> Log Time
                     </button>
                 </form>
@@ -1652,6 +2168,9 @@
                                     {% if entry.description %}
                                     <small class="text-muted" title="{{ entry.description }}" style="cursor: help;">{{ entry.description|truncatechars:40 }}</small>
                                     {% endif %}
+                                    {% if not entry.is_billable %}
+                                    <span class="badge bg-secondary ms-1" style="font-size:0.65rem;">Non-billable</span>
+                                    {% endif %}
                                 </div>
                                 {% if entry.user == user %}
                                 <button class="btn btn-sm btn-link text-danger delete-time-entry" 
@@ -1667,6 +2186,7 @@
                     <p class="text-muted small text-center py-2 mb-0">No time logged yet</p>
                     {% endif %}
                 </div>
+                {% endif %}{# /not task.is_epic — Time Tracking #}
             </div>
         </div>
 
@@ -1837,6 +2357,11 @@
     }
     /* Hide Save button when Activity tab is active */
     #stickyFormActions { z-index: 10; }
+
+    /* ── Dark Mode — timeline surfaces → tokens ── */
+    [data-bs-theme="dark"] .timeline-line { background-color: var(--border-color); }
+    [data-bs-theme="dark"] .timeline-item-marker { background-color: var(--card-bg); box-shadow: 0 0 0 2px var(--border-color); }
+    [data-bs-theme="dark"] .timeline-item-content { background-color: var(--bg-tertiary); }
 </style>
 
 <script>
@@ -1890,22 +2415,6 @@
                                   document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='))?.split('=')[1] || '';
                 let refreshed = [];
                 let errors = [];
-
-                // 1. Refresh completion prediction
-                try {
-                    const predResp = await fetch(`/api/task/${taskId}/prediction/`, {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
-                    });
-                    if (predResp.ok) {
-                        refreshed.push('prediction');
-                        // Trigger the existing refresh-prediction handler UI update
-                        const refreshPredBtn = document.getElementById('refresh-prediction');
-                        if (refreshPredBtn) refreshPredBtn.click();
-                    } else {
-                        errors.push('prediction');
-                    }
-                } catch(e) { errors.push('prediction'); }
 
                 // 2. Refresh risk assessment
                 try {
@@ -1982,12 +2491,11 @@
         }
 
         // Budget/Cost calculation preview
-        // autoFillCost: when true, overwrites the cost input with hours x rate.
-        // Set to false on initial load so the stored DB value is preserved.
-        function updateLaborCostPreview(autoFillCost) {
+        // Shows the computed labor cost (hours × rate) in a read-only preview.
+        // The "Estimated Cost" field is independent and never auto-overwritten.
+        function updateLaborCostPreview() {
             const hoursInput = document.getElementById('id_estimated_hours');
             const rateInput = document.getElementById('id_hourly_rate');
-            const costInput = document.getElementById('id_estimated_cost');
             const preview = document.getElementById('laborCostPreview');
             
             if (hoursInput && rateInput && preview) {
@@ -1998,12 +2506,6 @@
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2
                 });
-                
-                // Only auto-fill the Estimated Cost field when the user actively changes
-                // hours or rate — never overwrite on initial page load (preserves DB value).
-                if (autoFillCost && costInput && laborCost > 0) {
-                    costInput.value = laborCost.toFixed(2);
-                }
             }
         }
         
@@ -2012,30 +2514,69 @@
         const rateInput = document.getElementById('id_hourly_rate');
         
         if (hoursInput) {
-            hoursInput.addEventListener('input', function() { updateLaborCostPreview(true); });
+            hoursInput.addEventListener('input', function() { updateLaborCostPreview(); });
         }
         if (rateInput) {
-            rateInput.addEventListener('input', function() { updateLaborCostPreview(true); });
+            rateInput.addEventListener('input', function() { updateLaborCostPreview(); });
         }
         
-        // Initial calculation — preview only, do NOT overwrite the stored estimated cost
-        updateLaborCostPreview(false);
+        // Initial calculation
+        updateLaborCostPreview();
         
-        // Set up increase progress buttons
+        // Progress +/- buttons: update the bar locally on each click and save
+        // only the FINAL value once the user stops clicking (debounced). This
+        // means ten clicks = one save = one automation run instead of ten
+        // (BUG-03). The bar is driven by the server response so it can't snap
+        // back (BUG-07).
+        const _progressBarEl = document.querySelector('.progress-bar');
+        if (_progressBarEl) {
+            // Single source of truth for the in-flight value while clicking.
+            window._pendingProgress = parseInt(_progressBarEl.getAttribute('aria-valuenow'), 10) || 0;
+        }
+        let _progressSaveTimer = null;
+
+        function stepProgress(delta) {
+            let v = (typeof window._pendingProgress === 'number') ? window._pendingProgress : 0;
+            v = Math.max(0, Math.min(100, v + delta));
+            window._pendingProgress = v;
+            renderProgress(v, progressColorClass(v));   // optimistic local update
+            return v;
+        }
+
+        function scheduleProgressSave(taskId) {
+            if (_progressSaveTimer) clearTimeout(_progressSaveTimer);
+            _progressSaveTimer = setTimeout(() => {
+                updateTaskProgress(taskId, window._pendingProgress);
+            }, 600);
+        }
+
         document.querySelectorAll('.increase-progress').forEach(btn => {
             btn.addEventListener('click', function() {
-                const taskId = this.dataset.taskId;
-                updateTaskProgress(taskId, 'increase');
+                stepProgress(10);
+                scheduleProgressSave(this.dataset.taskId);
             });
         });
-        
-        // Set up decrease progress buttons
+
         document.querySelectorAll('.decrease-progress').forEach(btn => {
             btn.addEventListener('click', function() {
-                const taskId = this.dataset.taskId;
-                updateTaskProgress(taskId, 'decrease');
+                stepProgress(-10);
+                scheduleProgressSave(this.dataset.taskId);
             });
         });
+
+        // If the user edits the form's progress number field directly, mirror it
+        // onto the widget bar so the two controls never disagree. The form Save
+        // button persists this value; no AJAX call is needed here.
+        const _formProgressInput = document.getElementById('id_progress');
+        if (_formProgressInput) {
+            _formProgressInput.addEventListener('input', function() {
+                let v = parseInt(this.value, 10);
+                if (isNaN(v)) return;
+                v = Math.max(0, Math.min(100, v));
+                window._pendingProgress = v;
+                renderProgress(v, progressColorClass(v));
+            });
+        }
 
         // Add Comment button — validate non-empty then submit the inner comment form
         const addCommentBtn = document.getElementById('addCommentBtn');
@@ -2072,8 +2613,44 @@
                 })
                 .then(response => {
                     if (response.ok) {
-                        // Reload to show the new comment in the activity tab
-                        window.location.href = window.location.pathname + '#tab-activity';
+                        // Dynamically add comment to the DOM without full reload
+                        const commentContent = textarea.value.trim();
+                        const username = '{{ request.user.username|escapejs }}';
+                        const now = new Date();
+                        const dateStr = now.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+                        const timeStr = now.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit', hour12: false});
+                        const initial = username.charAt(0).toUpperCase();
+
+                        const commentHtml = `
+                        <div class="d-flex mb-4">
+                            <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center me-3" style="width: 50px; height: 50px;">
+                                ${initial}
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">${username}</h6>
+                                    <small class="text-muted">${dateStr} at ${timeStr}</small>
+                                </div>
+                                <p class="mb-0">${commentContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+                            </div>
+                        </div>`;
+
+                        // Find comments container and add at top (newest first)
+                        const commentsCard = document.querySelector('#tab-activity .card-body');
+                        const noCommentsMsg = commentsCard.querySelector('p.text-muted');
+                        if (noCommentsMsg && noCommentsMsg.textContent.includes('No comments yet')) {
+                            noCommentsMsg.remove();
+                        }
+                        const hr = commentsCard.querySelector('hr');
+                        if (hr) {
+                            hr.insertAdjacentHTML('beforebegin', commentHtml);
+                        } else {
+                            commentsCard.insertAdjacentHTML('afterbegin', commentHtml);
+                        }
+
+                        // Clear textarea and re-enable button
+                        textarea.value = '';
+                        addCommentBtn.disabled = false;
                     }
                 })
                 .catch(() => {
@@ -2143,7 +2720,42 @@
         }
     });
     
-    function updateTaskProgress(taskId, direction) {
+    // Mirror of the server's get_progress_color_class so the optimistic local
+    // update matches what the backend will return.
+    function progressColorClass(progress) {
+        if (progress < 30) return 'bg-danger';
+        if (progress < 70) return 'bg-warning';
+        return 'bg-success';
+    }
+
+    // Paint the progress bar + label. Used both for the optimistic local update
+    // while clicking and for the authoritative server response.
+    function renderProgress(progress, colorClass) {
+        const progressBar = document.querySelector('.progress-bar');
+        const progressText = document.getElementById('progress-value');
+        if (progressBar) {
+            progressBar.classList.remove('bg-danger', 'bg-warning', 'bg-success');
+            progressBar.classList.add(colorClass || progressColorClass(progress));
+            progressBar.style.width = `${progress}%`;
+            progressBar.setAttribute('aria-valuenow', progress);
+        }
+        if (progressText) {
+            progressText.textContent = `${progress}% complete`;
+        }
+        // Keep the main edit form's hidden/visible progress field in sync. Without
+        // this the +/- widget only AJAX-saves the value, while clicking the form's
+        // "Save Changes" button re-POSTs the stale page-load value and reverts the
+        // progress back to its original state (the reported bug).
+        const formProgressInput = document.getElementById('id_progress');
+        if (formProgressInput) {
+            formProgressInput.value = progress;
+        }
+    }
+
+    // Saves an ABSOLUTE progress value (0-100) in a single request. Called once
+    // per debounce window by the +/- buttons, so the automation engine sees one
+    // task_progress_changed event per user intent (BUG-03/07).
+    function updateTaskProgress(taskId, value) {
         // Get the CSRF token
         function getCookie(name) {
             let cookieValue = null;
@@ -2159,7 +2771,7 @@
             }
             return cookieValue;
         }
-        
+
         // Send AJAX request to update progress
         fetch(`/tasks/${taskId}/update-progress/`, {
             method: 'POST',
@@ -2169,27 +2781,17 @@
                 'X-CSRFToken': getCookie('csrftoken')
             },
             body: JSON.stringify({
-                direction: direction
+                value: value
             })
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Update the progress bar
-                const progressBar = document.querySelector('.progress-bar');
-                const progressText = document.getElementById('progress-value');
-                
-                if (progressBar && progressText) {
-                    // Remove existing color classes
-                    progressBar.classList.remove('bg-danger', 'bg-warning', 'bg-success');
-                    // Add new color class
-                    progressBar.classList.add(data.colorClass);
-                    // Update width
-                    progressBar.style.width = `${data.progress}%`;
-                    // Update text
-                    progressText.textContent = `${data.progress}% complete`;
-                }
-                
+                // Render from the authoritative server value so the bar can't
+                // snap back to a stale value.
+                window._pendingProgress = data.progress;
+                renderProgress(data.progress, data.colorClass);
+
                 // Add a new timeline item for the progress update
                 const timeline = document.querySelector('.timeline');
                 if (timeline) {
@@ -2877,21 +3479,13 @@
     }
     
     // Store the original referrer URL on page load (before any navigation)
-    // This captures where the user came from (e.g., Gantt chart)
+    // Only use explicit 'next' URL parameter — do NOT use document.referrer
+    // to prevent the form save from redirecting away from the task detail page.
     const originalReferrer = (function() {
-        // First check if there's a 'next' parameter in the URL
         const urlParams = new URLSearchParams(window.location.search);
         const nextParam = urlParams.get('next');
         if (nextParam) {
             return nextParam;
-        }
-        
-        // Otherwise use document.referrer if it's a valid internal page
-        const referrer = document.referrer;
-        if (referrer && !referrer.includes('/tasks/')) {
-            // Only use referrer if it's not another task page
-            // This prevents going back to task detail after form submit
-            return referrer;
         }
         return null;
     })();
@@ -2911,147 +3505,10 @@
             window.location.href = originalReferrer;
         } else {
             // Fallback to board detail if no referrer (demo-aware)
-            {% if is_demo_mode %}
-            window.location.href = '{% url "demo_board_detail" task.column.board.id %}';
-            {% else %}
             window.location.href = '{% url "board_detail" task.column.board.id %}';
-            {% endif %}
         }
     }
 
-    // Handle prediction refresh
-    document.getElementById('refresh-prediction')?.addEventListener('click', function() {
-        const taskId = this.getAttribute('data-task-id');
-        const btn = this;
-        const container = document.getElementById('prediction-container');
-        const icon = btn.querySelector('i');
-        
-        // Show loading state
-        btn.disabled = true;
-        icon.classList.add('fa-spin');
-        
-        fetch(`/api/task/${taskId}/prediction/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': getCookie('csrftoken'),
-                'Content-Type': 'application/json',
-            },
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.has_prediction) {
-                const pred = data.prediction;
-                
-                // Update the prediction display
-                container.innerHTML = `
-                    <div class="prediction-content">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div>
-                                <strong class="d-block ${pred.is_likely_late ? 'text-danger' : 'text-success'}">
-                                    ${pred.predicted_date_formatted}
-                                </strong>
-                                <small class="text-muted">
-                                    Range: ${pred.early_date_formatted} - ${pred.late_date_formatted}
-                                </small>
-                            </div>
-                            <span class="badge ${pred.confidence_percentage >= 70 ? 'bg-success' : pred.confidence_percentage >= 50 ? 'bg-warning' : 'bg-secondary'}">
-                                ${pred.confidence_percentage}% confidence
-                            </span>
-                        </div>
-                        ${pred.is_likely_late ? `
-                            <div class="alert alert-warning alert-sm mb-2 py-1 px-2">
-                                <i class="fas fa-exclamation-triangle me-1"></i>
-                                <small>Likely to miss due date</small>
-                            </div>
-                        ` : ''}
-                        <div class="mt-2">
-                            <small class="text-muted d-block">
-                                <i class="fas fa-chart-line me-1"></i>Based on ${pred.based_on_tasks} similar task${pred.based_on_tasks !== 1 ? 's' : ''}
-                            </small>
-                            
-                            ${pred.similar_tasks && pred.similar_tasks.length > 0 ? `
-                                <button type="button" class="btn btn-outline-info btn-sm mt-1 w-100" data-bs-toggle="collapse" data-bs-target="#similar-tasks-list">
-                                    <i class="fas fa-tasks me-1"></i>View ${pred.similar_tasks.length} Similar Task${pred.similar_tasks.length !== 1 ? 's' : ''}
-                                    <i class="fas fa-chevron-down ms-1"></i>
-                                </button>
-                                <div class="collapse mt-2" id="similar-tasks-list">
-                                    <div class="card card-body py-2 px-2 bg-white border-info">
-                                        <small class="text-primary mb-2"><strong><i class="fas fa-info-circle me-1"></i>Tasks used for prediction:</strong></small>
-                                        <div class="list-group list-group-flush">
-                                            ${pred.similar_tasks.map(task => `
-                                                <a href="/tasks/${task.id}/" class="list-group-item list-group-item-action py-2 px-2 small border-start border-info border-3" target="_blank">
-                                                    <div class="d-flex justify-content-between align-items-start">
-                                                        <div class="flex-grow-1">
-                                                            <i class="fas fa-check-circle text-success me-1"></i>
-                                                            <strong>${task.title.split(' ').slice(0, 8).join(' ')}${task.title.split(' ').length > 8 ? '...' : ''}</strong>
-                                                        </div>
-                                                        <span class="badge bg-primary ms-2">${task.actual_duration_days.toFixed(1)} days</span>
-                                                    </div>
-                                                    <div class="text-muted mt-1" style="font-size: 0.85em;">
-                                                        <span class="me-2">
-                                                            <i class="fas fa-layer-group"></i> Complexity: ${task.complexity_score}/10
-                                                        </span>
-                                                        <span class="me-2">
-                                                            <i class="fas fa-flag"></i> ${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                                                        </span>
-                                                        <span>
-                                                            <i class="fas fa-calendar-check"></i> ${task.completed_at ? new Date(task.completed_at).toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'}) : 'N/A'}
-                                                        </span>
-                                                    </div>
-                                                </a>
-                                            `).join('')}
-                                        </div>
-                                    </div>
-                                </div>
-                            ` : `
-                                <div class="alert alert-info py-2 px-2 mt-2 mb-0">
-                                    <small class="mb-0">
-                                        <i class="fas fa-info-circle me-1"></i>
-                                        <strong>No similar tasks found</strong>
-                                        <br>Prediction based on rule-based estimation.
-                                    </small>
-                                </div>
-                            `}
-                        </div>
-                        
-                        <button type="button" class="btn btn-link btn-sm p-0 mt-1" data-bs-toggle="collapse" data-bs-target="#prediction-details">
-                            <small>View factors <i class="fas fa-chevron-down"></i></small>
-                        </button>
-                        <div class="collapse mt-2" id="prediction-details">
-                            <div class="card card-body py-2 px-2 bg-white">
-                                <small class="text-muted">
-                                    <strong>Factors considered:</strong><br>
-                                    ${pred.factors.complexity_score ? `• Complexity: ${pred.factors.complexity_score}/10<br>` : ''}
-                                    ${pred.factors.priority ? `• Priority: ${pred.factors.priority.charAt(0).toUpperCase() + pred.factors.priority.slice(1)}<br>` : ''}
-                                    ${pred.factors.team_member_velocity ? `• Team velocity: ${pred.factors.team_member_velocity}x<br>` : ''}
-                                    • Historical avg: ${pred.factors.historical_avg_days ? pred.factors.historical_avg_days.toFixed(1) : 'N/A'} days<br>
-                                    • Method: ${pred.prediction_method.replace(/_/g, ' ')}
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                
-                // Show success message
-                showToast('Prediction updated successfully!', 'success');
-            } else {
-                container.innerHTML = `
-                    <div class="text-muted text-center py-2">
-                        <i class="fas fa-info-circle mb-2"></i>
-                        <small class="d-block">${data.message || 'Unable to generate prediction'}</small>
-                    </div>
-                `;
-            }
-        })
-        .catch(error => {
-            console.error('Error refreshing prediction:', error);
-            showToast('Failed to refresh prediction', 'error');
-        })
-        .finally(() => {
-            btn.disabled = false;
-            icon.classList.remove('fa-spin');
-        });
-    });
 
     // Simple toast notification function
     function showToast(message, type = 'info') {
@@ -3516,16 +3973,8 @@
                     </div>
                     <div class="modal-body">
                         ${stakeholdersHTML}
-                        <p><strong>These stakeholders were identified based on:</strong></p>
-                        <ul>
-                            <li><i class="bi bi-check-circle text-success me-2"></i>Task requirements and scope analysis</li>
-                            <li><i class="bi bi-check-circle text-success me-2"></i>Historical involvement in similar tasks</li>
-                            <li><i class="bi bi-check-circle text-success me-2"></i>Organizational roles and responsibilities</li>
-                            <li><i class="bi bi-check-circle text-success me-2"></i>Potential impact on their work streams</li>
-                            <li><i class="bi bi-check-circle text-success me-2"></i>Communication patterns in the project</li>
-                        </ul>
-                        <div class="alert alert-light">
-                            <p class="mb-0"><i class="bi bi-info-circle me-2"></i><strong>Note:</strong> AI recommendations improve over time as more project data becomes available.</p>
+                        <div class="alert alert-light mb-0">
+                            <p class="mb-0"><i class="bi bi-info-circle me-2"></i>These stakeholders are currently tracked as involved in this task. Use "AI Suggest" on tasks without stakeholders to get relevance-ranked recommendations.</p>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -3542,29 +3991,6 @@
 
     // Function to suggest stakeholders for a task using AI
     window.suggestStakeholders = function(taskId) {
-        // Get task data from form fields
-        const taskTitle = document.querySelector('[name="title"]')?.value?.trim() || 
-                         document.getElementById('id_title')?.value?.trim() || '';
-        const taskDescription = document.querySelector('[name="description"]')?.value?.trim() || 
-                               document.getElementById('id_description')?.value?.trim() || '';
-        const taskPriority = document.querySelector('[name="priority"]')?.value || '';
-        
-        // Get board stakeholders from embedded data
-        let boardStakeholders = [];
-        try {
-            const stakeholderData = document.getElementById('board-stakeholders-data');
-            if (stakeholderData) {
-                boardStakeholders = JSON.parse(stakeholderData.textContent);
-            }
-        } catch (e) {
-            console.error('Error parsing stakeholder data:', e);
-        }
-        
-        if (boardStakeholders.length === 0) {
-            alert('No stakeholders defined for this board. Please add stakeholders first.');
-            return;
-        }
-        
         // Show loading modal
         const modal = document.createElement('div');
         modal.className = 'modal fade';
@@ -3577,15 +4003,13 @@
                     </div>
                     <div class="modal-body" id="stakeholder-suggestions-body">
                         <div class="text-center py-4">
-                            <div class="spinner-border text-info" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-3">Analyzing task and identifying relevant stakeholders...</p>
+                            <div class="prizm-spinner"></div>
+                            <p class="mt-3 prizm-loading-message-inline" data-prizm-messages="stakeholder">Identifying relevant stakeholders…</p>
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <a href="{% url 'stakeholder:task_stakeholder_involvement' board_id=task.column.board.id task_id=task.id %}" 
+                        <a href="{% url 'stakeholder:task_stakeholder_involvement' board_id=task.column.board.id task_id=task.id %}"
                            class="btn btn-primary">
                             <i class="fas fa-user-plus me-1"></i> Manage Stakeholders
                         </a>
@@ -3596,155 +4020,114 @@
         document.body.appendChild(modal);
         const bsModal = new bootstrap.Modal(modal);
         bsModal.show();
-        
-        // Analyze and recommend stakeholders
-        const suggestions = analyzeStakeholdersForTask(taskTitle, taskDescription, taskPriority, boardStakeholders);
-        
-        // Display recommendations
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+
         const modalBody = document.getElementById('stakeholder-suggestions-body');
-        if (suggestions.length > 0) {
-            const taskDisplayName = taskTitle || 'this task';
-            let html = `
-                <div class="alert alert-info mb-3">
-                    <i class="bi bi-lightbulb me-2"></i>
-                    <strong>AI Analysis:</strong> Based on ${taskTitle ? `the task "${escapeHtml(taskTitle)}"` : 'this task'}, here are the recommended stakeholders:
-                </div>
-            `;
-            
-            suggestions.forEach((suggestion, index) => {
-                const relevanceClass = suggestion.relevance === 'high' ? 'success' : 
-                                       suggestion.relevance === 'medium' ? 'warning' : 'secondary';
-                html += `
-                    <div class="card mb-2 border-start border-3 border-${relevanceClass}">
-                        <div class="card-body py-2">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <strong><i class="bi bi-person-fill me-2"></i>${escapeHtml(suggestion.name)}</strong>
-                                    ${suggestion.role ? `<small class="d-block text-muted">${escapeHtml(suggestion.role)}${suggestion.organization ? ' • ' + escapeHtml(suggestion.organization) : ''}</small>` : ''}
-                                    <small class="d-block mt-1"><i class="bi bi-chat-quote me-1"></i>${escapeHtml(suggestion.reason)}</small>
-                                </div>
-                                <span class="badge bg-${relevanceClass}">${suggestion.relevance.charAt(0).toUpperCase() + suggestion.relevance.slice(1)} Relevance</span>
-                            </div>
-                        </div>
+
+        fetch("{% url 'stakeholder:suggest_task_stakeholders' board_id=task.column.board.id task_id=task.id %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify({}),
+        })
+        .then(response => response.json().then(data => {
+            if (!response.ok) {
+                const error = new Error(data.error || 'Failed to get stakeholder suggestions');
+                error.details = data;
+                throw error;
+            }
+            return data;
+        }))
+        .then(data => {
+            if (data.no_stakeholders) {
+                modalBody.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        No stakeholders defined for this board. Please add stakeholders first.
                     </div>
                 `;
-            });
-            
-            html += `
-                <div class="alert alert-light mt-3 mb-0">
-                    <small>
+                return;
+            }
+
+            const suggestions = data.suggestions || [];
+            let html = '';
+
+            if (data.degraded) {
+                html += `
+                    <div class="alert alert-secondary mb-3">
                         <i class="bi bi-info-circle me-2"></i>
-                        <strong>How to add:</strong> Click "Manage Stakeholders" to add these suggested stakeholders to the task.
-                    </small>
-                </div>
-            `;
-            
-            modalBody.innerHTML = html;
-        } else {
-            modalBody.innerHTML = `
-                <div class="alert alert-warning">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
-                    No specific stakeholder recommendations could be made. Consider adding stakeholders based on your project needs.
-                </div>
-            `;
-        }
-        
-        modal.addEventListener('hidden.bs.modal', () => modal.remove());
-    };
-    
-    // Helper function to analyze stakeholders for a task
-    function analyzeStakeholdersForTask(taskTitle, taskDescription, taskPriority, stakeholders) {
-        const suggestions = [];
-        const titleLower = (taskTitle || '').toLowerCase();
-        const descLower = (taskDescription || '').toLowerCase();
-        const combinedText = titleLower + ' ' + descLower;
-        
-        // Keywords that indicate relevance
-        const marketingKeywords = ['marketing', 'campaign', 'social', 'brand', 'content', 'promotion', 'advertising', 'launch', 'announce'];
-        const technicalKeywords = ['development', 'api', 'code', 'bug', 'feature', 'technical', 'software', 'database', 'server', 'deploy', 'integration'];
-        const designKeywords = ['design', 'ui', 'ux', 'interface', 'visual', 'mockup', 'prototype', 'wireframe', 'layout'];
-        const managementKeywords = ['review', 'approve', 'budget', 'timeline', 'schedule', 'milestone', 'strategic', 'planning'];
-        const dataKeywords = ['data', 'analytics', 'report', 'metrics', 'dashboard', 'analysis', 'insight'];
-        
-        stakeholders.forEach(stakeholder => {
-            const roleLower = (stakeholder.role || '').toLowerCase();
-            const nameLower = (stakeholder.name || '').toLowerCase();
-            const orgLower = (stakeholder.organization || '').toLowerCase();
-            const stakeholderContext = roleLower + ' ' + nameLower + ' ' + orgLower;
-            
-            let relevanceScore = 0;
-            let reasons = [];
-            
-            // Check for role-based matches
-            if (marketingKeywords.some(kw => combinedText.includes(kw)) && 
-                (stakeholderContext.includes('marketing') || stakeholderContext.includes('brand') || stakeholderContext.includes('content'))) {
-                relevanceScore += 3;
-                reasons.push('Marketing-related expertise aligns with task scope');
+                        Showing rule-based matches — AI analysis temporarily unavailable.
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div class="alert alert-info mb-3">
+                        <i class="bi bi-lightbulb me-2"></i>
+                        <strong>AI Analysis:</strong> Based on this task's content, here are the recommended stakeholders:
+                    </div>
+                `;
             }
-            
-            if (technicalKeywords.some(kw => combinedText.includes(kw)) && 
-                (stakeholderContext.includes('develop') || stakeholderContext.includes('engineer') || stakeholderContext.includes('technical') || stakeholderContext.includes('software'))) {
-                relevanceScore += 3;
-                reasons.push('Technical expertise relevant to task requirements');
-            }
-            
-            if (designKeywords.some(kw => combinedText.includes(kw)) && 
-                (stakeholderContext.includes('design') || stakeholderContext.includes('ux') || stakeholderContext.includes('ui'))) {
-                relevanceScore += 3;
-                reasons.push('Design expertise matches task needs');
-            }
-            
-            if (managementKeywords.some(kw => combinedText.includes(kw)) && 
-                (stakeholderContext.includes('manager') || stakeholderContext.includes('director') || stakeholderContext.includes('lead'))) {
-                relevanceScore += 2;
-                reasons.push('Management oversight may be required');
-            }
-            
-            if (dataKeywords.some(kw => combinedText.includes(kw)) && 
-                (stakeholderContext.includes('data') || stakeholderContext.includes('analyst') || stakeholderContext.includes('analytics'))) {
-                relevanceScore += 3;
-                reasons.push('Data/analytics expertise relevant to task');
-            }
-            
-            // Influence level consideration
-            if (stakeholder.influence_level === 'High' || stakeholder.influence_level === 'Very High') {
-                if (taskPriority === 'urgent' || taskPriority === 'high') {
-                    relevanceScore += 2;
-                    reasons.push('High influence stakeholder for high-priority task');
-                }
-            }
-            
-            // Interest level consideration
-            if (stakeholder.interest_level === 'High' || stakeholder.interest_level === 'Very High') {
-                relevanceScore += 1;
-                reasons.push('High interest in project outcomes');
-            }
-            
-            // If no specific match, but high influence/interest
-            if (relevanceScore === 0 && (stakeholder.influence_level === 'High' || stakeholder.interest_level === 'High')) {
-                relevanceScore = 1;
-                reasons.push('Key stakeholder should be kept informed');
-            }
-            
-            if (relevanceScore > 0) {
-                suggestions.push({
-                    id: stakeholder.id,
-                    name: stakeholder.name,
-                    role: stakeholder.role,
-                    organization: stakeholder.organization,
-                    relevance: relevanceScore >= 3 ? 'high' : relevanceScore >= 2 ? 'medium' : 'low',
-                    score: relevanceScore,
-                    reason: reasons[0] || 'Relevant to project scope'
+
+            if (suggestions.length > 0) {
+                suggestions.forEach(suggestion => {
+                    const relevanceClass = suggestion.relevance === 'high' ? 'success' :
+                                           suggestion.relevance === 'medium' ? 'warning' : 'secondary';
+                    html += `
+                        <div class="card mb-2 border-start border-3 border-${relevanceClass}">
+                            <div class="card-body py-2">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong><i class="bi bi-person-fill me-2"></i>${escapeHtml(suggestion.name)}</strong>
+                                        ${suggestion.role ? `<small class="d-block text-muted">${escapeHtml(suggestion.role)}${suggestion.organization ? ' • ' + escapeHtml(suggestion.organization) : ''}</small>` : ''}
+                                        <small class="d-block mt-1"><i class="bi bi-chat-quote me-1"></i>${escapeHtml(suggestion.reason)}</small>
+                                    </div>
+                                    <span class="badge bg-${relevanceClass}">${suggestion.relevance.charAt(0).toUpperCase() + suggestion.relevance.slice(1)} Relevance</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
                 });
+
+                html += `
+                    <div class="alert alert-light mt-3 mb-0">
+                        <small>
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>How to add:</strong> Click "Manage Stakeholders" to add these suggested stakeholders to the task.
+                        </small>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div class="alert alert-warning mb-0">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        No stakeholders were found genuinely relevant to this task's content.
+                    </div>
+                `;
+            }
+
+            modalBody.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Error suggesting stakeholders:', error);
+            if (error.details && error.details.quota_exceeded) {
+                modalBody.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        ${escapeHtml(error.details.message || 'AI usage quota exceeded. Please try again later.')}
+                    </div>
+                `;
+            } else {
+                modalBody.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        ${escapeHtml(error.message || 'Failed to get stakeholder suggestions.')}
+                    </div>
+                `;
             }
         });
-        
-        // Sort by relevance score
-        suggestions.sort((a, b) => b.score - a.score);
-        
-        // Return top 5 suggestions
-        return suggestions.slice(0, 5);
-    }
+    };
 
     // Utility: Escape HTML
     function escapeHtml(text) {
@@ -3795,6 +4178,7 @@
             const hours = document.getElementById('time-hours').value;
             const date = document.getElementById('time-date').value;
             const description = document.getElementById('time-description').value;
+            const isBillable = document.getElementById('time-is-billable')?.checked !== false;
             const taskId = {{ task.id }};
             
             if (!hours || parseFloat(hours) <= 0) {
@@ -3806,6 +4190,7 @@
             formData.append('hours', hours);
             formData.append('description', description);
             formData.append('work_date', date);
+            formData.append('is_billable', isBillable ? 'true' : 'false');
             formData.append('csrfmiddlewaretoken', getCsrfToken());
             
             // Disable button during submission
@@ -3949,6 +4334,97 @@
     });
 </script>
 <script>
+    // ═══ Epic Health Analysis (Epic-level AI Insights) ═══
+    document.addEventListener('DOMContentLoaded', function() {
+        const epicBtn = document.getElementById('analyze-epic-health-btn');
+        if (!epicBtn) return;
+
+        const sevClass = { high: 'danger', medium: 'warning', low: 'info', info: 'secondary' };
+
+        epicBtn.addEventListener('click', function() {
+            const epicId = this.getAttribute('data-epic-id');
+            const spinner = document.getElementById('epic-health-spinner');
+            const resultDiv = document.getElementById('epic-health-result');
+            const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+            spinner.classList.remove('d-none');
+            resultDiv.innerHTML = '';
+            epicBtn.disabled = true;
+
+            fetch(`/api/epic/${epicId}/analyze-health/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    resultDiv.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-1"></i>' +
+                        (data.error || 'Failed to analyze Epic health.') + '</div>';
+                    return;
+                }
+                const a = data.analysis || {};
+                const m = data.meta || {};
+                const esc = s => String(s == null ? '' : s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                let labelClass = 'success';
+                if (a.health_label === 'At risk') labelClass = 'danger';
+                else if (a.health_label === 'Needs attention') labelClass = 'warning';
+
+                let html = '<div class="bg-light rounded p-3">';
+                html += '<div class="d-flex align-items-center mb-2">';
+                html += '<span class="badge bg-' + labelClass + ' me-2">' + esc(a.health_label || 'Reviewed') + '</span>';
+                if (a.confidence != null) {
+                    html += '<small class="text-muted">' + esc(a.confidence) + '% confidence</small>';
+                }
+                html += '</div>';
+
+                // Deterministic facts (computed server-side from the rollup)
+                html += '<div class="mb-2 small text-muted">';
+                html += '<span class="me-3"><i class="fas fa-tasks me-1"></i>' + esc(m.completed) + '/' + esc(m.total_children) + ' done</span>';
+                if (m.high_risk_count) html += '<span class="me-3 text-danger"><i class="fas fa-shield-alt me-1"></i>' + esc(m.high_risk_count) + ' high-risk</span>';
+                if (m.deadline_conflict_count) html += '<span class="me-3 text-warning"><i class="fas fa-calendar-exclamation me-1"></i>' + esc(m.deadline_conflict_count) + ' deadline conflict(s)</span>';
+                if (m.blocker_count) html += '<span class="me-3"><i class="fas fa-ban me-1"></i>' + esc(m.blocker_count) + ' blocker(s)</span>';
+                html += '<span class="me-3"><i class="fas fa-users me-1"></i>' + esc(m.contributor_count) + ' contributor(s)</span>';
+                html += '</div>';
+
+                if (a.health_summary) {
+                    html += '<p class="text-dark mb-3">' + esc(a.health_summary) + '</p>';
+                }
+
+                if (Array.isArray(a.findings) && a.findings.length) {
+                    html += '<div class="list-group mb-2">';
+                    a.findings.forEach(f => {
+                        const cls = sevClass[f.severity] || 'secondary';
+                        html += '<div class="list-group-item">';
+                        html += '<span class="badge bg-' + cls + ' me-2">' + esc(f.category || 'note') + '</span>';
+                        html += '<strong>' + esc(f.title || '') + '</strong>';
+                        if (f.detail) html += '<div class="small text-muted mt-1">' + esc(f.detail) + '</div>';
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                }
+
+                if (Array.isArray(a.recommendations) && a.recommendations.length) {
+                    html += '<div class="mt-2"><strong class="small"><i class="fas fa-lightbulb text-warning me-1"></i>Recommendations</strong><ul class="small mb-0 mt-1">';
+                    a.recommendations.forEach(r => { html += '<li>' + esc(r) + '</li>'; });
+                    html += '</ul></div>';
+                }
+
+                html += '</div>';
+                resultDiv.innerHTML = html;
+            })
+            .catch(err => {
+                console.error('Epic health error:', err);
+                resultDiv.innerHTML = '<div class="alert alert-danger">An error occurred. Please try again.</div>';
+            })
+            .finally(() => {
+                spinner.classList.add('d-none');
+                epicBtn.disabled = false;
+            });
+        });
+    });
+</script>
+<script>
     // Initialize Priority Suggestion Widget for task detail page
     document.addEventListener('DOMContentLoaded', function() {
         const boardId = {{ board.id }};
@@ -4062,6 +4538,273 @@
             if (e.key === 'Enter') { e.preventDefault(); doAddSkill(); }
         });
     });
+}());
+</script>
+<script>
+// P4-02: Priority color indicator on select dropdown
+(function() {
+    var priorityColors = { urgent: '#EF4444', high: '#F97316', medium: '#EAB308', low: '#22C55E' };
+    var sel = document.getElementById('{{ form.priority.id_for_label }}');
+    if (!sel) return;
+    function applyColor() {
+        var c = priorityColors[sel.value] || '';
+        sel.style.borderLeft = c ? '4px solid ' + c : '';
+        sel.style.paddingLeft = c ? '8px' : '';
+    }
+    applyColor();
+    sel.addEventListener('change', applyColor);
+    // P1-03: Enhance raw multi-select listboxes with searchable checkbox UI
+    // Colors come from theme.css tokens via CSS classes (not inline styles) so
+    // this widget follows dark mode instead of hardcoding a light-mode look.
+    document.querySelectorAll('select[multiple]').forEach(function(sel) {
+        var wrapper = document.createElement('div');
+        wrapper.className = 'pz-multiselect-wrapper';
+        sel.parentNode.insertBefore(wrapper, sel);
+        sel.style.display = 'none';
+        wrapper.appendChild(sel);
+        var search = document.createElement('input');
+        search.type = 'text';
+        search.placeholder = 'Search…';
+        search.className = 'pz-multiselect-search';
+        wrapper.insertBefore(search, sel);
+        var list = document.createElement('div');
+        list.className = 'pz-multiselect-list';
+        wrapper.insertBefore(list, sel);
+        function renderList(filter) {
+            list.innerHTML = '';
+            Array.from(sel.options).forEach(function(opt) {
+                if (filter && opt.text.toLowerCase().indexOf(filter.toLowerCase()) === -1) return;
+                var label = document.createElement('label');
+                label.className = 'pz-multiselect-option';
+                var cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = opt.selected;
+                cb.addEventListener('change', function() { opt.selected = cb.checked; });
+                label.appendChild(cb);
+                label.appendChild(document.createTextNode(opt.text));
+                list.appendChild(label);
+            });
+        }
+        renderList('');
+        search.addEventListener('input', function() { renderList(search.value); });
+    });
+})();
+</script>
+
+<!-- Checklist interaction JS -->
+<script>
+function getCsrf() { return document.querySelector('[name=csrfmiddlewaretoken]').value; }
+
+function toggleChecklistItem(itemId) {
+    fetch('/api/checklist-item/' + itemId + '/toggle/', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Update visual state
+            const row = document.querySelector('.checklist-item-row[data-item-id="' + itemId + '"]');
+            if (row) {
+                const label = row.querySelector('.flex-grow-1 small:first-child');
+                if (data.is_completed) {
+                    label.classList.add('text-decoration-line-through', 'text-muted');
+                } else {
+                    label.classList.remove('text-decoration-line-through', 'text-muted');
+                }
+            }
+            // Update progress
+            updateChecklistProgress(data.checklist_progress);
+        }
+    })
+    .catch(err => console.error('Toggle failed:', err));
+}
+
+function deleteChecklistItem(itemId) {
+    if (!confirm('Remove this checklist item?')) return;
+    fetch('/api/checklist-item/' + itemId + '/delete/', {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': getCsrf() }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const row = document.querySelector('.checklist-item-row[data-item-id="' + itemId + '"]');
+            if (row) row.remove();
+            updateChecklistProgress(data.checklist_progress);
+            // Show empty message if no items remain
+            if (!document.querySelectorAll('.checklist-item-row').length) {
+                document.getElementById('checklist-items-list').innerHTML =
+                    '<small class="text-muted fst-italic d-block" id="checklist-empty-msg">Use the AI Analyze &amp; Break Down feature or the Add button to create checklist items.</small>';
+            }
+        }
+    })
+    .catch(err => console.error('Delete failed:', err));
+}
+
+function toggleAddChecklistInput() {
+    const form = document.getElementById('add-checklist-form');
+    form.classList.toggle('d-none');
+    if (!form.classList.contains('d-none')) {
+        document.getElementById('new-checklist-title').focus();
+    }
+}
+
+function addManualChecklistItem() {
+    const input = document.getElementById('new-checklist-title');
+    const title = input.value.trim();
+    if (!title) return;
+    const taskId = document.getElementById('checklist-section').dataset.taskId;
+    const prioritySelect = document.getElementById('new-checklist-priority');
+    const priority = prioritySelect ? prioritySelect.value : 'low';
+
+    fetch('/api/checklist-items/add/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({ task_id: parseInt(taskId), title: title, priority: priority })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Remove empty message if present
+            const emptyMsg = document.getElementById('checklist-empty-msg');
+            if (emptyMsg) emptyMsg.remove();
+            // Append new item
+            const list = document.getElementById('checklist-items-list');
+            const item = data.item;
+            const itemPriority = item.priority || 'low';
+            const badgeClass = (itemPriority === 'high' || itemPriority === 'urgent') ? 'bg-danger'
+                : (itemPriority === 'medium') ? 'bg-warning text-dark' : 'bg-secondary';
+            const html = `
+                <div class="d-flex align-items-start gap-2 p-2 bg-white rounded mb-1 checklist-item-row" data-item-id="${item.id}">
+                    <input type="checkbox" class="form-check-input mt-1 checklist-toggle"
+                           data-item-id="${item.id}"
+                           onchange="toggleChecklistItem(${item.id})"
+                           style="cursor:pointer;">
+                    <div class="flex-grow-1 min-w-0">
+                        <small>${item.title}</small>
+                    </div>
+                    <span class="badge ${badgeClass}" style="font-size:0.65em;">${itemPriority}</span>
+                    <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1" onclick="deleteChecklistItem(${item.id})" title="Remove">
+                        <i class="fas fa-times" style="font-size:0.75em;"></i>
+                    </button>
+                </div>`;
+            list.insertAdjacentHTML('beforeend', html);
+            input.value = '';
+            if (prioritySelect) prioritySelect.value = 'low';
+            updateChecklistProgress(data.checklist_progress);
+        }
+    })
+    .catch(err => console.error('Add failed:', err));
+}
+
+function updateChecklistProgress(progress) {
+    // Update the header text and progress bar
+    const section = document.getElementById('checklist-section');
+    if (!section || !progress) return;
+    const infoText = section.querySelector('.text-muted.fst-italic');
+    if (infoText) infoText.textContent = progress.completed + '/' + progress.total + ' completed';
+    const bar = section.querySelector('.progress-bar');
+    if (bar) {
+        const pct = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
+        bar.style.width = pct + '%';
+        bar.className = 'progress-bar ' + (progress.completed === progress.total ? 'bg-success' : 'bg-info');
+    } else if (progress.total > 0) {
+        // Create progress bar if it didn't exist
+        const header = section.querySelector('.d-flex.justify-content-between');
+        if (header) {
+            const pct = Math.round((progress.completed / progress.total) * 100);
+            const barHtml = '<div class="progress mb-2" style="height:6px;"><div class="progress-bar bg-info" style="width:' + pct + '%;"></div></div>';
+            header.insertAdjacentHTML('afterend', barHtml);
+        }
+    }
+}
+</script>
+{% endblock %}
+
+{% block extra_js %}
+{# Quill rich-text editor — single self-contained CDN file (no cross-package UMD issues) #}
+<link rel="stylesheet" href="{% static 'vendor/quill.snow.css' %}?v={{ STATIC_VERSION|default:'12' }}">
+<style>
+/* Scope Quill Snow styles so the toolbar sits flush with the editor */
+#quill-editor-container { border: 1px solid #dee2e6; border-radius: 0.375rem; background: #fff; }
+#quill-editor-container .ql-toolbar { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0.375rem 0.375rem 0 0; background: #f8f9fa; }
+#quill-editor-container .ql-container { border: none; border-radius: 0 0 0.375rem 0.375rem; font-size: 0.925rem; min-height: 120px; }
+#quill-editor-container .ql-editor { min-height: 120px; }
+#quill-editor-container.ql-focused,
+#quill-editor-container:focus-within { border-color: #0d6efd; box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25); }
+
+/* Dark Mode: the Quill editor is kept a LIGHT writing surface (its toolbar
+   icons are dark strokes designed for a light toolbar). Per the two-way rule,
+   force the typed text + placeholder DARK so they stay readable — otherwise
+   they'd inherit the theme's light body color and vanish on the white editor. */
+[data-bs-theme="dark"] #quill-editor-container { border-color: var(--border-color); }
+[data-bs-theme="dark"] #quill-editor-container .ql-editor { color: #212529; }
+[data-bs-theme="dark"] #quill-editor-container .ql-editor.ql-blank::before { color: #6c757d; }
+</style>
+<script src="{% static 'vendor/quill.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
+<script>
+(function () {
+    'use strict';
+
+    var hiddenTextarea = document.getElementById('id_description');
+    var editorContainer = document.getElementById('quill-editor-container');
+
+    if (!editorContainer || !hiddenTextarea || typeof Quill === 'undefined') {
+        // Quill not available — reveal the plain textarea as fallback
+        if (hiddenTextarea) {
+            hiddenTextarea.parentElement.style.display = '';
+            hiddenTextarea.className = 'form-control';
+        }
+        if (editorContainer) editorContainer.style.display = 'none';
+        return;
+    }
+
+    var quill = new Quill(editorContainer, {
+        theme: 'snow',
+        modules: {
+            toolbar: [
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ header: 2 }, { header: 3 }],
+                [{ list: 'ordered' }, { list: 'bullet' }],
+                ['code-block', 'blockquote'],
+                ['link'],
+                ['clean']
+            ]
+        }
+    });
+
+    // Load existing content (may be plain text from legacy or HTML from new saves)
+    var existingContent = hiddenTextarea.value || '';
+    if (existingContent.trim()) {
+        quill.root.innerHTML = existingContent.trim().startsWith('<')
+            ? existingContent
+            : existingContent.replace(/\n/g, '<br>');
+    }
+
+    // Keep hidden textarea in sync so the form submits current content
+    quill.on('text-change', function () {
+        hiddenTextarea.value = quill.root.innerHTML;
+    });
+
+    // Expose a compatibility shim so ai_features.js can call
+    // window.tiptapDescriptionEditor.commands.setContent(html)
+    window.tiptapDescriptionEditor = {
+        commands: {
+            setContent: function (html) {
+                quill.root.innerHTML = html || '';
+                hiddenTextarea.value = quill.root.innerHTML;
+            }
+        }
+    };
+
+    // Belt-and-suspenders sync just before the form submits
+    var taskForm = editorContainer.closest('form');
+    if (taskForm) {
+        taskForm.addEventListener('submit', function () {
+            hiddenTextarea.value = quill.root.innerHTML;
+        }, true);
+    }
 }());
 </script>
 {% endblock %}

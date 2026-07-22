@@ -6,6 +6,9 @@ sqlparse==0.5.3
 tzdata==2025.2
 pytz==2026.1.post1
 
+# RBAC Permissions
+rules==3.5.0
+
 # RESTful API Framework (for external integrations)
 djangorestframework==3.15.2
 django-cors-headers==4.6.0
@@ -34,11 +37,25 @@ whitenoise==6.9.0
 
 # AI Integration - Google Gemini
 google-generativeai==0.8.5
+
+# AI Integration - OpenAI (GPT-4o)
+openai==2.33.0
+distro==1.9.0
+jiter==0.14.0
+sniffio==1.3.1
+
+# AI Integration - Anthropic Claude
+anthropic==0.97.0
+docstring-parser==0.18.0
+
+# Google API Core & Integration Dependencies
+# (Used by Gemini AI, Google Calendar OAuth, and Google Custom Search)
 google-ai-generativelanguage==0.6.15
 google-api-core==2.25.1
 google-api-python-client==2.183.0
 google-auth==2.40.3
 google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.3.1
 googleapis-common-protos==1.70.0
 grpcio==1.76.0
 grpcio-status==1.71.2
@@ -62,6 +79,7 @@ PyPDF2==3.0.1
 Markdown==3.5.1
 lxml==6.0.2
 reportlab==4.2.5
+openpyxl>=3.1.0
 
 # HTTP Requests (for testing and integrations)
 requests==2.32.3
@@ -91,7 +109,7 @@ zope.interface==8.0.1
 
 # Asynchronous Task Processing
 celery==5.3.4
-django-celery-beat==2.6.0
+django-celery-beat==2.9.0
 redis==5.0.1
 django-redis==5.4.0
 amqp==5.3.1
@@ -116,8 +134,8 @@ vaderSentiment==3.3.2
 
 # Security Tools
 bandit==1.7.5
-safety==3.0.1
-safety-schemas==0.0.5
+safety==3.7.0
+safety-schemas==0.0.16
 dparse==0.6.4
 ruamel.yaml==0.18.16
 ruamel.yaml.clib==0.2.15

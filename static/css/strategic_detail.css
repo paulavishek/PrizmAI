@@ -3,13 +3,13 @@
    ============================================================ */
 
 /* Color-bar accents */
-.strategic-header { border-radius: 12px; overflow: hidden; }
-.strategic-header.goal-header    { border-left: 5px solid #7F77DD; }
-.strategic-header.mission-header { border-left: 5px solid #1D9E75; }
-.strategic-header.strategy-header{ border-left: 5px solid #378ADD; }
+.strategic-header { border-radius: 12px; overflow: hidden; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.strategic-header.goal-header    { border-left: 4px solid #7F77DD; }
+.strategic-header.mission-header { border-left: 4px solid #1D9E75; }
+.strategic-header.strategy-header{ border-left: 4px solid #378ADD; }
 
 /* Status badges */
-.status-badge { font-size: 0.72rem; font-weight: 600; padding: 0.25em 0.7em; border-radius: 10px; text-transform: capitalize; }
+.status-badge { font-size: 0.8rem; font-weight: 600; padding: 0.3em 0.8em; border-radius: 10px; text-transform: capitalize; }
 .status-badge.active    { background: #d1fae5; color: #065f46; }
 .status-badge.pending   { background: #e0e7ff; color: #3730a3; }
 .status-badge.paused    { background: #fef3c7; color: #92400e; }
@@ -17,7 +17,7 @@
 .status-badge.archived  { background: #e5e7eb; color: #374151; }
 
 /* Version label */
-.version-label { font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); background: var(--bg-tertiary); padding: 0.15em 0.55em; border-radius: 8px; }
+.version-label { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); background: var(--bg-tertiary); padding: 0.2em 0.65em; border-radius: 8px; }
 
 /* Health score ring */
 .health-ring {
@@ -42,8 +42,8 @@
 
 /* ---- Tab navigation ---- */
 .strategic-tabs .nav-link {
-    color: var(--text-secondary); font-weight: 500; font-size: 0.85rem;
-    border: none; padding: 0.55rem 1rem; border-radius: 8px 8px 0 0;
+    color: var(--text-secondary); font-weight: 500; font-size: 0.9rem;
+    border: none; padding: 0.65rem 1.15rem; border-radius: 8px 8px 0 0;
     transition: background .15s, color .15s;
 }
 .strategic-tabs .nav-link:hover { background: var(--bg-tertiary); color: var(--text-primary); }
@@ -52,20 +52,20 @@
 /* ---- Right sidebar ---- */
 .strategic-sidebar { min-width: 210px; max-width: 250px; }
 .strategic-sidebar .sidebar-section { margin-bottom: 1.25rem; }
-.strategic-sidebar .sidebar-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.04em; margin-bottom: 0.35rem; }
-.strategic-sidebar .sidebar-value { font-size: 0.85rem; }
+.strategic-sidebar .sidebar-label { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.04em; margin-bottom: 0.35rem; }
+.strategic-sidebar .sidebar-value { font-size: 0.9rem; }
 
 /* ---- Stale AI banner ---- */
 .stale-banner {
     background: #fffbeb; border: 1px solid #fbbf24; border-radius: 8px;
-    padding: 0.55rem 0.85rem; display: flex; align-items: center; gap: 0.5rem;
-    font-size: 0.82rem; color: #92400e;
+    padding: 0.65rem 0.95rem; display: flex; align-items: center; gap: 0.5rem;
+    font-size: 0.875rem; color: #92400e;
 }
-.stale-banner .btn { font-size: 0.75rem; }
+.stale-banner .btn { font-size: 0.8rem; }
 
 /* ---- Updates feed ---- */
-.update-entry { border-left: 3px solid var(--border-color); padding: 0.6rem 0.85rem; margin-bottom: 0.65rem; border-radius: 0 6px 6px 0; background: var(--bg-secondary); }
-.update-entry .update-status { font-size: 0.68rem; font-weight: 700; padding: 0.15em 0.55em; border-radius: 8px; text-transform: uppercase; }
+.update-entry { border-left: 3px solid var(--border-color); padding: 0.7rem 0.95rem; margin-bottom: 0.65rem; border-radius: 0 6px 6px 0; background: var(--bg-secondary); }
+.update-entry .update-status { font-size: 0.75rem; font-weight: 700; padding: 0.2em 0.6em; border-radius: 8px; text-transform: uppercase; }
 .update-entry .update-status.on_track  { background: #d1fae5; color: #065f46; }
 .update-entry .update-status.at_risk   { background: #fef3c7; color: #92400e; }
 .update-entry .update-status.off_track { background: #fee2e2; color: #991b1b; }
@@ -75,13 +75,13 @@
 .version-entry { position: relative; padding-left: 1.5rem; padding-bottom: 1rem; border-left: 2px solid var(--border-light); }
 .version-entry::before { content: ''; position: absolute; left: -5px; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--text-secondary); }
 .version-entry:last-child { border-left-color: transparent; }
-.version-entry .version-reason { font-size: 0.7rem; font-weight: 600; padding: 0.12em 0.5em; border-radius: 6px; }
+.version-entry .version-reason { font-size: 0.78rem; font-weight: 600; padding: 0.15em 0.55em; border-radius: 6px; }
 .version-entry .version-reason.minor_tweak    { background: #e0e7ff; color: #3730a3; }
 .version-entry .version-reason.scope_change   { background: #fef3c7; color: #92400e; }
 .version-entry .version-reason.strategic_pivot { background: #fee2e2; color: #991b1b; }
 
 /* ---- Follower chips ---- */
-.follower-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.76rem; background: var(--bg-tertiary); padding: 0.2em 0.6em; border-radius: 12px; }
+.follower-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.82rem; background: var(--bg-tertiary); padding: 0.25em 0.7em; border-radius: 12px; }
 
 /* ---- Progress bars ---- */
 .progress-sm { height: 6px; border-radius: 3px; }
@@ -89,11 +89,11 @@
 /* ---- Schedule / Risk pills  (re-used from existing goal page, now shared) ---- */
 .status-pill, .risk-pill {
     display: inline-flex; align-items: center; gap: 4px;
-    font-size: 0.68rem; font-weight: 700; padding: 0.2em 0.65em;
+    font-size: 0.75rem; font-weight: 700; padding: 0.3em 0.75em;
     border-radius: 12px; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap;
 }
 .status-pill .pill-dot, .risk-pill .pill-dot {
-    width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0;
 }
 .status-pill.on_track, .status-pill.on-track  { background: #d1fae5; color: #065f46; }
 .status-pill.on_track .pill-dot, .status-pill.on-track .pill-dot { background: #10b981; }
@@ -101,12 +101,60 @@
 .status-pill.at_risk .pill-dot, .status-pill.at-risk .pill-dot { background: #f59e0b; }
 .status-pill.late      { background: #fee2e2; color: #7f1d1d; }
 .status-pill.late .pill-dot      { background: #ef4444; }
+.status-pill.not_assessed  { background: #f1f5f9; color: #64748b; }
+.status-pill.not_assessed .pill-dot  { background: #94a3b8; }
 .risk-pill.low    { background: #d1fae5; color: #065f46; }
 .risk-pill.low .pill-dot    { background: #10b981; }
 .risk-pill.medium { background: #fef3c7; color: #92400e; }
 .risk-pill.medium .pill-dot { background: #f59e0b; }
 .risk-pill.high   { background: #fee2e2; color: #7f1d1d; }
 .risk-pill.high .pill-dot   { background: #ef4444; }
+.risk-pill.not_assessed  { background: #f1f5f9; color: #64748b; }
+.risk-pill.not_assessed .pill-dot  { background: #94a3b8; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Dark Mode — semantic status pills. Light pastels + dark text become
+   translucent dark tints + bright text so they read clearly on near-black
+   while keeping their color coding (green/amber/red/blue/grey).
+   ══════════════════════════════════════════════════════════════════════ */
+[data-bs-theme="dark"] .status-badge.active,
+[data-bs-theme="dark"] .update-entry .update-status.on_track,
+[data-bs-theme="dark"] .status-pill.on_track,
+[data-bs-theme="dark"] .status-pill.on-track,
+[data-bs-theme="dark"] .risk-pill.low {
+    background: rgba(16, 185, 129, 0.20); color: #81c995;
+}
+[data-bs-theme="dark"] .status-badge.paused,
+[data-bs-theme="dark"] .update-entry .update-status.at_risk,
+[data-bs-theme="dark"] .version-entry .version-reason.scope_change,
+[data-bs-theme="dark"] .status-pill.at_risk,
+[data-bs-theme="dark"] .status-pill.at-risk,
+[data-bs-theme="dark"] .risk-pill.medium {
+    background: rgba(245, 158, 11, 0.20); color: #fdd663;
+}
+[data-bs-theme="dark"] .update-entry .update-status.off_track,
+[data-bs-theme="dark"] .version-entry .version-reason.strategic_pivot,
+[data-bs-theme="dark"] .status-pill.late,
+[data-bs-theme="dark"] .risk-pill.high {
+    background: rgba(239, 68, 68, 0.20); color: #f28b82;
+}
+[data-bs-theme="dark"] .status-badge.pending,
+[data-bs-theme="dark"] .status-badge.completed,
+[data-bs-theme="dark"] .version-entry .version-reason.minor_tweak {
+    background: rgba(129, 140, 248, 0.20); color: #a5b4fc;
+}
+[data-bs-theme="dark"] .status-badge.archived,
+[data-bs-theme="dark"] .update-entry .update-status.blocked,
+[data-bs-theme="dark"] .status-pill.not_assessed,
+[data-bs-theme="dark"] .risk-pill.not_assessed {
+    background: rgba(148, 163, 184, 0.20); color: #cbd5e1;
+}
+[data-bs-theme="dark"] .health-ring.health-good   { color: #81c995; }
+[data-bs-theme="dark"] .health-ring.health-warn   { color: #fdd663; }
+[data-bs-theme="dark"] .health-ring.health-danger { color: #f28b82; }
+[data-bs-theme="dark"] .stale-banner {
+    background: rgba(245, 158, 11, 0.12); border-color: #b7791f; color: #fdd663;
+}
 
 /* Responsive: sidebar under on small screens */
 @media (max-width: 991.98px) {

@@ -9,11 +9,11 @@
   <!-- Header row -->
   <div class="d-flex align-items-center gap-3 mb-4">
     {% if next_url %}
-    <a href="{{ next_url }}" class="btn btn-outline-secondary btn-sm">
+    <a href="{{ next_url }}" class="btn-prizm-back btn-sm">
       <i class="fas fa-arrow-left me-1"></i> Back
     </a>
     {% else %}
-    <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-secondary btn-sm">
+    <a href="{% url 'gantt_chart' board.id %}" class="btn-prizm-back btn-sm">
       <i class="fas fa-arrow-left me-1"></i> Back to Gantt
     </a>
     {% endif %}
@@ -156,19 +156,21 @@
           <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-secondary">Cancel</a>
           {% endif %}
 
-          <!-- Delete -->
-          <form method="post"
-                action="{% url 'delete_gantt_milestone' board.id milestone.id %}"
-                class="ms-auto"
-                onsubmit="return confirm('Delete this milestone? This cannot be undone.');">
-            {% csrf_token %}
-            {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
-            <button type="submit" class="btn btn-outline-danger btn-sm">
-              <i class="fas fa-trash me-1"></i> Delete
-            </button>
-          </form>
+          <!-- Delete (button lives here for layout; its form is defined outside the edit form below) -->
+          <button type="submit" form="milestone-delete-form" class="btn btn-outline-danger btn-sm ms-auto"
+                  onclick="return confirm('Delete this milestone? This cannot be undone.');">
+            <i class="fas fa-trash me-1"></i> Delete
+          </button>
         </div>
 
+      </form>
+
+      <!-- Delete form kept separate from the edit form (nested forms are invalid HTML) -->
+      <form method="post" id="milestone-delete-form"
+            action="{% url 'delete_gantt_milestone' board.id milestone.id %}"
+            class="d-none">
+        {% csrf_token %}
+        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
       </form>
     </div>
 

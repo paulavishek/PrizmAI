@@ -19,6 +19,7 @@ from django.views.decorators.http import require_POST
 
 from .models import ChatMessage, ChatRoom
 from kanban.models import Column, Task
+from kanban.decorators import demo_ai_guard
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,20 @@ THREAD_MESSAGE_LIMIT = 50
 def _require_room_member(request, room):
     """Return True if the user is a member of the chat room, False otherwise."""
     return room.members.filter(pk=request.user.pk).exists()
+
+
+def _resolve_task_target_column(board):
+    """Column AI-extracted tasks land in: prefer a To Do-type column
+    (which also covers a "Backlog" column — see TODO_KEYWORDS in
+    column_semantics.py), falling back to the first column by position.
+    Shared by the extract preview endpoints and confirm_create_tasks so the
+    "will be added to X" wording never drifts from where tasks actually land.
+    """
+    from kanban.column_semantics import column_type_q
+    return (
+        Column.objects.filter(column_type_q('todo', field=''), board=board).order_by("position").first()
+        or Column.objects.filter(board=board).order_by("position").first()
+    )
 
 
 def _build_message_transcript(messages):
@@ -67,6 +82,7 @@ def _extract_json_array(text):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def summarize_thread(request, room_id):
     """
     POST /messaging/room/<room_id>/ai/summarize/
@@ -122,6 +138,7 @@ Be direct and professional. Do not include greetings or meta-commentary."""
 
 @login_required
 @require_POST
+@demo_ai_guard
 def extract_tasks_from_message(request, message_id):
     """
     POST /messaging/message/<message_id>/ai/extract-tasks/
@@ -181,7 +198,13 @@ Example format:
                 "priority_reasoning": str(t.get("priority_reasoning", "")).strip(),
             })
 
-    return JsonResponse({"tasks": clean_tasks, "extraction_method": "ai", "source": "single_message"})
+    target_column = _resolve_task_target_column(room.board)
+    return JsonResponse({
+        "tasks": clean_tasks,
+        "extraction_method": "ai",
+        "source": "single_message",
+        "target_column": target_column.name if target_column else None,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +213,7 @@ Example format:
 
 @login_required
 @require_POST
+@demo_ai_guard
 def extract_tasks_from_thread(request, room_id):
     """
     POST /messaging/room/<room_id>/ai/extract-tasks/
@@ -257,7 +281,13 @@ If there are no actionable tasks, return an empty array: []"""
                 "mentioned_by": str(t.get("mentioned_by", "")).strip(),
             })
 
-    return JsonResponse({"tasks": clean_tasks, "extraction_method": "ai", "source": "thread"})
+    target_column = _resolve_task_target_column(room.board)
+    return JsonResponse({
+        "tasks": clean_tasks,
+        "extraction_method": "ai",
+        "source": "thread",
+        "target_column": target_column.name if target_column else None,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +296,7 @@ If there are no actionable tasks, return an empty array: []"""
 
 @login_required
 @require_POST
+@demo_ai_guard
 def confirm_create_tasks(request, room_id):
     """
     POST /messaging/room/<room_id>/ai/confirm-tasks/
@@ -286,13 +317,7 @@ def confirm_create_tasks(request, room_id):
         return JsonResponse({"error": "No tasks provided."}, status=400)
 
     board = room.board
-
-    # Resolve target column: prefer "To Do" by name, fallback to first column by position
-    column = (
-        Column.objects.filter(board=board, name__icontains="to do").first()
-        or Column.objects.filter(board=board, name__icontains="todo").first()
-        or Column.objects.filter(board=board).order_by("position").first()
-    )
+    column = _resolve_task_target_column(board)
 
     if not column:
         return JsonResponse({"error": "No columns found on this board. Please create a column first."}, status=400)
@@ -347,6 +372,7 @@ def confirm_create_tasks(request, room_id):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def analyze_chat_attachment(request, file_id):
     """
     POST /messaging/file/<file_id>/ai-analyze/
@@ -430,6 +456,7 @@ def analyze_chat_attachment(request, file_id):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def create_tasks_from_chat_attachment(request, file_id):
     """
     POST /messaging/file/<file_id>/ai-create-tasks/
@@ -465,9 +492,9 @@ def create_tasks_from_chat_attachment(request, file_id):
     if column_id:
         column = get_object_or_404(Column, id=column_id, board=board)
     else:
+        from kanban.column_semantics import column_type_q
         column = (
-            Column.objects.filter(board=board, name__icontains="to do").first()
-            or Column.objects.filter(board=board, name__icontains="todo").first()
+            Column.objects.filter(column_type_q('todo', field=''), board=board).order_by("position").first()
             or Column.objects.filter(board=board).order_by("position").first()
         )
 
@@ -536,6 +563,7 @@ _VALID_TONES = {"professional", "urgent", "friendly", "diplomatic"}
 
 @login_required
 @require_POST
+@demo_ai_guard
 def compose_message(request, room_id):
     """
     POST /messaging/room/<room_id>/ai/compose/

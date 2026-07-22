@@ -26,6 +26,7 @@ from kanban.conflict_models import (
     ConflictDetection, ConflictResolution, ResolutionPattern, ConflictNotification
 )
 from accounts.models import Organization
+from accounts.demo_personas import DEMO_PERSONAS
 
 
 class Command(BaseCommand):
@@ -46,9 +47,9 @@ class Command(BaseCommand):
         # Get demo organization
         try:
             self.demo_org = Organization.objects.get(name='Demo - Acme Corporation')
-            self.stdout.write(self.style.SUCCESS(f'✅ Found organization: {self.demo_org.name}'))
+            self.stdout.write(self.style.SUCCESS(f'[OK] Found organization: {self.demo_org.name}'))
         except Organization.DoesNotExist:
-            self.stdout.write(self.style.ERROR('❌ Demo - Acme Corporation not found!'))
+            self.stdout.write(self.style.ERROR('[FAIL] Demo - Acme Corporation not found!'))
             self.stdout.write('   Please run: python manage.py create_demo_organization')
             return
 
@@ -56,17 +57,33 @@ class Command(BaseCommand):
         self.demo_boards = Board.objects.filter(organization=self.demo_org)
         self.stdout.write(f'   Found {self.demo_boards.count()} demo boards')
 
-        # Get demo users
+        # Get demo users - try canonical names first, then fall back to any board member
         self.demo_admin = User.objects.filter(username='demo_admin_solo').first()
-        self.alex = User.objects.filter(username='alex_chen_demo').first()
-        self.sam = User.objects.filter(username='sam_rivera_demo').first()
-        self.jordan = User.objects.filter(username='jordan_taylor_demo').first()
+        self.alex = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
+        self.sam = User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first()
+        self.jordan = User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first()
 
         self.demo_users = [u for u in [self.demo_admin, self.alex, self.sam, self.jordan] if u]
+
+        # Fallback: if demo_admin_solo doesn't exist, use any board member as admin
+        if not self.demo_admin:
+            self.demo_admin = (
+                self.alex or self.sam or self.jordan
+                or User.objects.filter(board_memberships__board__in=self.demo_boards).first()
+            )
+            if self.demo_admin:
+                self.stdout.write(self.style.WARNING(
+                    f'   [WARN]  demo_admin_solo not found - using "{self.demo_admin.username}" as admin'
+                ))
+
+        self.demo_users = [u for u in [self.demo_admin, self.alex, self.sam, self.jordan] if u]
+        # Deduplicate while preserving order
+        seen = set()
+        self.demo_users = [u for u in self.demo_users if not (u.id in seen or seen.add(u.id))]
         self.stdout.write(f'   Found {len(self.demo_users)} demo users')
 
         if not self.demo_admin:
-            self.stdout.write(self.style.ERROR('❌ demo_admin_solo user not found!'))
+            self.stdout.write(self.style.ERROR('[FAIL] No demo users found! Run create_demo_organization first.'))
             return
 
         # Clear existing data if requested
@@ -83,7 +100,7 @@ class Command(BaseCommand):
 
     def clear_conflict_data(self):
         """Clear existing conflict demo data"""
-        self.stdout.write(self.style.WARNING('\n🗑️  Clearing existing conflict demo data...'))
+        self.stdout.write(self.style.WARNING('\n  Clearing existing conflict demo data...'))
         
         # Delete in correct order for foreign key constraints
         ConflictNotification.objects.filter(conflict__board__in=self.demo_boards).delete()
@@ -91,7 +108,7 @@ class Command(BaseCommand):
         ConflictDetection.objects.filter(board__in=self.demo_boards).delete()
         ResolutionPattern.objects.filter(board__in=self.demo_boards).delete()
         
-        self.stdout.write(self.style.SUCCESS('   ✅ Cleared existing data'))
+        self.stdout.write(self.style.SUCCESS('   [OK] Cleared existing data'))
 
     def get_conflict_configs(self):
         """Return conflict configurations for each board"""
@@ -102,10 +119,10 @@ class Command(BaseCommand):
                 {
                     'conflict_type': 'resource',
                     'severity': 'high',
-                    'title': 'Sam Rivera has excessive workload',
-                    'description': 'Sam has 11 tasks assigned with overlapping deadlines in the next 2 weeks. This exceeds the recommended workload of 8 tasks per developer and may cause delays or quality issues.',
+                    'title': 'Marcus Chen has excessive workload',
+                    'description': 'Marcus has 11 tasks assigned with overlapping deadlines in the next 2 weeks. This exceeds the recommended workload of 8 tasks per developer and may cause delays or quality issues.',
                     'conflict_data': {
-                        'affected_user': 'sam_rivera_demo',
+                        'affected_user': 'marcus.chen',
                         'current_tasks': 11,
                         'recommended_max': 8,
                         'overdue_risk': 3,
@@ -123,13 +140,34 @@ class Command(BaseCommand):
                             'type': 'reassign',
                             'title': 'Reassign 2 tasks to Jordan',
                             'confidence': 85,
-                            'impact': 'Reduces Sam\'s workload by 25%'
+                            'impact': 'Reduces Sam\'s workload by 25%',
+                            'reasoning': (
+                                "Reassigning tasks to a team member with available capacity directly removes the "
+                                "overallocation at its source, giving each task a dedicated owner with realistic "
+                                "bandwidth to meet its deadline without quality trade-offs from split focus. "
+                                "The expected outcome is that Sam's remaining tasks proceed at full pace while "
+                                "Jordan takes ownership of the reassigned work with a clear scope. "
+                                "A brief handover session is recommended so Jordan has enough context to avoid "
+                                "ramp-up delays. "
+                                "Based on 15 past resolutions of this type on your projects, this approach has "
+                                "an 80% success rate (+15% confidence adjustment)."
+                            )
                         },
                         {
                             'type': 'reschedule',
                             'title': 'Extend deadlines for lower priority tasks',
                             'confidence': 75,
-                            'impact': 'Spreads workload over 3 weeks'
+                            'impact': 'Spreads workload over 3 weeks',
+                            'reasoning': (
+                                "Spreading deadlines over a longer window reduces the simultaneous demand on Sam, "
+                                "eliminating the bottleneck without changing task ownership. "
+                                "Sam can then give focused attention to each task in sequence, reducing the risk "
+                                "of delays or errors that arise from context-switching between 11 concurrent items. "
+                                "This approach requires downstream dependencies and stakeholder expectations to "
+                                "tolerate the adjusted timeline before committing. "
+                                "Based on 10 past resolutions of this type on your projects, this approach has "
+                                "a 70% success rate (+8% confidence adjustment)."
+                            )
                         }
                     ],
                     'status': 'active'
@@ -152,13 +190,33 @@ class Command(BaseCommand):
                             'type': 'modify_dependency',
                             'title': 'Use mock API for initial development',
                             'confidence': 80,
-                            'impact': 'Allows parallel progress on both tasks'
+                            'impact': 'Allows parallel progress on both tasks',
+                            'reasoning': (
+                                "Using a mock API decouples the File Upload System from its dependency on the "
+                                "User Management API, allowing both workstreams to advance in parallel rather "
+                                "than sequentially. "
+                                "Once the real API is ready, integration can be completed with minimal rework "
+                                "since both sides will have been developed against an agreed interface contract. "
+                                "This requires both teams to define the API contract before work proceeds and "
+                                "to maintain discipline to swap out the mock cleanly on completion. "
+                                "Based on 8 past resolutions of this type on your projects, this approach has "
+                                "a 75% success rate (+12% confidence adjustment)."
+                            )
                         },
                         {
                             'type': 'add_resources',
                             'title': 'Pair programming to accelerate blocking task',
                             'confidence': 70,
-                            'impact': 'Could reduce blocking time by 50%'
+                            'impact': 'Could reduce blocking time by 50%',
+                            'reasoning': (
+                                "Pairing a second developer on the blocking User Management API task directly "
+                                "accelerates its completion, shortening the window during which the File Upload "
+                                "System is held up. "
+                                "Pair programming on this type of integration work typically reduces elapsed time "
+                                "by 30-50% while also improving code quality through real-time review. "
+                                "This works best when both contributors have enough codebase context to pair "
+                                "effectively without a lengthy ramp-up period."
+                            )
                         }
                     ],
                     'status': 'active'
@@ -172,7 +230,7 @@ class Command(BaseCommand):
                         'task_1': 'Performance Optimization',
                         'task_2': 'Security Audit & Fixes',
                         'overlap_days': 5,
-                        'shared_resource': 'Sam Rivera'
+                        'shared_resource': 'Marcus Chen'
                     },
                     'ai_confidence_score': 72,
                     'suggested_resolutions': [
@@ -180,7 +238,18 @@ class Command(BaseCommand):
                             'type': 'reschedule',
                             'title': 'Stagger tasks by 1 week',
                             'confidence': 85,
-                            'impact': 'Better focus on each task'
+                            'impact': 'Better focus on each task',
+                            'reasoning': (
+                                "Staggering the Performance Optimization and Security Audit tasks creates "
+                                "dedicated focus windows for each, preventing the context-switching overhead "
+                                "that reduces Sam's effectiveness when both are active in the same sprint. "
+                                "The expected outcome is higher-quality output on both tasks and a lower risk "
+                                "of one slipping because of pressure from the other. "
+                                "This requires confirming with stakeholders that the later task's revised "
+                                "timeline is acceptable before committing to the change. "
+                                "Based on 20 past resolutions of this type on your projects, this approach has "
+                                "an 85% success rate (+18% confidence adjustment)."
+                            )
                         }
                     ],
                     'status': 'resolved'
@@ -190,7 +259,7 @@ class Command(BaseCommand):
 
     def create_conflicts(self):
         """Create conflict detection records and resolutions"""
-        self.stdout.write(self.style.NOTICE('\n⚠️  Creating Conflicts and Resolutions...'))
+        self.stdout.write(self.style.NOTICE('\n[WARN]  Creating Conflicts and Resolutions...'))
         
         conflicts_created = 0
         resolutions_created = 0
@@ -235,12 +304,19 @@ class Command(BaseCommand):
                     affected_tasks = random.sample(board_tasks, min(3, len(board_tasks)))
                     conflict.tasks.set(affected_tasks)
 
-                # Add affected users
-                affected_users = random.sample(self.demo_users, min(2, len(self.demo_users)))
-                conflict.affected_users.set(affected_users)
+                # Add affected users — prefer the person actually named in the
+                # conflict so THEY receive the notification (mirrors real
+                # detection). Only fall back to a random demo user when no named
+                # subject can be resolved from the conflict data.
+                named_user = self._resolve_named_user(config)
+                if named_user:
+                    conflict.affected_users.add(named_user)
+                else:
+                    affected_users = random.sample(self.demo_users, min(2, len(self.demo_users)))
+                    conflict.affected_users.set(affected_users)
 
                 conflicts_created += 1
-                self.stdout.write(f'   ✅ Created: {board_name} → {config["title"][:50]}...')
+                self.stdout.write(f'   [OK] Created: {board_name} -> {config["title"][:50]}...')
 
                 # Create resolutions for this conflict
                 for i, res_data in enumerate(config['suggested_resolutions']):
@@ -250,7 +326,7 @@ class Command(BaseCommand):
                         title=res_data['title'],
                         description=f"Suggested resolution: {res_data['title']}",
                         ai_confidence=res_data['confidence'],
-                        ai_reasoning=f"Based on analysis, this resolution has a {res_data['confidence']}% confidence of success. Expected impact: {res_data['impact']}",
+                        ai_reasoning=res_data.get('reasoning', ''),
                         estimated_impact=res_data['impact'],
                         action_steps=[
                             f"Review current situation",
@@ -276,9 +352,29 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(f'   Created {conflicts_created} conflicts, {resolutions_created} resolutions'))
 
+    def _resolve_named_user(self, config):
+        """Resolve the User named in a conflict config's data, if any.
+
+        Conflict configs reference their subject as ``affected_user`` (a
+        username-like value, e.g. 'marcus.chen') or ``shared_resource`` (a
+        display name, e.g. 'Marcus Chen'). Returns the matching User or None.
+        """
+        data = config.get('conflict_data', {}) or {}
+        for cand in (data.get('affected_user'), data.get('shared_resource')):
+            if not cand:
+                continue
+            user = User.objects.filter(username=cand).first()
+            if user:
+                return user
+            for u in self.demo_users:
+                display = (u.get_full_name() or u.username)
+                if display.lower() == str(cand).lower():
+                    return u
+        return None
+
     def create_resolution_patterns(self):
         """Create resolution patterns for learning"""
-        self.stdout.write(self.style.NOTICE('\n📊 Creating Resolution Patterns...'))
+        self.stdout.write(self.style.NOTICE('\n Creating Resolution Patterns...'))
         
         patterns_created = 0
         
@@ -352,7 +448,7 @@ class Command(BaseCommand):
 
     def create_notifications(self):
         """Create notifications for active conflicts"""
-        self.stdout.write(self.style.NOTICE('\n🔔 Creating Conflict Notifications...'))
+        self.stdout.write(self.style.NOTICE('\n Creating Conflict Notifications...'))
         
         notifications_created = 0
         
@@ -381,13 +477,13 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('CONFLICT DEMO DATA SUMMARY'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
         self.stdout.write(f'''
-📊 Total Conflict Demo Data:
-   • Total Conflicts: {total_conflicts}
+ Total Conflict Demo Data:
+   - Total Conflicts: {total_conflicts}
      - Active: {active_conflicts}
      - Resolved: {resolved_conflicts}
-   • Resolution Options: {total_resolutions}
-   • Learning Patterns: {total_patterns}
-   • Notifications: {total_notifications}
+   - Resolution Options: {total_resolutions}
+   - Learning Patterns: {total_patterns}
+   - Notifications: {total_notifications}
 
-🎉 Conflict detection demo is now populated!
+ Conflict detection demo is now populated!
 ''')

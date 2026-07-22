@@ -155,10 +155,11 @@
 
         lastParams = params;
 
-        // Show panel with loading
+        // Show panel with loading, disable button
         impactPanel.classList.add('show');
         impactLoading.style.display = 'block';
         impactResults.style.display = 'none';
+        var busy = PrizmLoading.buttonBusy(btnAnalyze, { label: 'Analyzing…' });
 
         fetch(CFG.urls.simulate, {
             method: 'POST',
@@ -172,6 +173,7 @@
         .then(function(r) { return r.json(); })
         .then(function(data) {
             impactLoading.style.display = 'none';
+            busy.done();
             if (data.success) {
                 lastResults = data.results;
                 renderResults(data.results);
@@ -182,6 +184,7 @@
         })
         .catch(function(err) {
             impactLoading.style.display = 'none';
+            busy.done();
             showToast('Network error: ' + err, 'danger');
         });
     });
@@ -499,6 +502,7 @@
         document.body.appendChild(el);
         setTimeout(function () { el.remove(); }, 4000);
     }
+    window.showToast = showToast;
 
     // ── Init ────────────────────────────────────────────────────
     updateSliderLabels();

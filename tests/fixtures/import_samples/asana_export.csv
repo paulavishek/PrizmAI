@@ -1,0 +1,6 @@
+Task ID,Name,Section/Column,Assignee,Due Date,Tags,Notes,Created At,Completed At
+1201000001,Research competitor pricing,To Do,testuser1,2026-07-10,research,Compile a pricing comparison sheet,2026-06-12,
+1201000002,Design new dashboard,In Progress,paul.biotech10@gmail.com,2026-07-05,"design,ux",Mock up the modernized dashboard layout,2026-06-14,
+1201000003,Ship weekly newsletter,Done,maria@example.com,2026-06-09,"content,marketing",Send the June week-2 edition,2026-06-08,2026-06-09
+1201000004,Plan offsite,Backlog,,2026-08-01,events,Tentative agenda for the team offsite,2026-06-13,
+1201000005,Triage incoming bug reports,Doing,testuser1,2026-06-20,support,Review and label new reports,2026-06-14,

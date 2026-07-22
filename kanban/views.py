@@ -1,12 +1,14 @@
 import logging
 import re
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileResponse
+from kanban.decorators import demo_write_guard
+from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileResponse, Http404
 from django.contrib import messages
 from django.db.models import Count, Q, Case, When, IntegerField, Max, Sum, Value, F, BooleanField
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 from django.core.cache import cache
 from django.conf import settings as django_settings
 from datetime import timedelta
@@ -19,12 +21,55 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 # Configure logger
 logger = logging.getLogger(__name__)
 
-from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy
+from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy, CalendarEvent
 from .forms import BoardForm, ColumnForm, TaskForm, TaskLabelForm, CommentForm, TaskMoveForm, TaskSearchForm, TaskFileForm
 from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement, ProjectStakeholder
 from .favorite_views import is_user_favorite as _is_fav
-from .ai_briefing import build_action_plan as _build_action_plan
+from .utils.sanitize import csv_safe_cell, html_to_plain_text
+from .ai_briefing import build_action_plan_cached as _build_action_plan_cached
+from decision_center.models import DecisionItem, DecisionCenterSettings, DecisionCenterBriefing
+
+
+def _get_discovery_widget_counts(user):
+    """Return discovery widget context vars for the dashboard.
+
+    Scoped by the active WORKSPACE (the tenant boundary) — never the shared
+    Organization, which would sum ideas across sibling workspaces. Returns zero
+    values if the feature is not enabled or there is no active workspace."""
+    try:
+        from kanban.preset_models import build_feature_flags
+        from kanban.discovery_models import DiscoveryIdea
+        profile = getattr(user, 'profile', None)
+        active_ws = getattr(profile, 'active_workspace', None)
+        if active_ws is None:
+            return {'discovery_enabled': False, 'discovery_ideas_to_score': 0, 'discovery_ideas_to_promote': 0}
+        # Preset is keyed on the active workspace, not the (shared) organization.
+        ws_preset = getattr(getattr(active_ws, 'workspace_preset', None), 'global_preset', 'lean')
+        features = build_feature_flags(ws_preset)
+        if not features.get('show_discovery'):
+            return {'discovery_enabled': False, 'discovery_ideas_to_score': 0, 'discovery_ideas_to_promote': 0}
+        # Scope to the active workspace; in the shared demo workspace ideas are
+        # further isolated per sandbox_owner (mirrors _idea_scope / the Discovery
+        # page), or the badge would sum every demo user's ideas.
+        scope = {'workspace': active_ws}
+        if getattr(active_ws, 'is_demo', False) or getattr(profile, 'is_viewing_demo', False):
+            scope['sandbox_owner'] = user
+        to_score = DiscoveryIdea.objects.filter(
+            stage__in=['new', 'under_review'], ai_score_impact__isnull=True,
+            **scope,
+        ).count()
+        to_promote = DiscoveryIdea.objects.filter(
+            stage='approved', **scope,
+        ).exclude(promotion__isnull=False).count()
+        return {
+            'discovery_enabled': True,
+            'discovery_ideas_to_score': to_score,
+            'discovery_ideas_to_promote': to_promote,
+        }
+    except Exception:
+        return {'discovery_enabled': False, 'discovery_ideas_to_score': 0, 'discovery_ideas_to_promote': 0}
+
 
 @login_required
 def dashboard(request):
@@ -45,12 +90,18 @@ def dashboard(request):
     # ── Onboarding v2 redirect guard ────────────────────────────────
     # Covers: pending, goal_submitted, workspace_generated, demo_exploring
     if profile.onboarding_version >= 2:
-        if profile.onboarding_status == 'pending':
-            return redirect('onboarding_welcome')
         if profile.onboarding_status == 'goal_submitted':
             return redirect('onboarding_generating')
         if profile.onboarding_status == 'workspace_generated':
             return redirect('onboarding_review')
+        if profile.onboarding_status == 'pending':
+            # Only redirect brand-new users who have no data yet.
+            # Returning users whose status was reset (e.g. mid-new-setup)
+            # should still reach the dashboard if they navigate away.
+            from kanban.models import OrganizationGoal
+            has_goals = OrganizationGoal.objects.filter(created_by=request.user).exists()
+            if not has_goals:
+                return redirect('onboarding_welcome')
         # demo_exploring, completed, skipped → continue to dashboard
     
     # MVP Mode: Organization is optional (can be None)
@@ -65,36 +116,235 @@ def dashboard(request):
     from kanban.utils.demo_settings import SIMPLIFIED_MODE
     
     # MVP Mode: Get all boards the user has access to
-    # v2 demo mode: separate demo boards from real boards via toggle
+    # Single-tier demo: when is_viewing_demo, show user's personal sandbox copies
     demo_mode = getattr(profile, 'is_viewing_demo', False)
-    
+    active_ws = getattr(request, 'workspace', None)
+
     if demo_mode:
-        # Demo mode: show official demo boards + boards the user created
-        # via Spectra while exploring demo mode.
-        boards = Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{request.user.id}')
-        ).distinct()
-    elif profile.onboarding_version >= 2:
-        # v2 real mode: only the user's own boards (no demo boards,
-        # no boards created during demo exploration via Spectra).
-        boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user),
-            is_official_demo_board=False,
-        ).exclude(
-            created_by_session__startswith='spectra_demo_'
-        ).distinct()
-    else:
-        # v1 legacy: demo + user boards mixed
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user)
+        # Single-tier demo: show user's sandbox copies, fall back to official demo boards
+        sandbox_boards = Board.objects.filter(
+            owner=request.user,
+            is_sandbox_copy=True,
         )
-        boards = (demo_boards | user_boards).distinct()
+        # Also include boards the user created manually during demo
+        # (these aren't sandbox copies but should still appear in stats)
+        # Exclude imported boards — imports belong in My Workspace, not Demo.
+        # IMPORTANT: scope to demo workspace to prevent real workspace boards leaking in.
+        from accounts.models import Organization as _Org
+        from kanban.models import Workspace
+        _demo_org = _Org.objects.filter(is_demo=True).first()
+        _demo_ws = None
+        if _demo_org:
+            _demo_ws = Workspace.objects.filter(
+                organization=_demo_org, is_demo=True, is_active=True,
+            ).first()
+        if _demo_ws:
+            user_created_boards = Board.objects.filter(
+                created_by=request.user,
+                is_sandbox_copy=False,
+                is_official_demo_board=False,
+                is_imported=False,
+                workspace=_demo_ws,
+            )
+        else:
+            user_created_boards = Board.objects.none()
+        boards = (sandbox_boards | user_created_boards).distinct()
+        if not sandbox_boards.exists():
+            # Sandbox missing — auto-re-provision synchronously so the user
+            # sees their sandbox immediately on this page load.
+            # EXCEPT for demo persona accounts (priya/marcus/elena etc.) —
+            # they're shared guest-only test logins and must never get their
+            # own independently-provisioned sandbox (see is_demo_persona()
+            # docstring / [[project_persona_membership_bleed]]). They fall
+            # straight through to the official-template read-only fallback.
+            from kanban.models import DemoSandbox
+            from kanban.utils.demo_protection import is_demo_persona
+            has_sandbox = False
+            try:
+                has_sandbox = hasattr(request.user, 'demo_sandbox') and request.user.demo_sandbox is not None
+            except Exception:
+                pass
+            if not has_sandbox and not is_demo_persona(request.user):
+                from kanban.tasks.sandbox_provisioning import provision_sandbox_task
+                try:
+                    provision_sandbox_task(request.user.id)
+                except Exception:
+                    pass
+                # Re-check for sandbox boards after provisioning
+                sandbox_boards = Board.objects.filter(
+                    owner=request.user,
+                    is_sandbox_copy=True,
+                )
+                boards = (sandbox_boards | user_created_boards).distinct()
+
+            if not sandbox_boards.exists():
+                # Still nothing — fall back to official demo boards as read-only
+                boards = (Board.objects.filter(
+                    is_official_demo_board=True,
+                ) | user_created_boards).distinct()
+        else:
+            # Catch-up: if user has sandbox boards but no tasks assigned to them
+            # (e.g. race condition on first entry, or re-entry timing), reassign now
+            has_assigned = Task.objects.filter(
+                column__board__in=sandbox_boards,
+                assigned_to=request.user,
+                item_type='task',
+            ).exclude(progress=100).exists()
+            if not has_assigned:
+                from kanban.models import DemoSandbox
+                from kanban.sandbox_views import _reassign_demo_tasks_to_user
+                # If provisioning raced ahead of the DemoSandbox row, create
+                # it now so reassignment can persist the mapping. Without
+                # this, the catch-up silently no-ops forever and "My Tasks"
+                # stays empty until the user clicks Reset Demo.
+                sandbox, _ = DemoSandbox.objects.get_or_create(user=request.user)
+                _reassign_demo_tasks_to_user(sandbox, request.user)
+
+            # Catch-up: repair the personal timesheet for sandboxes provisioned
+            # before per-user time-entry isolation. Remaps the primary persona's
+            # cloned time entries to the real user so the time-tracking dashboard
+            # (filtered by user=request.user) shows their own isolated copy
+            # instead of falling back to shared persona data. Idempotent.
+            try:
+                from kanban.sandbox_views import _remap_demo_time_entries_to_owner
+                _remap_demo_time_entries_to_owner(request.user)
+            except Exception:
+                pass
+
+            # Catch-up: clone demo calendar events into the user's sandbox boards
+            # for sandboxes provisioned before per-user calendar isolation. Events
+            # were only seeded on the shared template board and surfaced
+            # inconsistently across users; each user now gets their own copy.
+            # Clone-if-empty, so this is idempotent.
+            try:
+                from kanban.sandbox_views import _clone_calendar_events_for_user
+                _clone_calendar_events_for_user(request.user)
+            except Exception:
+                pass
+
+            # Catch-up: clone the per-user custom-field schema (+ seeded values)
+            # for sandboxes provisioned before per-user custom-field isolation.
+            # Without this, the shared workspace-scoped definitions bleed across
+            # demo users. Idempotent (clears + re-clones the user's own set).
+            try:
+                from kanban.sandbox_views import _clone_custom_fields_for_user
+                _clone_custom_fields_for_user(request.user)
+            except Exception:
+                pass
+
+            # Catch-up: add the user to sandbox chat rooms if a prior
+            # provisioning pass missed them. Sandbox boards are not
+            # ``is_official_demo_board``, so the Messages badge endpoint
+            # requires explicit ChatRoom membership before it will count
+            # unread messages.
+            from messaging.models import ChatRoom
+            missing_rooms = ChatRoom.objects.filter(
+                board__in=sandbox_boards,
+            ).exclude(members=request.user)
+            for _room in missing_rooms:
+                _room.members.add(request.user)
+
+            # Catch-up: seed Decision Center items if the user has none.
+            # ``collect_for_user`` is only called during provisioning, so a
+            # silent failure there leaves Focus Today permanently empty.
+            try:
+                if not DecisionItem.objects.filter(created_for=request.user).exists():
+                    from decision_center.tasks import (
+                        collect_for_user, generate_briefing_for_user,
+                    )
+                    collect_for_user(request.user)
+                    generate_briefing_for_user(request.user)
+            except Exception:
+                pass
+    elif active_ws and not active_ws.is_demo:
+        # Workspace-scoped: delegate to the centralized helper.
+        from kanban.utils.demo_protection import get_user_boards as _get_user_boards
+        boards = _get_user_boards(request.user)
+    else:
+        # v2 and v1: delegate to the centralized helper that handles all
+        # demo/sandbox/spectra exclusion in one place.
+        from kanban.utils.demo_protection import get_user_boards as _get_user_boards
+        boards = _get_user_boards(request.user)
     
-    # Get analytics data — all 4 stats in one DB aggregate call (avoids 4 separate queries)
+    # Annotate task counts so the template can display them efficiently
+    # (Task has no direct FK to Board — it goes through Column)
     _now = timezone.now()
-    _stats = Task.objects.filter(column__board__in=boards, item_type='task').aggregate(
+    boards = boards.annotate(
+        # ``distinct=True`` is REQUIRED: get_user_boards() joins ``memberships``
+        # (the "shared with me" branch), so a plain Count multiplies a board's
+        # task total by the number of membership rows that survive the WHERE —
+        # which differs per viewer (owner sees all member rows, a member sees
+        # only their own). distinct counts task rows once, regardless.
+        task_count=Count(
+            'columns__tasks',
+            filter=Q(columns__tasks__item_type='task'),
+            distinct=True,
+        ),
+        done_task_count=Count(
+            'columns__tasks',
+            filter=Q(columns__tasks__item_type='task', columns__tasks__progress=100),
+            distinct=True,
+        ),
+    )
+
+    # Prefetch member avatars for the board cards (batched, avoids N+1).
+    from django.db.models import Prefetch
+    from kanban.models import BoardMembership as _BoardMembership
+    boards = boards.prefetch_related(
+        Prefetch(
+            'memberships',
+            queryset=_BoardMembership.objects.select_related('user__profile').order_by('-added_at'),
+            to_attr='member_list',
+        )
+    )
+
+    # ── Own vs shared board partition ────────────────────────────────
+    # A board is "owned" when the user created it, is its owner, or it lives in
+    # the active workspace. Anything else is a board shared *to* the user via
+    # BoardMembership from another workspace. Headline metrics cover owned boards
+    # only (the active-workspace snapshot); shared boards get their own section.
+    # In demo mode every visible board is a personal sandbox copy, so they are
+    # all treated as owned.
+    _active_ws_id = getattr(active_ws, 'id', None)
+    _owned_q = Q(created_by=request.user) | Q(owner=request.user)
+    if _active_ws_id:
+        _owned_q |= Q(workspace_id=_active_ws_id)
+    if demo_mode:
+        owned_boards = boards
+        shared_boards = boards.none()
+    else:
+        owned_boards = boards.filter(_owned_q)
+        shared_boards = boards.exclude(_owned_q)
+    owned_board_ids = list(owned_boards.values_list('id', flat=True))
+
+    # Collaborator metadata for the "Shared with me" section (no N+1): owner via
+    # select_related; member count + the viewer's own role come from independent
+    # BoardMembership queries. NOTE: we must NOT annotate Count('memberships') on
+    # ``shared_boards`` — that queryset carries get_user_boards()'s membership JOIN
+    # constrained to the current user, so the count would always be 1.
+    shared_boards = shared_boards.select_related('created_by')
+    _shared_board_ids = list(shared_boards.values_list('id', flat=True))
+    my_board_roles = {}
+    shared_board_member_counts = {}
+    if _shared_board_ids:
+        from kanban.models import BoardMembership
+        my_board_roles = {
+            m.board_id: m.role
+            for m in BoardMembership.objects.filter(
+                user=request.user, board_id__in=_shared_board_ids,
+            )
+        }
+        shared_board_member_counts = {
+            row['board_id']: row['c']
+            for row in BoardMembership.objects
+            .filter(board_id__in=_shared_board_ids)
+            .values('board_id')
+            .annotate(c=Count('id'))
+        }
+
+    # Get analytics data — all 4 stats in one DB aggregate call (avoids 4 separate queries)
+    # Scoped to owned boards: the headline cards reflect the active workspace only.
+    _stats = Task.objects.filter(column__board_id__in=owned_board_ids, item_type='task').aggregate(
         task_count=Count('id'),
         completed_count=Count('id', filter=Q(progress=100)),
         overdue_count=Count('id', filter=Q(due_date__lt=_now) & ~Q(progress=100)),
@@ -115,8 +365,8 @@ def dashboard(request):
     # Items per page
     items_per_page = 10
     
-    # All Tasks (exclude milestones)
-    all_tasks_list = Task.objects.filter(column__board__in=boards, item_type='task').select_related('column', 'assigned_to', 'column__board').order_by('-created_at')
+    # All Tasks (exclude milestones) — owned boards only, to match the headline cards
+    all_tasks_list = Task.objects.filter(column__board_id__in=owned_board_ids, item_type='task').select_related('column', 'assigned_to', 'column__board').order_by('-created_at')
     all_tasks_page = request.GET.get('all_tasks_page', 1)
     all_tasks_paginator = Paginator(all_tasks_list, items_per_page)
     try:
@@ -128,7 +378,7 @@ def dashboard(request):
     
     # Completed Tasks (exclude milestones)
     completed_tasks_list = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         item_type='task',
         progress=100
     ).select_related('column', 'assigned_to', 'column__board').order_by('-updated_at')
@@ -143,7 +393,8 @@ def dashboard(request):
     
     # Overdue Tasks
     overdue_tasks_list = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
+        item_type='task',
         due_date__lt=timezone.now()
     ).exclude(
         progress=100
@@ -159,7 +410,7 @@ def dashboard(request):
     
     # Due Soon Tasks
     due_soon_tasks_list = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
     ).exclude(
         progress=100
@@ -219,36 +470,36 @@ def dashboard(request):
             }
         ).order_by('priority_order', 'due_date_order', 'due_date', 'created_at')
     elif sort_by == 'recent':
-        # Sort by: 1) Most recently created/updated, 2) Priority
-        my_tasks = my_tasks_query.extra(
-            select={
-                'priority_order': """
-                    CASE priority 
-                        WHEN 'urgent' THEN 1 
-                        WHEN 'high' THEN 2 
-                        WHEN 'medium' THEN 3 
-                        WHEN 'low' THEN 4 
-                        ELSE 5 
-                    END
-                """
-            }
-        ).order_by('-updated_at', '-created_at', 'priority_order')
+        # Sort by: most recently modified/updated first.
+        # Purely time-based — no priority tiebreaker so it stays distinct from
+        # the priority and urgency sorts.
+        my_tasks = my_tasks_query.order_by('-updated_at', '-created_at')
     else:  # Default: 'urgency'
-        # Sort by: 1) Overdue tasks first, 2) Priority level, 3) Due date, 4) Creation date
+        # Urgency = time-sensitivity, not just the priority label.
+        # Score = (days until due date) minus a priority boost:
+        #   urgent=7d, high=3d, medium=1d, low=0d
+        # A high-priority task due in 2 days (score=-1) outranks an urgent task
+        # due in 30 days (score=23). Overdue tasks always have negative scores.
+        # Tasks with no due date are least urgent (score=9999).
+        # This makes Urgency sort meaningfully different from Priority sort when
+        # a lower-priority task is due sooner than a higher-priority one.
         my_tasks = my_tasks_query.extra(
             select={
-                'is_overdue': "CASE WHEN due_date < datetime('now') THEN 1 ELSE 0 END",
-                'priority_order': """
-                    CASE priority 
-                        WHEN 'urgent' THEN 1 
-                        WHEN 'high' THEN 2 
-                        WHEN 'medium' THEN 3 
-                        WHEN 'low' THEN 4 
-                        ELSE 5 
+                'urgency_score': """
+                    CASE
+                        WHEN due_date IS NULL THEN 9999
+                        ELSE (julianday(due_date) - julianday('now')) -
+                             CASE priority
+                                 WHEN 'urgent' THEN 7
+                                 WHEN 'high'   THEN 3
+                                 WHEN 'medium' THEN 1
+                                 WHEN 'low'    THEN 0
+                                 ELSE 0
+                             END
                     END
                 """
             }
-        ).order_by('-is_overdue', 'priority_order', 'due_date', 'created_at')
+        ).order_by('urgency_score', 'created_at')
     
     # Count of my tasks (for stats) — derived from the same base query to stay in sync
     my_tasks_count = my_tasks_query.count()
@@ -261,31 +512,14 @@ def dashboard(request):
     # or it is a demo mission.
     user_board_ids = list(boards.values_list('id', flat=True))
 
-    # Missions the user has direct ownership of or demo missions
-    if demo_mode:
-        missions_qs = Mission.objects.filter(
-            Q(is_demo=True) | Q(is_seed_demo_data=True) |
-            Q(strategies__boards__id__in=user_board_ids)
-        ).distinct().select_related('organization_goal').prefetch_related(
-            'strategies__boards'
-        ).order_by('-created_at')
-    elif profile.onboarding_version >= 2:
-        # v2 real mode: only user's own missions (exclude demo)
-        missions_qs = Mission.objects.filter(
-            Q(created_by=request.user) |
-            Q(strategies__boards__id__in=user_board_ids)
-        ).filter(is_demo=False, is_seed_demo_data=False
-        ).distinct().select_related('organization_goal').prefetch_related(
-            'strategies__boards'
-        ).order_by('-created_at')
-    else:
-        missions_qs = Mission.objects.filter(
-            Q(created_by=request.user) |
-            Q(is_demo=True) |
-            Q(strategies__boards__id__in=user_board_ids)
-        ).distinct().select_related('organization_goal').prefetch_related(
-            'strategies__boards'
-        ).order_by('-created_at')
+    # Missions the user has direct ownership of or demo missions.
+    # Use the centralized helper for the base queryset, then add prefetches.
+    from kanban.utils.demo_protection import get_user_missions as _get_user_missions
+    missions_qs = _get_user_missions(request.user).select_related(
+        'organization_goal'
+    ).prefetch_related(
+        'strategies__boards'
+    ).order_by('-created_at')
 
     # Build mission tree as a plain list (for easy template iteration)
     # Each mission dict holds: mission obj + list of strategy dicts
@@ -310,8 +544,10 @@ def dashboard(request):
     _board_med_risk_thresh = getattr(django_settings, 'HEALTH_BOARD_MED_RISK_THRESHOLD', 0.10)
     _cache_ttl = getattr(django_settings, 'HEALTH_ROLLUP_CACHE_TTL', 120)
 
-    # --- Cache key scoped to user + demo mode (board set varies) ---
-    _cache_key = f'health_rollup:u{request.user.id}:d{int(demo_mode)}'
+    # --- Cache key scoped to user + demo mode + board set hash ---
+    # Include board count and IDs hash so cache invalidates when boards are added/removed
+    _board_ids_hash = hash(tuple(sorted(_board_ids)))
+    _cache_key = f'health_rollup:u{request.user.id}:d{int(demo_mode)}:b{_board_ids_hash}'
     _cached = cache.get(_cache_key) if _cache_ttl > 0 else None
 
     if _cached is not None:
@@ -335,6 +571,7 @@ def dashboard(request):
                 )),
                 no_due_date_tasks=Count('id', filter=Q(due_date__isnull=True)),
                 high_risk_tasks=Count('id', filter=Q(risk_level__in=['high', 'critical'])),
+                risk_assessed_tasks=Count('id', filter=Q(risk_level__isnull=False)),
             )
         )
         # Also get total + done for completion %
@@ -364,6 +601,7 @@ def dashboard(request):
                 'at_risk_tasks': row['at_risk_tasks'],
                 'no_due_date_tasks': row['no_due_date_tasks'],
                 'high_risk_tasks': row['high_risk_tasks'],
+                'risk_assessed_tasks': row['risk_assessed_tasks'],
             }
         # Boards with only completed tasks (no active) still need total/done
         for bid, comp in _completion_map.items():
@@ -377,6 +615,7 @@ def dashboard(request):
                     'at_risk_tasks': 0,
                     'no_due_date_tasks': 0,
                     'high_risk_tasks': 0,
+                    'risk_assessed_tasks': 0,
                 }
 
         if _cache_ttl > 0:
@@ -395,7 +634,7 @@ def dashboard(request):
         # making the board harder to achieve a clean On Track status.
         denom = active  # includes late + at_risk + no_due + on-track-active
         if denom == 0:
-            schedule_status = 'on_track'
+            schedule_status = 'not_assessed'
         elif late / denom > _board_late_thresh:
             schedule_status = 'late'
         elif (late + at_risk) / denom > _board_at_risk_thresh:
@@ -404,8 +643,11 @@ def dashboard(request):
             schedule_status = 'on_track'
 
         # Risk Level: based on high/critical risk tasks as fraction of active tasks
-        if denom == 0:
-            risk_level = 'low'
+        assessed = bstats.get('risk_assessed_tasks', 0)
+        if denom == 0 and bstats.get('total_tasks', 0) == 0:
+            risk_level = 'not_assessed'
+        elif assessed == 0:
+            risk_level = 'not_assessed'
         elif high_risk / denom >= _board_high_risk_thresh:
             risk_level = 'high'
         elif high_risk / denom >= _board_med_risk_thresh:
@@ -419,22 +661,44 @@ def dashboard(request):
         """Return worst schedule status from a list."""
         if 'late' in statuses: return 'late'
         if 'at_risk' in statuses: return 'at_risk'
-        return 'on_track'
+        if 'on_track' in statuses: return 'on_track'
+        return 'not_assessed'
 
     def _worst_risk(*levels):
         """Return worst risk level from a list."""
         if 'high' in levels: return 'high'
         if 'medium' in levels: return 'medium'
-        return 'low'
+        if 'low' in levels: return 'low'
+        return 'not_assessed'
+
+    # ── Sandbox board mapping ────────────────────────────────────────
+    # In demo mode, the mission tree references template boards (via
+    # Strategy FK), but our stats are computed on the user's sandbox
+    # copies. Build a template_id → sandbox_id mapping so we can look
+    # up the correct stats when iterating template boards in the tree.
+    _template_to_sandbox = {}
+    if demo_mode:
+        for _sb in boards.filter(cloned_from__isnull=False):
+            _template_to_sandbox[_sb.cloned_from_id] = _sb.id
 
     mission_tree = []
     mission_item_map = {}  # id -> item dict, used for goal_tree grouping
+    # Convert user_board_ids to a set for fast lookup in the inner loop
+    _user_board_id_set = set(user_board_ids)
     for mission in missions_qs:
         strategy_list = []
         for strategy in mission.strategies.all().order_by('-created_at'):
             board_list = []
             for board in strategy.boards.all().order_by('name'):
-                _bstats = _board_stats_map.get(board.id, {})
+                # RBAC: outside demo, users only see boards they are a member
+                # of (or created).  This prevents the Hierarchy Navigator from
+                # showing extra boards/strategies.
+                if not demo_mode:
+                    if board.id not in _user_board_id_set:
+                        continue
+                # In demo mode, look up stats via the sandbox copy ID
+                _stats_id = _template_to_sandbox.get(board.id, board.id)
+                _bstats = _board_stats_map.get(_stats_id, {})
                 total_t = _bstats.get('total_tasks', 0)
                 done_t = _bstats.get('done_tasks', 0)
                 high_risk_t = _bstats.get('high_risk_tasks', 0)
@@ -460,13 +724,18 @@ def dashboard(request):
             # Strategy health = worst of its boards
             s_schedules = [b['schedule_status'] for b in board_list]
             s_risks = [b['risk_level'] for b in board_list]
-            s_schedule = _worst_schedule(*s_schedules) if s_schedules else 'on_track'
-            s_risk = _worst_risk(*s_risks) if s_risks else 'low'
+            s_schedule = _worst_schedule(*s_schedules) if s_schedules else 'not_assessed'
+            s_risk = _worst_risk(*s_risks) if s_risks else 'not_assessed'
             s_health = 'green'
             if s_schedule == 'late' or s_risk == 'high': s_health = 'red'
             elif s_schedule == 'at_risk' or s_risk == 'medium': s_health = 'amber'
             s_total = sum(b['total_tasks'] for b in board_list)
             s_done  = sum(b['done_tasks']  for b in board_list)
+            # Skip strategies with no visible boards for non-admin,
+            # non-owner, non-demo users (RBAC board filter above may
+            # have excluded all boards under this strategy).
+            if not board_list and not demo_mode and strategy.created_by != request.user:
+                continue
             strategy_list.append({
                 'strategy': strategy,
                 'boards': board_list,
@@ -481,8 +750,8 @@ def dashboard(request):
         # Mission health = worst of its strategies
         m_schedules = [s['schedule_status'] for s in strategy_list]
         m_risks = [s['risk_level'] for s in strategy_list]
-        m_schedule = _worst_schedule(*m_schedules) if m_schedules else 'on_track'
-        m_risk = _worst_risk(*m_risks) if m_risks else 'low'
+        m_schedule = _worst_schedule(*m_schedules) if m_schedules else 'not_assessed'
+        m_risk = _worst_risk(*m_risks) if m_risks else 'not_assessed'
         m_health = 'green'
         if m_schedule == 'late' or m_risk == 'high': m_health = 'red'
         elif m_schedule == 'at_risk' or m_risk == 'medium': m_health = 'amber'
@@ -496,6 +765,11 @@ def dashboard(request):
         strategies_on_track = sum(1 for s in strategy_list if s['schedule_status'] == 'on_track')
         strategies_at_risk = sum(1 for s in strategy_list if s['schedule_status'] == 'at_risk')
         strategies_late = sum(1 for s in strategy_list if s['schedule_status'] == 'late')
+
+        # Skip missions with no visible strategies for non-admin,
+        # non-owner, non-demo users.
+        if not strategy_list and not demo_mode and mission.created_by != request.user:
+            continue
 
         item = {
             'mission': mission,
@@ -529,6 +803,27 @@ def dashboard(request):
         else:
             ungrouped_missions.append(item)
 
+    # Include standalone goals (no linked missions) so they appear in
+    # the Hierarchy Navigator even before the user links missions.
+    if demo_mode:
+        _all_goals_qs = OrganizationGoal.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
+        )
+    elif active_ws and not active_ws.is_demo:
+        _all_goals_qs = OrganizationGoal.objects.filter(workspace=active_ws)
+    else:
+        _all_goals_qs = OrganizationGoal.objects.filter(
+            Q(created_by=request.user) |
+            Q(missions__strategies__boards__memberships__user=request.user),
+            is_demo=False, is_seed_demo_data=False,
+        ).distinct()
+    for _standalone_goal in _all_goals_qs:
+        if _standalone_goal.id not in goal_map:
+            goal_map[_standalone_goal.id] = {
+                'goal': _standalone_goal,
+                'missions': [],
+            }
+
     goal_tree = list(goal_map.values())
     if ungrouped_missions:
         goal_tree.append({'goal': None, 'missions': ungrouped_missions})
@@ -537,8 +832,8 @@ def dashboard(request):
     for goal_entry in goal_tree:
         g_schedules = [m['schedule_status'] for m in goal_entry['missions']]
         g_risks = [m['risk_level'] for m in goal_entry['missions']]
-        goal_entry['schedule_status'] = _worst_schedule(*g_schedules) if g_schedules else 'on_track'
-        goal_entry['risk_level'] = _worst_risk(*g_risks) if g_risks else 'low'
+        goal_entry['schedule_status'] = _worst_schedule(*g_schedules) if g_schedules else 'not_assessed'
+        goal_entry['risk_level'] = _worst_risk(*g_risks) if g_risks else 'not_assessed'
         goal_entry['total_tasks'] = sum(m['total_tasks'] for m in goal_entry['missions'])
         goal_entry['done_tasks'] = sum(m['done_tasks'] for m in goal_entry['missions'])
         goal_entry['completion_pct'] = (
@@ -588,19 +883,52 @@ def dashboard(request):
                 })
 
     # ----------------------------------------------------------------
-    # Total high-risk count across all accessible boards
+    # Include standalone boards (not linked to any strategy) in charts
     # ----------------------------------------------------------------
-    total_high_risk = sum(r.get('high_risk_tasks', 0) for r in _board_stats_map.values())
+    _charted_board_ids = set()
+    for mission_item in mission_tree:
+        for strategy_item in mission_item['strategies']:
+            for board_item in strategy_item['boards']:
+                _bid = board_item['board'].id
+                # In demo mode, also mark the sandbox copy id as charted
+                _charted_board_ids.add(_bid)
+                if _bid in _template_to_sandbox:
+                    _charted_board_ids.add(_template_to_sandbox[_bid])
+
+    for _sb_board in boards:
+        if _sb_board.id not in _charted_board_ids:
+            _bstats = _board_stats_map.get(_sb_board.id, {})
+            total_t = _bstats.get('total_tasks', 0)
+            done_t = _bstats.get('done_tasks', 0)
+            high_risk_t = _bstats.get('high_risk_tasks', 0)
+            pct = round((done_t / total_t * 100), 1) if total_t else 0
+            chart_boards.append({
+                'name': _sb_board.name[:35],
+                'strategy': '',
+                'total': total_t,
+                'done': done_t,
+                'high_risk': high_risk_t,
+                'completion_pct': pct,
+            })
+
+    # ----------------------------------------------------------------
+    # Total high-risk count — owned boards only, to match the headline card scope
+    # ----------------------------------------------------------------
+    total_high_risk = sum(
+        _board_stats_map.get(bid, {}).get('high_risk_tasks', 0)
+        for bid in owned_board_ids
+    )
 
     # Queryset of individual high-risk tasks (for modal)
     # Sort: critical first (0), then high (1); within each group earliest due date first (nulls last)
     high_risk_tasks_qs = (
         Task.objects
         .filter(
-            column__board_id__in=_board_ids,
+            column__board_id__in=owned_board_ids,
             item_type='task',
             risk_level__in=['high', 'critical'],
         )
+        .exclude(progress=100)  # Only active (incomplete) tasks — a done task isn't a risk
         .select_related('column__board', 'assigned_to')
         .annotate(
             risk_sort=Case(
@@ -682,7 +1010,7 @@ def dashboard(request):
     # ----------------------------------------------------------------
     # Risk Heatmap  (3×3 grid: likelihood 1-3 × impact 1-3)
     # ----------------------------------------------------------------
-    _risk_rows = (
+    _risk_task_rows = (
         Task.objects
         .filter(
             column__board_id__in=_board_ids,
@@ -690,21 +1018,34 @@ def dashboard(request):
             risk_likelihood__isnull=False,
             risk_impact__isnull=False,
         )
-        .values('risk_likelihood', 'risk_impact')
-        .annotate(count=Count('id'))
+        .select_related('column__board', 'assigned_to')
+        .order_by('due_date')
     )
     risk_matrix = [[0] * 3 for _ in range(3)]
+    # cell_tasks[likelihood_row][impact_col] -> list of task dicts, so clicking
+    # a heatmap cell can show exactly the tasks that make up its count.
+    risk_cell_tasks = [[[] for _ in range(3)] for _ in range(3)]
     risk_total  = 0
-    for row in _risk_rows:
-        lik = row['risk_likelihood'] - 1   # 0-indexed (0=low, 1=med, 2=high)
-        imp = row['risk_impact']     - 1   # 0-indexed
+    for t in _risk_task_rows:
+        lik = t.risk_likelihood - 1   # 0-indexed (0=low, 1=med, 2=high)
+        imp = t.risk_impact     - 1   # 0-indexed
         if 0 <= lik <= 2 and 0 <= imp <= 2:
-            risk_matrix[lik][imp] += row['count']
-            risk_total += row['count']
+            risk_matrix[lik][imp] += 1
+            risk_total += 1
+            risk_cell_tasks[lik][imp].append({
+                'id':          t.id,
+                'title':       t.title,
+                'board':       t.column.board.name,
+                'risk_level':  t.risk_level,
+                'due_date':    t.due_date.strftime('%b %d, %Y') if t.due_date else None,
+                'priority':    t.priority,
+                'assigned_to': t.assigned_to.username if t.assigned_to else None,
+            })
     risk_heatmap_data = {
-        'matrix':   risk_matrix,  # [likelihood_row][impact_col]
-        'total':    risk_total,
-        'has_data': risk_total > 0,
+        'matrix':      risk_matrix,  # [likelihood_row][impact_col]
+        'cell_tasks':  risk_cell_tasks,
+        'total':       risk_total,
+        'has_data':    risk_total > 0,
     }
 
     # ----------------------------------------------------------------
@@ -742,6 +1083,117 @@ def dashboard(request):
     }
 
     # ----------------------------------------------------------------
+    # Board health map — holistic per-board health for board card dots.
+    #
+    # Signals (triple-constraint + blockers + risk):
+    #   TIME:   schedule_status from _compute_board_health, SPI
+    #   BUDGET: ProjectBudget.get_status()
+    #   SCOPE:  scope creep percentage
+    #   RISK:   risk_level from _compute_board_health
+    #   BLOCKERS: active high/critical conflicts
+    #
+    # Output per board: { 'level': 'red'|'amber'|'green', 'reasons': [...] }
+    # ----------------------------------------------------------------
+    _spi_map = {b['board_id']: b.get('spi') for b in spi_cpi_data}
+    _sci_map = {b['id']: b.get('growth_pct', 0) for b in _sci_boards}
+
+    # Active conflict counts per board (single query)
+    from kanban.conflict_models import ConflictDetection
+    _conflict_qs = (
+        ConflictDetection.objects
+        .filter(
+            tasks__column__board_id__in=_board_ids,
+            status='active',
+            severity__in=['high', 'critical'],
+        )
+        .values('tasks__column__board_id', 'severity')
+        .annotate(cnt=Count('id', distinct=True))
+    )
+    _conflict_map = {}  # board_id -> {'high': n, 'critical': n}
+    for row in _conflict_qs:
+        bid = row['tasks__column__board_id']
+        _conflict_map.setdefault(bid, {'high': 0, 'critical': 0})
+        _conflict_map[bid][row['severity']] += row['cnt']
+
+    board_health_map = {}
+    for bid in _board_ids:
+        reasons_red = []
+        reasons_amber = []
+
+        bstats = _board_stats_map.get(bid, {})
+        schedule_status, risk_level = _compute_board_health(bstats)
+
+        # 1) Schedule (time constraint)
+        if schedule_status == 'late':
+            late = bstats.get('late_tasks', 0)
+            reasons_red.append(f'{late} overdue task{"s" if late != 1 else ""}')
+        elif schedule_status == 'at_risk':
+            at_risk = bstats.get('at_risk_tasks', 0)
+            reasons_amber.append(f'{at_risk} task{"s" if at_risk != 1 else ""} at risk')
+
+        # 2) Risk level
+        if risk_level == 'high':
+            hr = bstats.get('high_risk_tasks', 0)
+            reasons_red.append(f'{hr} high-risk task{"s" if hr != 1 else ""}')
+        elif risk_level == 'medium':
+            hr = bstats.get('high_risk_tasks', 0)
+            reasons_amber.append(f'{hr} high-risk task{"s" if hr != 1 else ""}')
+
+        # 3) SPI (schedule performance)
+        spi = _spi_map.get(bid)
+        if spi is not None:
+            if spi < 0.5:
+                reasons_red.append(f'SPI {spi:.2f} (severely behind)')
+            elif spi < 0.8:
+                reasons_amber.append(f'SPI {spi:.2f} (behind schedule)')
+
+        # 4) Budget
+        budget = _budget_map.get(bid)
+        if budget:
+            b_status = budget.get_status()
+            if b_status in ('over', 'critical'):
+                reasons_red.append(f'Budget {b_status}')
+            elif b_status == 'warning':
+                reasons_amber.append('Budget warning')
+
+        # 5) Scope creep
+        sci_pct = _sci_map.get(bid, 0)
+        if sci_pct > 30:
+            reasons_red.append(f'Scope +{sci_pct}%')
+        elif sci_pct > 15:
+            reasons_amber.append(f'Scope +{sci_pct}%')
+
+        # 6) Active blockers (conflicts)
+        conflicts = _conflict_map.get(bid, {})
+        crit_conflicts = conflicts.get('critical', 0)
+        high_conflicts = conflicts.get('high', 0)
+        if crit_conflicts:
+            reasons_red.append(f'{crit_conflicts} critical blocker{"s" if crit_conflicts != 1 else ""}')
+        elif high_conflicts:
+            reasons_amber.append(f'{high_conflicts} high blocker{"s" if high_conflicts != 1 else ""}')
+
+        # Determine level
+        if reasons_red:
+            level = 'red'
+            tooltip = 'At Risk — ' + '; '.join(reasons_red + reasons_amber)
+        elif reasons_amber:
+            level = 'amber'
+            tooltip = 'Caution — ' + '; '.join(reasons_amber)
+        else:
+            level = 'green'
+            tooltip = 'Healthy'
+
+        board_health_map[bid] = {'level': level, 'tooltip': tooltip}
+
+    # In demo mode, also map sandbox board IDs via _template_to_sandbox
+    if demo_mode:
+        for template_id, sandbox_id in _template_to_sandbox.items():
+            if sandbox_id in board_health_map:
+                continue  # already computed directly
+            if template_id in board_health_map:
+                board_health_map[sandbox_id] = board_health_map[template_id]
+
+    # ----------------------------------------------------------------
     # Data-readiness flags — used to conditionally hide empty widgets
     # ----------------------------------------------------------------
     # SPI only has meaning when there are tasks past their due date (SPI = EV/PV).
@@ -754,9 +1206,36 @@ def dashboard(request):
     # Velocity chart is meaningful only after at least one task has been completed.
     has_velocity_data = completed_count > 0
 
+    # ----------------------------------------------------------------
+    # Weekly velocity data (real tasks completed per week, last 7 weeks)
+    # ----------------------------------------------------------------
+    _velocity_weeks = []
+    if has_velocity_data:
+        _vel_now = timezone.now()
+        # Build 7 week buckets ending at the current week
+        for _w in range(6, -1, -1):
+            _week_end = _vel_now - timedelta(weeks=_w)
+            _week_start = _week_end - timedelta(weeks=1)
+            _week_count = Task.objects.filter(
+                column__board_id__in=_board_ids,
+                item_type='task',
+                completed_at__gt=_week_start,
+                completed_at__lte=_week_end,
+            ).count()
+            _velocity_weeks.append(_week_count)
+
     _oldest_board_time = boards.order_by('created_at').values_list('created_at', flat=True).first()
     workspace_is_new = (
-        _oldest_board_time is not None
+        # Never treat the demo as a brand-new onboarding workspace. Reset Demo
+        # re-clones the sandbox board on every reset, so its created_at is always
+        # "now" — combined with a transient completed_count==0 (the freshly cloned
+        # tasks not yet counted at the instant the post-reset dashboard renders),
+        # this heuristic misfired and swapped the demo dashboard for the onboarding
+        # "Your <goal> workspace is ready — Spectra built … 0 starter tasks" layout.
+        # That was the "different data after reset" page. The demo is pre-populated
+        # demo content, never an empty new workspace to onboard.
+        not demo_mode
+        and _oldest_board_time is not None
         and (timezone.now() - _oldest_board_time).total_seconds() < 86400
         and completed_count == 0
     )
@@ -783,9 +1262,41 @@ def dashboard(request):
                     briefing_pulse = first_line
             break
 
+    # Fallback pulse: when no mission AI summary exists, synthesise from
+    # the task statistics the dashboard already computed.
+    if not briefing_pulse and task_count > 0:
+        parts = []
+        if overdue_count:
+            parts.append(f"{overdue_count} overdue task{'s' if overdue_count != 1 else ''}")
+        if total_high_risk:
+            parts.append(f"{total_high_risk} high-risk item{'s' if total_high_risk != 1 else ''}")
+        if completion_rate >= 80:
+            parts.append(f"{completion_rate:.0f}% complete — strong progress")
+        elif completed_count:
+            parts.append(f"{completion_rate:.0f}% complete")
+        board_count = boards.count()
+        briefing_pulse = (
+            f"{task_count} tasks across {board_count} board{'s' if board_count != 1 else ''}. "
+            + (', '.join(parts) + '.' if parts else 'All on track.')
+        )
+
     # Top risk item for the Key Risk panel — the single highest-priority
-    # risk task (critical before high, earliest due date, then unassigned first)
+    # risk task (critical before high, earliest due date, then unassigned first).
+    # Falls back to the most-overdue task when there are no high/critical tasks.
     _top_risk_task = high_risk_tasks_qs.first()  # already sorted: critical→due date
+    if not _top_risk_task and overdue_count > 0:
+        _top_risk_task = (
+            Task.objects
+            .filter(
+                column__board_id__in=_board_ids,
+                item_type='task',
+                due_date__lt=timezone.now(),
+            )
+            .exclude(progress=100)
+            .select_related('column__board', 'assigned_to')
+            .order_by('due_date')
+            .first()
+        )
     briefing_top_risk = None
     if _top_risk_task:
         _tr_due = _top_risk_task.due_date
@@ -809,12 +1320,50 @@ def dashboard(request):
             _tr_due_label = "No due date"
         briefing_top_risk = {
             'task':       _top_risk_task,
-            'risk_level': _top_risk_task.risk_level,
+            'risk_level': _top_risk_task.risk_level or ('high' if _tr_days < 0 else ''),
             'due_label':  _tr_due_label,
             'due_date':   _tr_due,
             'board_name': (_top_risk_task.column.board.name
                           if _top_risk_task.column and _top_risk_task.column.board else ''),
         }
+
+    # Build list of up to 3 top risk items for the briefing panel
+    briefing_top_risks = []
+    _risk_candidates = list(high_risk_tasks_qs[:3])
+    if not _risk_candidates and overdue_count > 0:
+        _risk_candidates = list(
+            Task.objects
+            .filter(column__board_id__in=_board_ids, item_type='task', due_date__lt=timezone.now())
+            .exclude(progress=100)
+            .select_related('column__board', 'assigned_to')
+            .order_by('due_date')[:3]
+        )
+    _now_for_risks = timezone.now()
+    for _rc in _risk_candidates:
+        _rc_due = _rc.due_date
+        _rc_days = None
+        if _rc_due:
+            _rc_days = int((_rc_due - _now_for_risks).days)
+            _rc_due_local = timezone.localtime(_rc_due)
+            _rc_date_str = _rc_due_local.strftime('%b') + ' ' + str(_rc_due_local.day)
+            if _rc_days < 0:
+                _rc_due_label = f"Overdue · {_rc_date_str}"
+            elif _rc_days == 0:
+                _rc_due_label = "Due today"
+            elif _rc_days == 1:
+                _rc_due_label = "Due tomorrow"
+            else:
+                _rc_due_label = f"Due {_rc_date_str}"
+        else:
+            _rc_due_label = "No due date"
+        briefing_top_risks.append({
+            'task':       _rc,
+            'risk_level': _rc.risk_level or ('high' if _rc_days is not None and _rc_days < 0 else ''),
+            'due_label':  _rc_due_label,
+            'due_date':   _rc_due,
+            'board_name': (_rc.column.board.name if _rc.column and _rc.column.board else ''),
+        })
+
     # briefing_risk is kept for has_content check
     if overdue_count > 0 or total_high_risk > 0:
         briefing_risk = True  # sentinel — actual display uses briefing_top_risk
@@ -856,6 +1405,20 @@ def dashboard(request):
         )
         briefing_action_type = 'high_risk'
         briefing_action_tasks = list(high_risk_tasks_qs[:3])
+    elif (_stalled_all := Task.stalled_for_boards(_board_ids, tier='warning')):
+        # Nothing overdue or high-risk, but work has stopped moving. Surface the
+        # tasks past their aging warning threshold (same signal as the card badges
+        # via Task.aging_state — see kanban/models.py). Ranked after high-risk per
+        # the Focus Today integration design.
+        _stalled = _stalled_all[:3]
+        _n = len(_stalled)
+        briefing_action = (
+            f"Unblock {_n} stalled task{'s' if _n != 1 else ''} that "
+            f"{'have' if _n != 1 else 'has'} sat untouched in their column — "
+            "momentum is slipping."
+        )
+        briefing_action_type = 'stalled'
+        briefing_action_tasks = _stalled
     elif completion_rate >= 80:
         briefing_action = "Strong progress — verify final tasks are assigned before the sprint ends."
         briefing_action_type = 'progress'
@@ -863,9 +1426,14 @@ def dashboard(request):
         briefing_action = "Focus on in-progress tasks to maintain momentum toward your delivery goals."
         briefing_action_type = 'general'
 
-    # Build AI-powered action plan (falls back to rule-based if Gemini is unavailable)
+    # Build AI-powered action plan (cached per user+workspace; falls back to
+    # rule-based if Gemini is unavailable). Caching avoids a synchronous Gemini
+    # call on every dashboard load — the cache key changes when any input task
+    # is edited, so it stays fresh without pattern-based invalidation.
     _now_for_plan = timezone.now()
-    briefing_action_plan, briefing_action_summary, briefing_ai_powered = _build_action_plan(
+    _briefing_scope = f"{request.user.id}:{getattr(active_ws, 'id', '')}"
+    briefing_action_plan, briefing_action_summary, briefing_ai_powered = _build_action_plan_cached(
+        scope_id=_briefing_scope,
         tasks=briefing_action_tasks,
         action_type=briefing_action_type,
         overdue_count=overdue_count,
@@ -874,10 +1442,35 @@ def dashboard(request):
         now=_now_for_plan,
     )
 
+    # First-run briefing facts — let the new-workspace message reference the actual
+    # goal and the hierarchy Spectra just generated instead of a generic line.
+    ws_goal_name = None
+    ws_mission_count = 0
+    ws_board_count = 0
+    ws_total_tasks = 0
+    if workspace_is_new:
+        ws_mission_count = len(mission_tree)
+        ws_total_tasks = sum(mi.get('total_tasks', 0) for mi in mission_tree)
+        ws_board_count = sum(len(si.get('boards', [])) for mi in mission_tree for si in mi.get('strategies', []))
+        ws_goal_name = next((ge['goal'].name for ge in goal_tree if ge.get('goal')), None)
+
+    # Derive a categorical pulse status for the collapsed-bar pill (no such field
+    # exists on the briefing; mirror the action_type cascade using counts already
+    # in scope). 3 tiers map to the app's schedule_status vocabulary.
+    if overdue_count > 0:
+        briefing_pulse_status = 'off_track'
+    elif total_high_risk > 0:
+        briefing_pulse_status = 'at_risk'
+    else:
+        briefing_pulse_status = 'on_track'
+
     daily_briefing = {
         'pulse':          briefing_pulse,
+        'pulse_status':   briefing_pulse_status,
         'risk':           briefing_risk,
+        'risk_count':     len(briefing_top_risks),
         'top_risk':       briefing_top_risk,
+        'top_risks':      briefing_top_risks,
         'action':         briefing_action,
         'action_type':    briefing_action_type,
         'action_tasks':   briefing_action_tasks,
@@ -885,6 +1478,10 @@ def dashboard(request):
         'action_summary': briefing_action_summary,
         'ai_powered':     briefing_ai_powered,
         'workspace_is_new': workspace_is_new,
+        'ws_goal_name':   ws_goal_name,
+        'ws_mission_count': ws_mission_count,
+        'ws_board_count': ws_board_count,
+        'ws_total_tasks': ws_total_tasks,
         'has_content':    bool(briefing_pulse or briefing_risk or briefing_action or workspace_is_new),
     }
 
@@ -895,6 +1492,7 @@ def dashboard(request):
         'boards':       chart_boards,
         'spi_cpi':      spi_cpi_data,
         'risk_heatmap': risk_heatmap_data,
+        'velocity_weeks': _velocity_weeks,
     }
 
     # Pre-Mortem risk levels: latest analysis per board (single query)
@@ -922,7 +1520,14 @@ def dashboard(request):
                 premortem_risk_map[bid] = level
 
     # Standalone boards: user-accessible boards not linked to any strategy
-    standalone_boards = boards.filter(strategy__isnull=True).order_by('name')
+    # In demo mode, exclude sandbox copies — they appear via the mission tree
+    # through the template→sandbox mapping, not as standalone.
+    # Owned boards only — shared cross-workspace boards belong to the "Shared with
+    # me" section, not this workspace's strategic hierarchy.
+    _standalone_qs = owned_boards.filter(strategy__isnull=True)
+    if demo_mode:
+        _standalone_qs = _standalone_qs.exclude(cloned_from__isnull=False)
+    standalone_boards = _standalone_qs.order_by('name')
 
     # Flat list of accessible strategies for the "Link to Strategy" dropdown on standalone boards
     # Query directly using mission IDs already in mission_tree for reliability
@@ -946,11 +1551,141 @@ def dashboard(request):
     else:
         all_strategies = []
 
+    # Flat counts for the Hierarchy Navigator tabs
+    goal_count = sum(1 for ge in goal_tree if ge['goal'] is not None)
+    strategy_count = sum(mi['strategy_count'] for mi in mission_tree)
+    hierarchy_board_count = sum(
+        len(bi)
+        for mi in mission_tree
+        for si in mi['strategies']
+        for bi in [si['boards']]
+    ) + standalone_boards.count()
+
+    # RBAC: can this user create goals? (for Hierarchy Navigator empty-state buttons)
+    from kanban.permissions import can_user_create_goals
+    _can_create_goal = can_user_create_goals(request.user, request)
+
     # One-time onboarding banner (tasks are unassigned after AI workspace generation)
     show_assign_banner = request.session.pop('show_onboarding_assign_banner', False)
 
+    # ── Decision Center badge counts (server-side to avoid flash) ───
+    _dc_effective_demo = demo_mode or '_demo' in request.user.username
+    _dc_cache_key = f"dc_widget_{request.user.id}_{'demo' if _dc_effective_demo else 'real'}"
+    _dc_cached = cache.get(_dc_cache_key)
+    _dc_settings, _ = DecisionCenterSettings.objects.get_or_create(user=request.user)
+    # Wake any of this user's snoozed items whose timer has expired so they
+    # reappear in the Focus Today widget immediately — mirrors the full
+    # Decision Center page (decision_center_view) and the morning collection
+    # task, which otherwise would be the only places a snooze un-hides.
+    _woke = DecisionItem.objects.filter(
+        created_for=request.user, status='snoozed',
+        snoozed_until__lte=timezone.now(),
+    ).update(status='pending', snoozed_until=None)
+    if _woke:
+        cache.delete(_dc_cache_key)
+        _dc_cached = None
+    _dc_pending = (
+        DecisionItem.objects.filter(
+            created_for=request.user, status='pending', board__in=boards,
+        ) | DecisionItem.objects.filter(
+            created_for=request.user, status='pending', board__isnull=True,
+        )
+    ).distinct()
+    if _dc_cached:
+        dc_action_count = _dc_cached.get('action_required_count', 0)
+        dc_awareness_count = _dc_cached.get('awareness_count', 0)
+        dc_quickwin_count = _dc_cached.get('quick_win_count', 0)
+    else:
+        dc_action_count = _dc_pending.filter(priority_level='action_required').count()
+        dc_awareness_count = (
+            _dc_pending.filter(priority_level='awareness').count()
+            if _dc_settings.show_awareness_items else 0
+        )
+        dc_quickwin_count = (
+            _dc_pending.filter(priority_level='quick_win').count()
+            if _dc_settings.show_quick_wins else 0
+        )
+    dc_total_count = dc_action_count + dc_awareness_count + dc_quickwin_count
+
+    # ── Unified "Focus Today" widget: top 3 decision items + editorial headline ──
+    # Body rows are the real mixed queue (overdue / conflict / quick win); the
+    # full /decision-center/ page is the expanded version of this same content.
+    _dc_allowed_levels = ['action_required']
+    if _dc_settings.show_awareness_items:
+        _dc_allowed_levels.append('awareness')
+    if _dc_settings.show_quick_wins:
+        _dc_allowed_levels.append('quick_win')
+    dc_top_items = list(
+        _dc_pending
+        .filter(priority_level__in=_dc_allowed_levels)
+        .select_related('board')
+        .order_by('priority_level', '-created_at')[:3]  # action_required sorts first
+    )
+
+    # Per-item deep link (to the feature's own page, not just the board) + a short,
+    # human-friendly badge label. Attached as plain attributes for the template.
+    _DC_SHORT_LABELS = {
+        'conflict': 'Conflict',
+        'premortem_risk': 'High Risk',
+        'overdue_task': 'Overdue',
+        'overallocated': 'Overallocated',
+        'scope_change': 'Scope Change',
+        'deadline_approaching': 'Deadline',
+        'budget_threshold': 'Budget',
+        'unassigned_task': 'Unassigned',
+        'stale_task': 'Stale',
+        'memory_captured': 'Memory',
+    }
+
+    def _dc_item_url(_item):
+        try:
+            if _item.item_type == 'conflict' and _item.source_object_id:
+                return reverse('conflict_detail', args=[_item.source_object_id])
+            if _item.item_type == 'conflict':
+                return reverse('conflict_dashboard')
+            if _item.item_type == 'premortem_risk' and _item.board_id:
+                return reverse('premortem_dashboard', args=[_item.board_id])
+            if _item.board_id:
+                return reverse('board_detail', args=[_item.board_id])
+        except Exception:
+            pass
+        return reverse('decision_center:decision_center')
+
+    for _item in dc_top_items:
+        _item.widget_url = _dc_item_url(_item)
+        _item.widget_label = _DC_SHORT_LABELS.get(_item.item_type, _item.get_item_type_display())
+
+    # Editorial headline = today's Decision Center briefing (Gemini); fall back to
+    # pulse. Scoped to the active workspace mode so the demo briefing never leaks
+    # into the real workspace (and vice-versa).
+    dc_headline = (
+        DecisionCenterBriefing.objects
+        .filter(
+            user=request.user,
+            generated_at__date=timezone.localdate(),
+            is_demo=_dc_effective_demo,
+        )
+        .values_list('headline', flat=True).first()
+    ) or briefing_pulse
+
+    # Demo welcome panel: pass the user's primary sandbox board for links
+    demo_board = None
+    if demo_mode:
+        demo_board = Board.objects.filter(
+            owner=request.user, is_sandbox_copy=True
+        ).order_by('-created_at').first()
+        if not demo_board:
+            # No sandbox active — use the official demo board
+            demo_board = Board.objects.filter(
+                is_official_demo_board=True
+            ).first()
+
     return render(request, 'kanban/dashboard.html', {
         'boards': boards,
+        'owned_boards': owned_boards,
+        'shared_boards': shared_boards,
+        'my_board_roles': my_board_roles,
+        'shared_board_member_counts': shared_board_member_counts,
         'task_count': task_count,
         'completed_count': completed_count,
         'completion_rate': round(completion_rate, 1),
@@ -967,6 +1702,7 @@ def dashboard(request):
             'now': timezone.now(),  # For comparing dates in the template
         # Demo mode / onboarding v2
         'demo_mode': demo_mode,
+        'demo_board': demo_board,
         'onboarding_profile': profile,
         # Mission tree  
         'mission_tree': mission_tree,
@@ -974,6 +1710,11 @@ def dashboard(request):
         'standalone_boards': standalone_boards,
         'all_strategies': all_strategies,
         'mission_count': len(mission_tree),
+        'goal_count': goal_count,
+        'strategy_count': strategy_count,
+        'hierarchy_board_count': hierarchy_board_count,
+        # RBAC: goal creation permission for Hierarchy Navigator
+        'can_create_goal': _can_create_goal,
         'chart_data': chart_data,  # Raw dict for json_script filter
         'chart_missions': chart_missions,
         'chart_strategies': chart_strategies,
@@ -984,24 +1725,414 @@ def dashboard(request):
         'spi_cpi_data':      spi_cpi_data,
         'risk_heatmap_data': risk_heatmap_data,
         'scope_creep_data':  scope_creep_data,
+        'board_health_map':  board_health_map,
         'has_schedule_data': has_schedule_data,
         'has_time_log_data': has_time_log_data,
         'has_velocity_data': has_velocity_data,
         'daily_briefing':    daily_briefing,
         'premortem_risk_map': premortem_risk_map,
         'show_assign_banner': show_assign_banner,
+        'dc_action_count': dc_action_count,
+        'dc_awareness_count': dc_awareness_count,
+        'dc_quickwin_count': dc_quickwin_count,
+        'dc_total_count': dc_total_count,
+        'dc_top_items': dc_top_items,
+        'dc_headline': dc_headline,
+        # PrizmDiscovery widget counts (only if feature is enabled)
+        **_get_discovery_widget_counts(request.user),
         })
 
 
 @login_required
 def toggle_demo_mode(request):
-    """POST /toggle-demo-mode/ — flip the demo viewing mode and redirect to dashboard."""
+    """POST /toggle-demo-mode/ — enter or leave demo mode.
+
+    Entering demo:
+      - If user already has a sandbox → re-enter: join demo org,
+        reassign tasks, flip is_viewing_demo on.
+      - Otherwise → kick off async provisioning via Celery and return JSON
+        with a task_id so the frontend can stream progress via WebSocket.
+    Leaving demo:
+      - Restore demo task assignments, leave demo org, flip is_viewing_demo off.
+        Sandbox boards are NOT deleted — the sandbox persists so the
+        user can re-enter any time.
+    """
     if request.method != 'POST':
         return redirect('dashboard')
+
     profile = request.user.profile
-    profile.is_viewing_demo = not profile.is_viewing_demo
-    profile.save(update_fields=['is_viewing_demo'])
+    from kanban.models import DemoSandbox
+    from kanban.sandbox_views import (
+        _join_demo_org, _leave_demo_org,
+        _reassign_demo_tasks_to_user, _restore_demo_task_assignments,
+        _remap_demo_time_entries_to_owner, _clone_calendar_events_for_user,
+        _clone_custom_fields_for_user,
+    )
+
+    if not profile.is_viewing_demo:
+        # ── Entering demo ──────────────────────────────────────────
+
+        # Resolve demo workspace from the demo org directly — do NOT
+        # use profile.organization which may be the user's real org.
+        from kanban.models import Workspace
+        from kanban.utils.demo_protection import get_demo_workspace
+        demo_ws = get_demo_workspace()
+
+        # Ensure the dashboard onboarding guard won't redirect away.
+        # Users who joined via board invitation have status='pending'
+        # and no goals, which would send them to /onboarding/ instead
+        # of showing the sandbox.  'demo_exploring' is an allowed
+        # pass-through status for the dashboard guard.
+        _update_onboarding = profile.onboarding_status in ('pending',)
+
+        # Check for existing sandbox (persistent — no expiry check)
+        try:
+            existing = request.user.demo_sandbox
+            # Re-enter existing sandbox instantly
+            _join_demo_org(request.user)
+            _reassign_demo_tasks_to_user(existing, request.user)
+            _remap_demo_time_entries_to_owner(request.user)
+            _clone_calendar_events_for_user(request.user)
+            # Self-heal custom fields for sandboxes provisioned before per-user
+            # custom-field isolation (idempotent — clears + re-clones).
+            try:
+                _clone_custom_fields_for_user(request.user)
+            except Exception:
+                pass
+            from kanban.tasks.sandbox_provisioning import touch_sandbox_access
+            touch_sandbox_access(request.user)
+            from kanban.sandbox_views import sync_persona_memberships_to_owner
+            sync_persona_memberships_to_owner(request.user)
+            profile.is_viewing_demo = True
+            profile.active_workspace = demo_ws
+            fields = ['is_viewing_demo', 'active_workspace']
+            if _update_onboarding:
+                profile.onboarding_status = 'demo_exploring'
+                fields.append('onboarding_status')
+            profile.save(update_fields=fields)
+            return redirect('dashboard')
+        except DemoSandbox.DoesNotExist:
+            pass
+
+        # Demo persona accounts (priya/marcus/elena etc.) are shared
+        # guest-only test logins — never provision an independent sandbox
+        # for them (see is_demo_persona() docstring /
+        # [[project_persona_membership_bleed]]). Just flip is_viewing_demo so
+        # they browse the official template / their existing guest boards.
+        from kanban.utils.demo_protection import is_demo_persona
+        if is_demo_persona(request.user):
+            profile.is_viewing_demo = True
+            profile.active_workspace = demo_ws
+            fields = ['is_viewing_demo', 'active_workspace']
+            if _update_onboarding:
+                profile.onboarding_status = 'demo_exploring'
+                fields.append('onboarding_status')
+            profile.save(update_fields=fields)
+            return redirect('dashboard')
+
+        # No sandbox yet — provision asynchronously (or sync fallback)
+        from kanban.tasks.sandbox_provisioning import provision_sandbox_task
+        try:
+            result = provision_sandbox_task.delay(request.user.id)
+        except Exception:
+            # Redis/Celery unavailable — provision synchronously
+            provision_sandbox_task(request.user.id)
+            profile.is_viewing_demo = True
+            profile.active_workspace = demo_ws
+            fields = ['is_viewing_demo', 'active_workspace']
+            if _update_onboarding:
+                profile.onboarding_status = 'demo_exploring'
+                fields.append('onboarding_status')
+            profile.save(update_fields=fields)
+            return redirect('dashboard')
+
+        # If this is an AJAX request, return JSON for WebSocket streaming
+        is_ajax = (
+            request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or request.content_type == 'application/json'
+        )
+        if is_ajax:
+            return JsonResponse({
+                'status': 'provisioning',
+                'task_id': result.id,
+            })
+
+        # Fallback for non-JS: redirect to dashboard (Celery will finish in background)
+        profile.is_viewing_demo = True
+        profile.active_workspace = demo_ws
+        fields = ['is_viewing_demo', 'active_workspace']
+        if _update_onboarding:
+            profile.onboarding_status = 'demo_exploring'
+            fields.append('onboarding_status')
+        profile.save(update_fields=fields)
+        return redirect('dashboard')
+    else:
+        # ── Leaving demo ───────────────────────────────────────────
+        try:
+            sandbox = request.user.demo_sandbox
+            _restore_demo_task_assignments(sandbox)
+        except DemoSandbox.DoesNotExist:
+            pass
+        _leave_demo_org(request.user)
+
+        # Re-read profile after _leave_demo_org restored the real org
+        profile.refresh_from_db()
+
+        # Resolve the user's default real workspace
+        from kanban.models import Workspace
+        real_ws = None
+        if profile.organization:
+            real_ws = Workspace.objects.filter(
+                organization=profile.organization,
+                is_demo=False, is_active=True,
+            ).order_by('-created_at').first()
+
+        profile.is_viewing_demo = False
+        profile.active_workspace = real_ws
+        profile.save(update_fields=['is_viewing_demo', 'active_workspace'])
+        return redirect('dashboard')
+
+
+@login_required
+@require_POST
+def rename_workspace(request):
+    """POST /rename-workspace/ — rename the user's active workspace.
+
+    Only the org creator can rename workspaces.  Demo workspaces cannot
+    be renamed.  Accepts ``name`` in POST body.  Returns JSON for AJAX
+    callers or redirects for regular form submissions.
+    """
+    from kanban.models import Workspace
+
+    profile = request.user.profile
+    ws = getattr(profile, 'active_workspace', None)
+    if not ws or ws.is_demo:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Cannot rename this workspace'}, status=400)
+        return redirect('dashboard')
+
+    # Only the workspace owner can rename it
+    if ws.created_by_id != request.user.id:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Only the workspace owner can rename it'}, status=403)
+        return redirect('dashboard')
+
+    import re
+    new_name = request.POST.get('name', '').strip()
+    # Sanitize: allow letters, numbers, spaces, hyphens, apostrophes
+    new_name = re.sub(r'[^\w\s\-\']', '', new_name)[:60]
+    if not new_name:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Name cannot be empty'}, status=400)
+        return redirect('dashboard')
+
+    ws.name = new_name
+    ws.save(update_fields=['name'])
+
+    # Keep organization name in sync
+    if ws.organization:
+        ws.organization.name = new_name[:100]
+        ws.organization.save(update_fields=['name'])
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'name': ws.name})
     return redirect('dashboard')
+
+
+@login_required
+@require_POST
+def delete_workspace(request):
+    """POST /delete-workspace/ — soft-delete a workspace.
+
+    Only the workspace owner (creator) can delete it.  The currently active
+    workspace cannot be deleted — the user must switch to another first,
+    unless it's the only real workspace (then we just redirect to
+    onboarding).  Demo workspaces cannot be deleted this way.
+
+    Accepts ``workspace_id`` in POST body.
+    """
+    from kanban.models import Workspace
+
+    workspace_id = request.POST.get('workspace_id')
+    if not workspace_id:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Missing workspace_id'}, status=400)
+        return redirect('dashboard')
+
+    profile = request.user.profile
+
+    try:
+        ws = Workspace.objects.get(pk=workspace_id, is_active=True)
+    except Workspace.DoesNotExist:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Workspace not found'}, status=404)
+        return redirect('dashboard')
+
+    # Cannot delete demo workspace
+    if ws.is_demo:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Cannot delete demo workspace'}, status=400)
+        return redirect('dashboard')
+
+    # Security: workspaces are private to their owner — only the owner may delete.
+    if ws.created_by_id != request.user.id:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        from django.contrib import messages
+        messages.error(request, 'Only the workspace owner can delete this workspace.')
+        return redirect('dashboard')
+
+    # Soft-delete the workspace
+    ws.is_active = False
+    ws.save(update_fields=['is_active'])
+
+    from django.contrib import messages
+    messages.success(request, f'Workspace "{ws.name}" has been deleted.')
+
+    # If the deleted workspace was the active one, switch to another the user owns
+    if profile.active_workspace_id == ws.pk:
+        next_ws = Workspace.objects.filter(
+            created_by=request.user,
+            is_active=True,
+            is_demo=False,
+        ).order_by('-created_at').first()
+        if next_ws:
+            profile.active_workspace = next_ws
+            profile.save(update_fields=['active_workspace'])
+        else:
+            # No workspaces left — clear active and redirect to onboarding
+            profile.active_workspace = None
+            profile.save(update_fields=['active_workspace'])
+            return redirect('onboarding_welcome')
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True})
+    return redirect('dashboard')
+
+
+@login_required
+@require_POST
+def switch_workspace(request):
+    """POST /switch-workspace/ — switch the user's active workspace.
+
+    Accepts ``workspace_id`` in POST data.  Updates both
+    ``profile.active_workspace`` and ``profile.is_viewing_demo`` for
+    backwards compatibility with all existing views.
+
+    If the target workspace is the demo workspace, enters demo mode
+    (provisions sandbox if needed).  If switching away from demo,
+    leaves demo mode properly.
+    """
+    from kanban.models import Workspace, DemoSandbox
+    from kanban.sandbox_views import (
+        _join_demo_org, _leave_demo_org,
+        _reassign_demo_tasks_to_user, _restore_demo_task_assignments,
+        _remap_demo_time_entries_to_owner, _clone_calendar_events_for_user,
+        _clone_custom_fields_for_user,
+    )
+
+    workspace_id = request.POST.get('workspace_id')
+    if not workspace_id:
+        return redirect('dashboard')
+
+    profile = request.user.profile
+
+    try:
+        target_ws = Workspace.objects.get(
+            pk=workspace_id,
+            is_active=True,
+        )
+    except Workspace.DoesNotExist:
+        return redirect('dashboard')
+
+    # Security check: workspaces are private to their owner.  A user may only
+    # switch into a workspace they own, or the shared demo workspace.
+    if not target_ws.is_demo and target_ws.created_by_id != request.user.id:
+        return redirect('dashboard')
+
+    was_demo = profile.is_viewing_demo
+
+    if target_ws.is_demo:
+        # Entering demo workspace — same logic as toggle_demo_mode
+        if not was_demo:
+            _update_onboarding = profile.onboarding_status in ('pending',)
+            try:
+                existing = request.user.demo_sandbox
+                _join_demo_org(request.user)
+                _reassign_demo_tasks_to_user(existing, request.user)
+                _remap_demo_time_entries_to_owner(request.user)
+                _clone_calendar_events_for_user(request.user)
+                try:
+                    _clone_custom_fields_for_user(request.user)
+                except Exception:
+                    pass
+                from kanban.tasks.sandbox_provisioning import touch_sandbox_access
+                touch_sandbox_access(request.user)
+                from kanban.sandbox_views import sync_persona_memberships_to_owner
+                sync_persona_memberships_to_owner(request.user)
+            except DemoSandbox.DoesNotExist:
+                from kanban.tasks.sandbox_provisioning import provision_sandbox_task
+                try:
+                    provision_sandbox_task(request.user.id)
+                except Exception:
+                    pass
+
+            profile.is_viewing_demo = True
+            profile.active_workspace = target_ws
+            fields = ['is_viewing_demo', 'active_workspace']
+            if _update_onboarding:
+                profile.onboarding_status = 'demo_exploring'
+                fields.append('onboarding_status')
+            profile.save(update_fields=fields)
+        else:
+            # Already in demo — just update active_workspace
+            profile.active_workspace = target_ws
+            profile.save(update_fields=['active_workspace'])
+    else:
+        # Switching to a real workspace
+        if was_demo:
+            try:
+                sandbox = request.user.demo_sandbox
+                _restore_demo_task_assignments(sandbox)
+            except DemoSandbox.DoesNotExist:
+                pass
+            _leave_demo_org(request.user)
+            profile.refresh_from_db()
+
+        profile.is_viewing_demo = False
+        profile.active_workspace = target_ws
+        profile.save(update_fields=['is_viewing_demo', 'active_workspace'])
+
+    return redirect('dashboard')
+
+
+@login_required
+def workspace_selection(request):
+    """GET /workspace-selection/ — Jira-style workspace picker shown when
+    a user has multiple real workspaces."""
+    from kanban.models import Workspace
+    from kanban.utils.demo_protection import get_demo_workspace
+
+    profile = request.user.profile
+
+    # Workspaces are private to their owner — only list the user's own.
+    real_workspaces = list(
+        Workspace.objects.filter(
+            created_by=request.user, is_active=True, is_demo=False,
+        ).order_by('-updated_at')
+    )
+
+    # If 0 or 1 real workspaces, no need for selection — go to dashboard
+    if len(real_workspaces) <= 1:
+        return redirect('dashboard')
+
+    demo_ws = get_demo_workspace()
+
+    return render(request, 'kanban/workspace_selection.html', {
+        'real_workspaces': real_workspaces,
+        'demo_workspace': demo_ws,
+        'active_workspace': profile.active_workspace,
+    })
 
 
 @login_required
@@ -1019,31 +2150,131 @@ def board_list(request):
     
     # Get boards respecting the user's onboarding choice (mirrors dashboard logic)
     demo_mode = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(request, 'workspace', None)
 
     if demo_mode:
-        # Demo mode: show official demo boards + boards created via Spectra
+        # Single-tier demo: show user's sandbox copies + boards created
+        # manually in demo mode (but NOT imported boards — those belong
+        # in My Workspace).
+        # IMPORTANT: scope user_created_boards to demo workspace to prevent
+        # real workspace boards from leaking into the demo view.
+        sandbox_boards = Board.objects.filter(
+            owner=request.user,
+            is_sandbox_copy=True,
+        )
+        from accounts.models import Organization as _Org
+        from kanban.models import Workspace
+        _demo_org = _Org.objects.filter(is_demo=True).first()
+        _demo_ws = None
+        if _demo_org:
+            _demo_ws = Workspace.objects.filter(
+                organization=_demo_org, is_demo=True, is_active=True,
+            ).first()
+        if _demo_ws:
+            user_created_boards = Board.objects.filter(
+                created_by=request.user,
+                is_sandbox_copy=False,
+                is_official_demo_board=False,
+                is_imported=False,
+                workspace=_demo_ws,
+            )
+        else:
+            user_created_boards = Board.objects.none()
+        boards = (sandbox_boards | user_created_boards).distinct()
+    elif active_ws and not active_ws.is_demo:
+        # Workspace boards, plus boards shared *to* the user as a non-owner
+        # member/viewer (owned boards stay workspace-scoped).
         boards = Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{request.user.id}')
+            Q(workspace=active_ws)
+            | Q(memberships__user=request.user,
+                memberships__role__in=['member', 'viewer']),
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
+        ).exclude(
+            # Hide boards in soft-deleted (inactive) workspaces (see get_user_boards).
+            Q(workspace__isnull=False) & Q(workspace__is_active=False)
         ).distinct()
     elif profile.onboarding_version >= 2:
-        # v2 onboarding (AI-generated or scratch) — never show demo boards
+        # v2 onboarding (AI-generated or scratch) — never show demo or sandbox boards
         boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user),
-            is_official_demo_board=False
+            Q(created_by=request.user) | Q(memberships__user=request.user),
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
+        ).exclude(
+            Q(workspace__isnull=False) & Q(workspace__is_active=False)
         ).distinct()
     else:
-        # v1 legacy — demo + user boards mixed
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user)
-        )
-        boards = (demo_boards | user_boards).distinct()
+        # v1 legacy — use centralized helper for safe filtering
+        from kanban.utils.demo_protection import get_user_boards as _get_user_boards
+        boards = _get_user_boards(request.user)
 
-    # Compute summary metrics across all accessible boards
-    task_count = Task.objects.filter(column__board__in=boards, item_type='task').count()
+    # Annotate task counts so the template can display them efficiently.
+    # ``distinct=True`` avoids the membership-join fan-out (see dashboard view).
+    boards = boards.annotate(
+        task_count=Count(
+            'columns__tasks',
+            filter=Q(columns__tasks__item_type='task'),
+            distinct=True,
+        ),
+        done_task_count=Count(
+            'columns__tasks',
+            filter=Q(columns__tasks__item_type='task', columns__tasks__progress=100),
+            distinct=True,
+        ),
+    )
+
+    # Prefetch member avatars for the board cards (batched, avoids N+1).
+    from django.db.models import Prefetch
+    from kanban.models import BoardMembership as _BoardMembership
+    boards = boards.prefetch_related(
+        Prefetch(
+            'memberships',
+            queryset=_BoardMembership.objects.select_related('user__profile').order_by('-added_at'),
+            to_attr='member_list',
+        )
+    )
+
+    # Own vs shared partition (mirrors the dashboard). Owned = created/owned by
+    # the user or in the active workspace; everything else is shared *to* them.
+    _active_ws_id = getattr(active_ws, 'id', None)
+    _owned_q = Q(created_by=request.user) | Q(owner=request.user)
+    if _active_ws_id:
+        _owned_q |= Q(workspace_id=_active_ws_id)
+    if demo_mode:
+        owned_boards = boards
+        shared_boards = boards.none()
+    else:
+        owned_boards = boards.filter(_owned_q)
+        shared_boards = boards.exclude(_owned_q)
+    owned_board_ids = list(owned_boards.values_list('id', flat=True))
+
+    shared_boards = shared_boards.select_related('created_by')
+    _shared_board_ids = list(shared_boards.values_list('id', flat=True))
+    my_board_roles = {}
+    shared_board_member_counts = {}
+    if _shared_board_ids:
+        from kanban.models import BoardMembership
+        my_board_roles = {
+            m.board_id: m.role
+            for m in BoardMembership.objects.filter(
+                user=request.user, board_id__in=_shared_board_ids,
+            )
+        }
+        shared_board_member_counts = {
+            row['board_id']: row['c']
+            for row in BoardMembership.objects
+            .filter(board_id__in=_shared_board_ids)
+            .values('board_id')
+            .annotate(c=Count('id'))
+        }
+
+    # Compute summary metrics — scoped to OWNED boards (the active-workspace
+    # snapshot), so the cards match the "Your Boards" grid below.
+    task_count = Task.objects.filter(column__board_id__in=owned_board_ids, item_type='task').count()
     completed_count = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         item_type='task',
         progress=100
     ).count()
@@ -1053,13 +2284,13 @@ def board_list(request):
     remaining_tasks = task_count - completed_count
 
     due_soon = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         item_type='task',
         due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
     ).exclude(progress=100).count()
 
     overdue_count = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         item_type='task',
         due_date__lt=timezone.now()
     ).exclude(progress=100).count()
@@ -1068,7 +2299,7 @@ def board_list(request):
 
     # All Tasks modal data
     all_tasks_list = Task.objects.filter(
-        column__board__in=boards, item_type='task'
+        column__board_id__in=owned_board_ids, item_type='task'
     ).select_related('column', 'assigned_to', 'column__board').order_by('-created_at')
     all_tasks_page = request.GET.get('all_tasks_page', 1)
     all_tasks_paginator = Paginator(all_tasks_list, items_per_page)
@@ -1081,7 +2312,7 @@ def board_list(request):
 
     # Completed Tasks modal data
     completed_tasks_list = Task.objects.filter(
-        column__board__in=boards, item_type='task', progress=100
+        column__board_id__in=owned_board_ids, item_type='task', progress=100
     ).select_related('column', 'assigned_to', 'column__board').order_by('-updated_at')
     completed_tasks_page = request.GET.get('completed_tasks_page', 1)
     completed_tasks_paginator = Paginator(completed_tasks_list, items_per_page)
@@ -1094,7 +2325,7 @@ def board_list(request):
 
     # Overdue Tasks modal data
     overdue_tasks_list = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         due_date__lt=timezone.now()
     ).exclude(progress=100).select_related('column', 'assigned_to', 'column__board').order_by('due_date')
     overdue_tasks_page = request.GET.get('overdue_tasks_page', 1)
@@ -1108,7 +2339,7 @@ def board_list(request):
 
     # Due Soon Tasks modal data
     due_soon_tasks_list = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
     ).exclude(progress=100).select_related('column', 'assigned_to', 'column__board').order_by('due_date')
     due_soon_tasks_page = request.GET.get('due_soon_tasks_page', 1)
@@ -1120,12 +2351,14 @@ def board_list(request):
     except EmptyPage:
         due_soon_tasks = due_soon_tasks_paginator.page(due_soon_tasks_paginator.num_pages)
 
-    # For board_list, we only display boards, creation is handled by create_board view
-    form = BoardForm()
-
+    # For board_list, we only display boards; creation is handled by the
+    # create_board view/page (the legacy create-board modal was removed).
     return render(request, 'kanban/board_list.html', {
         'boards': boards,
-        'form': form,
+        'owned_boards': owned_boards,
+        'shared_boards': shared_boards,
+        'my_board_roles': my_board_roles,
+        'shared_board_member_counts': shared_board_member_counts,
         'task_count': task_count,
         'completed_count': completed_count,
         'completion_rate': completion_rate,
@@ -1139,6 +2372,7 @@ def board_list(request):
     })
 
 @login_required
+@demo_write_guard
 def create_board(request):
     from kanban.audit_utils import log_model_change
     from kanban.permission_utils import assign_default_role_to_user
@@ -1162,14 +2396,52 @@ def create_board(request):
     strategy_id = request.GET.get('strategy_id') or request.POST.get('strategy_id')
     selected_strategy = None
     if strategy_id:
+        from kanban.utils.demo_protection import get_user_strategies
         try:
-            selected_strategy = KanbanStrategy.objects.get(id=strategy_id)
-        except KanbanStrategy.DoesNotExist:
+            # Scope to the user's accessible strategies so a crafted strategy_id
+            # cannot link a board to a strategy outside the current workspace/demo.
+            selected_strategy = get_user_strategies(request.user).get(id=strategy_id)
+        except (KanbanStrategy.DoesNotExist, ValueError):
             selected_strategy = None
+
+    # All strategies for the optional "Link to Strategy" dropdown (only when no
+    # strategy pre-selected). Computed up-front so the duplicate-name warning
+    # branch below can re-render the form without recomputing.
+    all_strategies = []
+    if not selected_strategy:
+        from kanban.utils.demo_protection import get_user_strategies
+        all_strategies = list(
+            get_user_strategies(request.user)
+            .select_related('mission')
+            .order_by('mission__name', 'name')
+            .values('id', 'name', 'mission__name', 'mission_id')
+        )
+
+    active_workspace = getattr(request, 'workspace', None)
 
     if request.method == 'POST':
         form = BoardForm(request.POST)
         if form.is_valid():
+            # Soft duplicate-title guard: if this user already owns a board with
+            # the same name in the same workspace, warn once and let them confirm.
+            # This prevents accidental dupes (which double-count tasks and pollute
+            # cross-board features like Déjà Vu) without hard-blocking legitimately
+            # similar names. Bypassed when the user re-submits with confirm_duplicate.
+            new_name = form.cleaned_data.get('name', '')
+            if request.POST.get('confirm_duplicate') != '1':
+                dup_qs = Board.objects.filter(
+                    owner=request.user, name__iexact=new_name,
+                )
+                if active_workspace is not None:
+                    dup_qs = dup_qs.filter(workspace=active_workspace)
+                if dup_qs.exists():
+                    return render(request, 'kanban/create_board.html', {
+                        'form': form,
+                        'selected_strategy': selected_strategy,
+                        'all_strategies': all_strategies,
+                        'duplicate_warning_name': new_name,
+                    })
+
             board = form.save(commit=False)
             # MVP Mode: organization can be None
             board.organization = organization
@@ -1179,28 +2451,39 @@ def create_board(request):
             if selected_strategy:
                 board.strategy = selected_strategy
 
+            # Tag boards created during sandbox mode so they get cleaned up
+            demo_mode = getattr(profile, 'is_viewing_demo', False)
+            if demo_mode:
+                board.is_sandbox_copy = True
+
+            # Assign to the active workspace
+            if hasattr(request, 'workspace') and request.workspace:
+                board.workspace = request.workspace
+
             board.save()
-            board.members.add(request.user)
+            board.owner = request.user
+            board.save(update_fields=['owner'])
+
+            # Create RBAC membership for the creator as Owner
+            from kanban.models import BoardMembership
+            BoardMembership.objects.get_or_create(
+                board=board, user=request.user,
+                defaults={'role': 'owner', 'added_by': request.user}
+            )
+
+            # Auto-add demo personas when creating a board in demo/sandbox mode
+            if demo_mode:
+                demo_usernames = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
+                for demo_user in User.objects.filter(username__in=demo_usernames):
+                    BoardMembership.objects.get_or_create(
+                        board=board, user=demo_user,
+                        defaults={'role': 'member'},
+                    )
             
-            # Assign creator as Admin in RBAC system (if organization exists)
-            if organization:
-                try:
-                    from kanban.permission_models import Role, BoardMembership
-                    admin_role = Role.objects.filter(
-                        organization=organization,
-                        name='Admin'
-                    ).first()
-                    if admin_role:
-                        BoardMembership.objects.create(
-                            board=board,
-                            user=request.user,
-                            role=admin_role,
-                            added_by=request.user
-                        )
-                except Exception as e:
-                    # Continue even if RBAC setup fails
-                    pass
-            
+            # Auto-add workspace members to the new board
+            from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+            auto_add_workspace_members_to_board(board)
+
             # Log board creation
             log_model_change('board.created', board, request.user, request)
               # Check if there are recommended columns to create
@@ -1208,21 +2491,13 @@ def create_board(request):
             if recommended_columns_json:
                 try:
                     recommended_columns = json.loads(recommended_columns_json)
-                    
-                    # Safety check: Ensure first column is "To Do" (required for Add Task button)
-                    if recommended_columns and recommended_columns[0]['name'] != 'To Do':
-                        # Prepend "To Do" if it's missing
-                        has_todo = any(col['name'].lower() in ['to do', 'todo'] for col in recommended_columns)
-                        if not has_todo:
-                            recommended_columns.insert(0, {
-                                'name': 'To Do',
-                                'description': 'Tasks to be started',
-                                'position': 0
-                            })
-                            # Adjust positions for other columns
-                            for i, col in enumerate(recommended_columns[1:], start=1):
-                                col['position'] = i
-                    
+
+                    # Safety backstop: the recommender frames columns as
+                    # Backlog/To Do ... Done, but defensively re-frame here in case
+                    # an older or hand-edited payload is posted.
+                    from kanban.utils.ai_utils import _frame_recommended_columns
+                    recommended_columns = _frame_recommended_columns(recommended_columns)
+
                     # Create the recommended columns
                     for i, column_data in enumerate(recommended_columns):
                         Column.objects.create(
@@ -1245,6 +2520,13 @@ def create_board(request):
                     Column.objects.create(name=name, board=board, position=i)
                 messages.success(request, f'Board "{board.name}" created successfully!')
 
+            # Auto-classify board project type in background
+            try:
+                from kanban.tasks.ai_summary_tasks import classify_board_on_creation
+                classify_board_on_creation.delay(board.id)
+            except Exception:
+                pass  # Celery/Redis may be unavailable in dev
+
             # Redirect back to strategy if we came from one
             if selected_strategy:
                 return redirect('strategy_detail',
@@ -1253,10 +2535,11 @@ def create_board(request):
             return redirect('board_detail', board_id=board.id)
     else:
         form = BoardForm()
-    
+
     return render(request, 'kanban/create_board.html', {
         'form': form,
         'selected_strategy': selected_strategy,
+        'all_strategies': all_strategies,
     })
 
 @login_required
@@ -1266,12 +2549,31 @@ def board_detail(request, board_id):
     
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if this is a demo board
+    # Check if this is an official demo template board
     is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
     
-    # Auto-add user to demo boards - ensures they appear in AI Resource Optimization
-    if is_demo_board and request.user not in board.members.all():
-        board.members.add(request.user)
+    # If user navigates to an official demo template board, redirect to their
+    # personal sandbox copy instead of polluting the template with memberships.
+    if is_demo_board and request.user.is_authenticated:
+        sandbox_copy = Board.objects.filter(
+            cloned_from=board, owner=request.user, is_sandbox_copy=True
+        ).first()
+        if sandbox_copy:
+            return redirect('board_detail', board_id=sandbox_copy.id)
+        # No sandbox copy exists — redirect to dashboard with guidance
+        messages.info(
+            request,
+            'Activate demo mode from the dashboard to access demo boards.'
+        )
+        return redirect('dashboard')
+    
+    # RBAC: check view permission
+    # Demo bypass: skip RBAC when the board lives in a demo workspace.
+    from kanban.permissions import is_demo_context as _is_demo_ctx
+    if not _is_demo_ctx(request, board=board) and not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='board_view')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
     
     # Log board view
     log_audit('board.viewed', user=request.user, request=request,
@@ -1288,7 +2590,7 @@ def board_detail(request, board_id):
         columns = Column.objects.filter(board=board).order_by('position')
     
     # Initialize the search form
-    search_form = TaskSearchForm(request.GET or None, board=board)
+    search_form = TaskSearchForm(request.GET or None, board=board, user=request.user)
     
     # Get all tasks for this board (with filtering if search is active)
     # Exclude milestones (item_type='milestone') — they are Gantt-only items
@@ -1341,7 +2643,7 @@ def board_detail(request, board_id):
     labels = TaskLabel.objects.filter(board=board)
     
     # Get board members - all members of this board
-    board_member_ids = board.members.values_list('id', flat=True)
+    board_member_ids = board.memberships.values_list('user_id', flat=True)
     board_member_profiles = UserProfile.objects.filter(user_id__in=board_member_ids)
     
     # For adding new members: show all non-demo users who aren't on the board yet
@@ -1385,9 +2687,11 @@ def board_detail(request, board_id):
             column_permissions[column.id] = perms
     
     # All restrictions removed - all authenticated users have full access
-    can_manage_members = True
-    can_edit_board = True
-    can_create_tasks = True
+    # RBAC: derive template permissions from django-rules
+    can_manage_members = request.user.has_perm('prizmai.invite_board_member', board)
+    can_edit_board = request.user.has_perm('prizmai.edit_board', board)
+    can_create_tasks = can_edit_board
+    can_delete_board = request.user.has_perm('prizmai.delete_board', board)
 
     # Invitation permission: board creator or site admin
     can_manage_invites = (
@@ -1396,6 +2700,11 @@ def board_detail(request, board_id):
     )
 
     # ── Annotate tasks with overdue / at-risk flags for card rendering ──
+    # Prefetch checklist items for checklist badge on cards
+    from django.db.models import Count, Q as _Q
+    tasks = tasks.select_related('assigned_to', 'assigned_to__profile', 'column').prefetch_related('labels', 'checklist_items')
+    tasks = list(tasks)  # evaluate once
+
     today = timezone.now()
     for t in tasks:
         t.is_overdue = (
@@ -1411,28 +2720,55 @@ def board_detail(request, board_id):
             and t.progress < 100
         )
 
-    # ── Build per-column metadata (task count, WIP exceeded) ──
+    # ── Build per-column metadata (task count, WIP exceeded, aging config) ──
     column_meta = {}
     for col in columns:
         count = sum(1 for t in tasks if t.column_id == col.id)
+        aging = col.effective_aging()
+        if not aging['enabled']:
+            aging_subtitle = 'Aging badges disabled'
+        elif col.aging_mode == 'custom':
+            aging_subtitle = f"Custom ({aging['warning']}d / {aging['critical']}d)"
+        else:
+            aging_subtitle = f"Using board defaults ({aging['warning']}d / {aging['critical']}d)"
         column_meta[col.id] = {
             'task_count': count,
             'wip_exceeded': col.is_wip_exceeded(count),
             'wip_limit': col.wip_limit,
+            'aging': aging,
+            'aging_mode': col.aging_mode,
+            'aging_subtitle': aging_subtitle,
         }
 
     # Board members list for inline assignee picker.
-    # Combine legacy board.members M2M with the RBAC BoardMembership model so
-    # all users – regardless of which path they were added through – appear.
-    from kanban.permission_models import BoardMembership as BM
-    rbac_member_ids = BM.objects.filter(board=board).values_list('user_id', flat=True)
-    all_member_ids = set(board_member_ids) | set(rbac_member_ids)
+    from kanban.models import BoardMembership
     board_members_list = (
         User.objects
-        .filter(id__in=all_member_ids)
+        .filter(board_memberships__board=board)
         .select_related('profile')
         .order_by('first_name', 'username')
     )
+
+    # Board preset context for board-level mode dropdown
+    # Demo workspace boards and sandbox copies always get enterprise (all features unlocked)
+    _is_demo_board = getattr(board, 'is_sandbox_copy', False) or \
+                     (getattr(board.organization, 'is_demo', False) if board.organization else False)
+    board_preset_local = None
+    board_preset_global = 'enterprise' if _is_demo_board else 'lean'
+    board_preset_effective = 'enterprise' if _is_demo_board else 'lean'
+    try:
+        from kanban.preset_models import BoardPreset, PRESET_CHOICES as _BP_CHOICES, PRESET_ORDER as _BP_ORDER
+        bp_obj = BoardPreset.objects.select_related('board__workspace__workspace_preset').get(board=board)
+        board_preset_local = bp_obj.local_preset  # None means "inherit"
+        board_preset_effective = bp_obj.effective_preset()
+        try:
+            if board.workspace:
+                board_preset_global = board.workspace.workspace_preset.global_preset
+        except Exception:
+            pass
+    except BoardPreset.DoesNotExist:
+        _BP_CHOICES = []
+        _BP_ORDER = ['lean', 'professional', 'enterprise']
 
     # Exit Protocol: inject hospice banner context
     hospice_risk_score = 0
@@ -1451,6 +2787,18 @@ def board_detail(request, board_id):
         hospice_session = HospiceSession.objects.filter(board=board).first()
     except Exception:
         pass
+
+    # Fix 2: Pop pending scope reason modal trigger (set by create_task)
+    pending_scope_reason_task_id = None
+    _pending_task_id = request.session.pop('pending_scope_reason_task_id', None)
+    _pending_board_id = request.session.pop('pending_scope_reason_board_id', None)
+    if (_pending_task_id and _pending_board_id
+            and int(_pending_board_id) == board.id):
+        try:
+            Task.objects.get(id=_pending_task_id, column__board=board)
+            pending_scope_reason_task_id = _pending_task_id
+        except Task.DoesNotExist:
+            pass
 
     return render(request, 'kanban/board_detail.html', {
         'board': board,
@@ -1471,6 +2819,7 @@ def board_detail(request, board_id):
         'can_manage_members': can_manage_members,  # Permission flags for UI
         'can_edit_board': can_edit_board,
         'can_create_tasks': can_create_tasks,
+        'can_delete_board': can_delete_board,
         'can_manage_invites': can_manage_invites,  # For invite button visibility
         'column_meta': column_meta,  # Per-column WIP/count metadata
         'board_members_list': board_members_list,  # For inline assignee picker
@@ -1479,6 +2828,10 @@ def board_detail(request, board_id):
         'hospice_dismissed': hospice_dismissed,
         'hospice_session': hospice_session,
         'is_favorited': _is_fav(request.user, 'board', board.pk),
+        'board_preset_local': board_preset_local,
+        'board_preset_global': board_preset_global,
+        'board_preset_effective': board_preset_effective,
+        'pending_scope_reason_task_id': pending_scope_reason_task_id,
     })
 
 def task_detail(request, task_id):
@@ -1500,13 +2853,30 @@ def task_detail(request, task_id):
         ).prefetch_related(
             'labels',
             'subtasks',
+            'subtasks__assigned_to',
+            'subtasks__cost',
+            'subtasks__dependent_tasks',
             'related_tasks',
             'dependencies',
+            'checklist_items',
+            # Custom fields — required prefetch (see spectra_data_fetchers.fetch_task_dict).
+            'custom_field_values__field',
+            'custom_field_values__selected_options',
             Prefetch('file_attachments', queryset=TaskFile.objects.filter(deleted_at__isnull=True).select_related('uploaded_by'))
         ),
         id=task_id
     )
     board = task.column.board
+
+    # RBAC: check view permission on the parent board.
+    # Demo bypass: skip RBAC when the board lives in a demo workspace so that
+    # sample-data tasks (e.g. from priya.sharma shown on the time tracking
+    # dashboard) remain accessible to users browsing in demo mode.
+    from kanban.permissions import is_demo_context
+    if not is_demo_context(request, board=board) and not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='task_view')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
 
     # Milestones have their own dedicated detail page
     if task.item_type == 'milestone':
@@ -1515,6 +2885,11 @@ def task_detail(request, task_id):
         return redirect(f'/milestones/{task.id}/{qs}')
 
     if request.method == 'POST':
+        # RBAC: editing the task requires write access (viewers are read-only).
+        # Mirror the read gate above — demo workspaces intentionally bypass RBAC.
+        if not is_demo_context(request, board=board):
+            from kanban.simple_access import check_modify_or_403
+            check_modify_or_403(request.user, board)
         form = TaskForm(request.POST, instance=task, board=board)
         if form.is_valid():
             # --- Snapshot AI-relevant fields before save for stale detection ---
@@ -1528,6 +2903,31 @@ def task_detail(request, task_id):
             for field_name in ai_relevant_fields:
                 old_values[field_name] = getattr(original_task, field_name, None)
 
+            # Snapshot non-excluded custom-field values before save for stale-banner detection.
+            from kanban.custom_field_models import CustomFieldDefinition as _CFDef, TaskCustomFieldValue as _TCFV
+            from kanban.custom_field_scoping import custom_field_scope_q_for_board as _cf_scope
+            _cf_ws_id = board.workspace_id
+            _old_cf_snapshot = {}
+            if _cf_ws_id:
+                _ai_cf_defs_qs = _CFDef.objects.filter(
+                    _cf_scope(board),
+                    workspace_id=_cf_ws_id, is_active=True,
+                    applies_to_tasks=True, exclude_from_ai=False,
+                )
+                # Epic-hidden fields aren't editable here, so don't track them.
+                if task.is_epic:
+                    _ai_cf_defs_qs = _ai_cf_defs_qs.filter(applies_to_epics=True)
+                _ai_cf_defs = list(_ai_cf_defs_qs)
+                _cf_old_map = {
+                    v.field_id: v
+                    for v in _TCFV.objects.filter(
+                        task=original_task, field__in=_ai_cf_defs,
+                    ).prefetch_related('selected_options')
+                }
+                for _fdef in _ai_cf_defs:
+                    _v = _cf_old_map.get(_fdef.id)
+                    _old_cf_snapshot[_fdef.id] = (_fdef.name, _v.display_value() if _v else None)
+
             # Track changes automatically
             with AuditLogContext(task, request.user, request, 'task.updated'):
                 task = form.save(commit=False)
@@ -1536,7 +2936,19 @@ def task_detail(request, task_id):
                 task.save()
                 # Save many-to-many relationships (dependencies, labels, related_tasks)
                 form.save_m2m()
-            
+
+            # Save budget/cost fields to TaskCost model
+            form._save_task_cost(task)
+
+            # Persist custom-field values (workspace-defined typed metadata).
+            try:
+                from kanban.custom_field_serializers import save_custom_field_values_from_post
+                from django.core.exceptions import ValidationError as _CFValidationError
+                save_custom_field_values_from_post(task, request.POST, request.user)
+            except _CFValidationError as cf_err:
+                messages.error(request, f"Custom field error: {cf_err}")
+                # Continue — task save succeeded; only custom-field side failed.
+
             # --- Detect which AI-relevant fields changed ---
             ai_field_labels = {
                 'title': 'title',
@@ -1552,12 +2964,44 @@ def task_detail(request, task_id):
                 'skill_match_score': 'skill match score',
                 'collaboration_required': 'collaboration required',
             }
+            def _norm_for_stale_cmp(v):
+                """Normalize a value for stale-banner comparison.
+
+                DateTimeField values stored in DB are tz-aware UTC; values from
+                a datetime-local HTML input are tz-naive local time at minute
+                precision (seconds are stripped by the browser). Comparing them
+                directly raises TypeError or produces false positives due to the
+                second/sub-second difference. Normalize both sides to naive local
+                time at minute precision so unchanged datetimes compare equal.
+                """
+                from datetime import datetime as _dt
+                from django.utils import timezone as _tz
+                if isinstance(v, _dt):
+                    if _tz.is_aware(v):
+                        v = _tz.localtime(v)
+                    return v.replace(second=0, microsecond=0, tzinfo=None)
+                return v
+
             changed_ai_fields = []
             for field_name in ai_relevant_fields:
                 new_val = getattr(task, field_name, None)
-                if old_values[field_name] != new_val:
+                if _norm_for_stale_cmp(old_values[field_name]) != _norm_for_stale_cmp(new_val):
                     changed_ai_fields.append(ai_field_labels.get(field_name, field_name))
-            
+
+            # Extend with non-excluded custom fields that changed.
+            if _old_cf_snapshot:
+                _cf_new_map = {
+                    v.field_id: v
+                    for v in _TCFV.objects.filter(
+                        task=task, field_id__in=_old_cf_snapshot,
+                    ).prefetch_related('selected_options')
+                }
+                for _cf_id, (_cf_name, _old_disp) in _old_cf_snapshot.items():
+                    _new_row = _cf_new_map.get(_cf_id)
+                    _new_disp = _new_row.display_value() if _new_row else None
+                    if _old_disp != _new_disp:
+                        changed_ai_fields.append(_cf_name)
+
             # Record activity
             TaskActivity.objects.create(
                 task=task,
@@ -1637,144 +3081,80 @@ def task_detail(request, task_id):
     from wiki.models import WikiLink
     wiki_links = WikiLink.objects.filter(task=task).select_related('wiki_page')
     
-    # Get task completion prediction if available
-    prediction_data = None
-    if task.progress < 100:
-        from kanban.utils.task_prediction import predict_task_completion_date
-        from kanban.utils.task_prediction import update_task_prediction
-        
-        # Auto-generate prediction if task has start date but no prediction yet
-        if task.start_date and not task.predicted_completion_date:
-            try:
-                prediction = update_task_prediction(task)
-                if prediction:
-                    # Format the prediction for template use
-                    is_likely_late = False
-                    if task.due_date:
-                        is_likely_late = prediction['predicted_date'] > task.due_date
-                    
-                    prediction_data = {
-                        'predicted_date': prediction['predicted_date'],
-                        'confidence': prediction['confidence'],
-                        'confidence_percentage': int(prediction['confidence'] * 100),
-                        'confidence_interval_days': prediction['confidence_interval_days'],
-                        'based_on_tasks': prediction['based_on_tasks'],
-                        'similar_tasks': prediction.get('similar_tasks', []),
-                        'factors': prediction['factors'],
-                        'early_date': prediction['early_date'],
-                        'late_date': prediction['late_date'],
-                        'prediction_method': prediction['prediction_method'],
-                        'is_likely_late': is_likely_late
-                    }
-            except Exception as e:
-                logger.warning(f"Failed to generate initial prediction for task {task.id}: {e}")
-        
-        # Check if prediction is stale (older than 24 hours) and update if needed
-        elif task.predicted_completion_date and (
-            not task.last_prediction_update or 
-            (timezone.now() - task.last_prediction_update > timedelta(hours=24))
-        ):
-            try:
-                prediction = update_task_prediction(task)
-                if prediction:
-                    # Format the prediction for template use
-                    is_likely_late = False
-                    if task.due_date:
-                        is_likely_late = prediction['predicted_date'] > task.due_date
-                    
-                    prediction_data = {
-                        'predicted_date': prediction['predicted_date'],
-                        'confidence': prediction['confidence'],
-                        'confidence_percentage': int(prediction['confidence'] * 100),
-                        'confidence_interval_days': prediction['confidence_interval_days'],
-                        'based_on_tasks': prediction['based_on_tasks'],
-                        'similar_tasks': prediction.get('similar_tasks', []),
-                        'factors': prediction['factors'],
-                        'early_date': prediction['early_date'],
-                        'late_date': prediction['late_date'],
-                        'prediction_method': prediction['prediction_method'],
-                        'is_likely_late': is_likely_late
-                    }
-            except Exception as e:
-                logger.warning(f"Failed to update prediction for task {task.id}: {e}")
-        
-        # Use existing prediction
-        if not prediction_data and task.predicted_completion_date:
-            is_likely_late = False
-            if task.due_date:
-                is_likely_late = task.predicted_completion_date > task.due_date
-            
-            # Parse early/late dates from metadata (may be ISO strings or missing)
-            raw_early = task.prediction_metadata.get('early_date')
-            raw_late = task.prediction_metadata.get('late_date')
-            from dateutil.parser import parse as parse_dt
-            try:
-                early_date = parse_dt(raw_early) if isinstance(raw_early, str) else raw_early
-            except Exception:
-                early_date = None
-            try:
-                late_date = parse_dt(raw_late) if isinstance(raw_late, str) else raw_late
-            except Exception:
-                late_date = None
-
-            # Ensure minimum 3-day spread for meaningful range display
-            predicted = task.predicted_completion_date
-            if early_date and late_date:
-                if hasattr(early_date, 'date'):
-                    spread = (late_date - early_date).total_seconds() / 86400
-                else:
-                    spread = 0
-                if spread < 3:
-                    half_pad = timedelta(days=(3 - spread) / 2)
-                    early_date = early_date - half_pad
-                    late_date = late_date + half_pad
-            else:
-                early_date = predicted - timedelta(days=2)
-                late_date = predicted + timedelta(days=3)
-
-            prediction_data = {
-                'predicted_date': predicted,
-                'confidence': task.prediction_confidence,
-                'confidence_percentage': int(task.prediction_confidence * 100),
-                'confidence_interval_days': task.prediction_metadata.get('confidence_interval_days', 0),
-                'based_on_tasks': task.prediction_metadata.get('based_on_tasks', 0),
-                'similar_tasks': task.prediction_metadata.get('similar_tasks', []),
-                'factors': task.prediction_metadata.get('factors', {}),
-                'early_date': early_date,
-                'late_date': late_date,
-                'prediction_method': task.prediction_metadata.get('prediction_method', 'unknown'),
-                'is_likely_late': is_likely_late
-            }
     
     # Get total time logged on this task
     from kanban.budget_models import TimeEntry
     total_time_logged = TimeEntry.objects.filter(task=task).aggregate(
         total=Sum('hours_spent')
     )['total'] or 0
-    
+
+    from kanban.custom_field_serializers import serialize_task_custom_fields
+    custom_fields_for_task = serialize_task_custom_fields(task)
+
+    # Epic rollup: aggregated child-task stats for the Epic-specific rendering
+    # (read-only progress, contributors, aggregates, child summary). None for
+    # regular tasks so the template's {% if epic_rollup %} branches stay off.
+    epic_rollup = task.get_epic_rollup() if task.is_epic else None
+
+    # For Epics, time is logged against child tasks, not the container — roll up
+    # the total logged across all children for a read-only display.
+    epic_time_logged = None
+    if epic_rollup:
+        epic_time_logged = TimeEntry.objects.filter(
+            task__in=epic_rollup['children']
+        ).aggregate(total=Sum('hours_spent'))['total'] or 0
+
+    # Requirements traceability — which requirements (if any) this task
+    # satisfies, and which board requirements are still available to link.
+    from requirements.models import Requirement
+    linked_requirements = task.linked_requirements.filter(board=board).order_by('identifier')
+    available_requirements = Requirement.objects.filter(board=board).exclude(
+        id__in=linked_requirements.values_list('id', flat=True)
+    ).order_by('identifier')
+
     return render(request, 'kanban/task_detail.html', {
         'task': task,
         'board': board,
         'form': form,
+        'epic_rollup': epic_rollup,
+        'epic_time_logged': epic_time_logged,
+        'custom_fields_for_task': custom_fields_for_task,
         'comment_form': comment_form,
         'comments': comments,
         'activities': activities,
         'stakeholders': stakeholders,
         'board_stakeholders': board_stakeholders,
         'wiki_links': wiki_links,
-        'prediction': prediction_data,
         'total_time_logged': total_time_logged,
         'is_demo_mode': False,
         'is_demo_board': False,
         'board_columns': Column.objects.filter(board=board).order_by('position'),
         'is_favorited': _is_fav(request.user, 'task', task.pk),
+        'linked_requirements': linked_requirements,
+        'available_requirements': available_requirements,
     })
 
 @login_required
+@demo_write_guard
 def create_task(request, board_id, column_id=None):
     from kanban.audit_utils import log_model_change
 
     board = get_object_or_404(Board, id=board_id)
+
+    # Prevent task creation on official demo template boards — redirect to sandbox copy
+    if getattr(board, 'is_official_demo_board', False) and request.user.is_authenticated:
+        sandbox_copy = Board.objects.filter(
+            cloned_from=board, owner=request.user, is_sandbox_copy=True
+        ).first()
+        if sandbox_copy:
+            return redirect('create_task', board_id=sandbox_copy.id)
+        messages.error(request, 'Cannot create tasks on the demo template. Please activate demo mode first.')
+        return redirect('dashboard')
+
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to create tasks on this board.")
+        return redirect('board_detail', board_id=board.id)
 
     # Demo mode flags — always False for authenticated users on this view
     is_demo_mode = False
@@ -1861,6 +3241,42 @@ def create_task(request, board_id, column_id=None):
                 task.save()
                 # Save many-to-many relationships
                 form.save_m2m()
+
+                # Save budget/cost fields to TaskCost model
+                form._save_task_cost(task)
+
+                # Persist custom-field values from the create form (if any).
+                if request.user.is_authenticated:
+                    try:
+                        from kanban.custom_field_serializers import save_custom_field_values_from_post
+                        from django.core.exceptions import ValidationError as _CFValidationError
+                        save_custom_field_values_from_post(task, request.POST, request.user)
+                    except _CFValidationError as cf_err:
+                        messages.warning(request, f"Custom field error: {cf_err}")
+
+                # ── Create checklist items from AI breakdown (if provided) ──
+                checklist_json = request.POST.get('checklist_breakdown_data', '').strip()
+                if checklist_json:
+                    try:
+                        import json as _json
+                        from kanban.models import ChecklistItem
+                        subtask_list = _json.loads(checklist_json)
+                        if isinstance(subtask_list, list):
+                            for idx, st in enumerate(subtask_list):
+                                title = (st.get('title') or '').strip()
+                                if not title:
+                                    continue
+                                ChecklistItem.objects.create(
+                                    task=task,
+                                    title=title,
+                                    description=(st.get('description') or '').strip(),
+                                    position=idx,
+                                    estimated_effort=st.get('estimated_effort', ''),
+                                    priority=st.get('priority', 'medium'),
+                                    source='ai_generated',
+                                )
+                    except (ValueError, TypeError):
+                        pass  # malformed JSON — task still created, just skip checklist
                 
                 # Record activity (only for authenticated users)
                 if request.user.is_authenticated:
@@ -1876,6 +3292,20 @@ def create_task(request, board_id, column_id=None):
                     log_model_change('task.created', task, request.user, request)
                 
                 messages.success(request, 'Task created successfully!')
+
+                # Fix 2: Trigger scope reason capture if this board has a baseline
+                # and is not a demo board — set a session flag so board_detail shows modal.
+                is_demo_board_for_modal = (
+                    getattr(board, 'is_official_demo_board', False)
+                    or getattr(board, 'is_sandbox_copy', False)
+                    or getattr(board, 'is_seed_demo_data', False)
+                )
+                if (request.user.is_authenticated
+                        and board.baseline_task_count is not None
+                        and not is_demo_board_for_modal):
+                    request.session['pending_scope_reason_task_id'] = task.id
+                    request.session['pending_scope_reason_board_id'] = board.id
+
                 return redirect('board_detail', board_id=board.id)
         
         # If form has duplicate tasks, add them to context for display
@@ -1891,11 +3321,30 @@ def create_task(request, board_id, column_id=None):
         form = TaskForm(board=board, initial=initial)
         duplicate_tasks = None
     
+    # For new tasks we have no values yet — render every active workspace field
+    # with its defaults via the same serializer shape.
+    from kanban.custom_field_serializers import serialize_field_definitions_for_workspace
+    if board.workspace_id:
+        defs = serialize_field_definitions_for_workspace(board.workspace_id, board=board)
+        custom_fields_for_task = [
+            {
+                **d,
+                'value': None,
+                'display': '',
+                'selected_option_ids': [opt['id'] for opt in d.get('options', []) if opt.get('id')]
+                                       if d.get('field_type') == 'list' else [],
+            }
+            for d in defs
+        ]
+    else:
+        custom_fields_for_task = []
+
     return render(request, 'kanban/create_task.html', {
         'form': form,
         'board': board,
         'column': column,
-        'duplicate_tasks': duplicate_tasks
+        'duplicate_tasks': duplicate_tasks,
+        'custom_fields_for_task': custom_fields_for_task,
     })
 
 def delete_task(request, task_id):
@@ -1909,7 +3358,10 @@ def delete_task(request, task_id):
         from django.contrib.auth.views import redirect_to_login
         return redirect_to_login(request.get_full_path())
     
-    # All restrictions removed - all authenticated users can delete tasks
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to delete tasks on this board.")
+        return redirect('board_detail', board_id=board.id)
     
     if request.method == 'POST':
         board_id = task.column.board.id
@@ -1939,6 +3391,11 @@ def create_column(request, board_id):
     
     # All restrictions removed - all authenticated users can create columns
     
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to modify this board.")
+        return redirect('board_detail', board_id=board.id)
+    
     if request.method == 'POST':
         form = ColumnForm(request.POST)
         if form.is_valid():
@@ -1947,6 +3404,10 @@ def create_column(request, board_id):
             # Set position to be at the end
             last_position = Column.objects.filter(board=board).order_by('-position').first()
             column.position = (last_position.position + 1) if last_position else 0
+            # Done/Backlog-style columns default to aging disabled.
+            from kanban.models import column_name_disables_aging
+            if column_name_disables_aging(column.name):
+                column.aging_mode = 'disabled'
             column.save()
             
             # Log to audit trail
@@ -1976,16 +3437,30 @@ def update_column(request, column_id):
     
     # All restrictions removed - all authenticated users can edit columns
     
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to modify this board.")
+        return redirect('board_detail', board_id=board.id)
+    
     if request.method == 'POST':
         new_name = request.POST.get('name', '').strip()
         if new_name:
+            from kanban.column_semantics import COLUMN_TYPE_CHOICES
             old_name = column.name
             column.name = new_name
+            # Optional structural type marker. '' == auto (derive from name).
+            # An explicit type survives renames on purpose; leaving it on Auto
+            # keeps status detection tracking the name.
+            if 'column_type' in request.POST:
+                requested = request.POST.get('column_type', '').strip()
+                valid = {c[0] for c in COLUMN_TYPE_CHOICES}
+                if requested in valid:
+                    column.column_type = requested
             column.save()
-            
+
             # Log to audit trail
             log_model_change('column.updated', column, request.user if request.user.is_authenticated else None, request)
-            
+
             messages.success(request, f'Column renamed from "{old_name}" to "{new_name}"!')
         else:
             messages.error(request, 'Column name cannot be empty.')
@@ -2002,10 +3477,9 @@ def update_column(request, column_id):
 def create_label(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: only board editors (member/owner/ancestor-owner/org-admin) can create labels
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     if request.method == 'POST':
         form = TaskLabelForm(request.POST)
@@ -2014,12 +3488,22 @@ def create_label(request, board_id):
             label.board = board
             label.save()
             messages.success(request, 'Label created successfully!')
-            return redirect('board_detail', board_id=board.id)
+            return redirect('create_label', board_id=board.id)
     else:
-        form = TaskLabelForm()    
-        return render(request, 'kanban/create_label.html', {
+        form = TaskLabelForm()
+
+    color_palette = [
+        '#EF4444', '#DC2626', '#F97316', '#EA580C',
+        '#EAB308', '#CA8A04', '#22C55E', '#16A34A',
+        '#14B8A6', '#0D9488', '#06B6D4', '#0891B2',
+        '#3B82F6', '#2563EB', '#6366F1', '#4F46E5',
+        '#8B5CF6', '#7C3AED', '#EC4899', '#DB2777',
+        '#F43F5E', '#FF5733', '#84CC16', '#64748B',
+    ]
+    return render(request, 'kanban/create_label.html', {
         'form': form,
         'board': board,
+        'color_palette': color_palette,
         'has_lean_labels': board.labels.filter(category='lean').exists(),
         'has_regular_labels': board.labels.filter(category='regular').exists()
     })
@@ -2029,10 +3513,9 @@ def delete_label(request, label_id):
     label = get_object_or_404(TaskLabel, id=label_id)
     board = label.board
     
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: only board editors can delete labels
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     # Delete the label
     label_name = label.name
@@ -2053,12 +3536,15 @@ def board_analytics(request, board_id):
         return redirect_to_login(request.get_full_path())
     
     # All restrictions removed - all authenticated users can view analytics
+    # RBAC: check view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     # Demo mode removed - always False
     is_demo_mode = False
     is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
     
     # Get columns for this board
-    columns = Column.objects.filter(board=board)
+    columns = Column.objects.filter(board=board).order_by('position')
     
     # Get tasks by column (exclude milestones)
     tasks_by_column = []
@@ -2114,23 +3600,32 @@ def board_analytics(request, board_id):
         })
     
     # Get completion rate over time (last 30 days)
+    # Use Task.updated_at for tasks with progress=100, which is reliable regardless
+    # of how activity log descriptions were worded.
     thirty_days_ago = timezone.now() - timedelta(days=30)
-    completed_tasks_queryset = TaskActivity.objects.filter(
-        task__column__board=board,
-        activity_type='moved',
-        description__contains='Done',
-        created_at__gte=thirty_days_ago
-    ).values('created_at__date').annotate(
+    completed_tasks_queryset = Task.objects.filter(
+        column__board=board,
+        item_type='task',
+        progress=100,
+        updated_at__gte=thirty_days_ago,
+    ).values('updated_at__date').annotate(
         count=Count('id')
-    ).order_by('created_at__date')
-    
+    ).order_by('updated_at__date')
+
+    # Build a full 30-day date range with 0 fills so the trend chart always
+    # shows a continuous timeline rather than only days with completions.
+    completion_by_date = {
+        item['updated_at__date']: item['count']
+        for item in completed_tasks_queryset
+    }
     completed_tasks = []
-    for item in completed_tasks_queryset:
+    for i in range(30):
+        day = (timezone.now() - timedelta(days=29 - i)).date()
         completed_tasks.append({
-            'date': item['created_at__date'].strftime('%Y-%m-%d'),
-            'count': item['count']
+            'date': day.strftime('%Y-%m-%d'),
+            'count': completion_by_date.get(day, 0),
         })
-    
+
     # Calculate productivity based on task progress (exclude milestones)
     total_tasks = Task.objects.filter(column__board=board, item_type='task').count()
     
@@ -2211,7 +3706,19 @@ def board_analytics(request, board_id):
     
     # Calculate remaining tasks
     remaining_tasks = total_tasks - completed_count
-    
+
+    # ── Goal-Aware Analytics: promoted metrics & charts ──
+    promoted_metrics = None
+    promoted_chart_configs = None
+    promoted_chart_data = {}
+    if board.project_type:
+        from kanban.utils.analytics_helpers import (
+            get_promoted_metrics, get_promoted_charts, get_promoted_chart_data,
+        )
+        promoted_metrics = get_promoted_metrics(board)
+        promoted_chart_configs = get_promoted_charts(board)
+        promoted_chart_data = get_promoted_chart_data(board)
+
     response = render(request, 'kanban/board_analytics.html', {
         'board': board,
         'columns': columns,
@@ -2223,7 +3730,7 @@ def board_analytics(request, board_id):
         'tasks_by_lean_category': tasks_by_lean_category, # Raw data for JSON encoding in template
         'productivity': round(productivity, 1),
         'upcoming_tasks': upcoming_tasks,
-        'overdue_tasks': overdue_tasks,  # Add overdue tasks
+        'overdue_tasks': overdue_tasks,  # Add overdue count
         'overdue_count': overdue_count,  # Add overdue count
         'total_tasks': total_tasks,
         'completed_count': completed_count,
@@ -2234,6 +3741,17 @@ def board_analytics(request, board_id):
         'total_categorized': total_categorized,
         'is_demo_mode': is_demo_mode,
         'is_demo_board': is_demo_board,
+        # Goal-Aware Analytics
+        'promoted_metrics': promoted_metrics,
+        'promoted_chart_configs': promoted_chart_configs,
+        # Type-specific chart datasets
+        'cycle_time_data':       promoted_chart_data.get('cycle_time_distribution', []),
+        'weekly_completion_data': promoted_chart_data.get('weekly_completion', []),
+        'label_type_data':       promoted_chart_data.get('label_type_breakdown'),
+        'backlog_age_data':      promoted_chart_data.get('backlog_age', []),
+        'stage_funnel_data':     promoted_chart_data.get('stage_funnel', []),
+        'on_time_late_data':     promoted_chart_data.get('on_time_vs_late'),
+        'stage_time_data':       promoted_chart_data.get('stage_time', []),
     })
     
     # Prevent caching of analytics data
@@ -2254,7 +3772,25 @@ def gantt_chart(request, board_id):
         from django.contrib.auth.views import redirect_to_login
         return redirect_to_login(request.get_full_path())
     
+    # Preset guard: Gantt requires Professional+
+    # Demo workspace boards and sandbox copies bypass all preset restrictions
+    _is_demo_board = getattr(board, 'is_sandbox_copy', False) or \
+                     (getattr(board.organization, 'is_demo', False) if board.organization else False)
+    if not _is_demo_board:
+        from kanban.preset_models import BoardPreset, build_feature_flags
+        try:
+            bp = BoardPreset.objects.get(board=board)
+            flags = build_feature_flags(bp.effective_preset())
+        except BoardPreset.DoesNotExist:
+            flags = build_feature_flags('lean')
+        if not flags.get('show_gantt'):
+            messages.info(request, "Gantt Chart is available in Professional mode. Upgrade your workspace to unlock it.")
+            return redirect('board_detail', board_id=board.id)
+    
     # All restrictions removed - all authenticated users can view Gantt chart
+    # RBAC: check view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     # Demo mode removed - always False
     is_demo_mode = False
     is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
@@ -2280,27 +3816,13 @@ def gantt_chart(request, board_id):
             Q(title__icontains=search_query) | Q(description__icontains=search_query)
         )
     
-    # Apply status filter (based on column name patterns)
-    if status_filter:
-        if status_filter == 'todo':
-            # Tasks not in progress or done columns
-            tasks = tasks.exclude(
-                Q(column__name__icontains='progress') | 
-                Q(column__name__icontains='done') | 
-                Q(column__name__icontains='complete')
-            )
-        elif status_filter == 'in_progress':
-            tasks = tasks.filter(column__name__icontains='progress')
-        elif status_filter == 'done':
-            tasks = tasks.filter(
-                Q(column__name__icontains='done') | Q(column__name__icontains='complete')
-            )
-        elif status_filter == 'active':
-            # Active = To Do + In Progress (exclude completed)
-            tasks = tasks.exclude(
-                Q(column__name__icontains='done') | Q(column__name__icontains='complete')
-            )
-    
+    # Apply status filter — matches an exact column on this board (by id), so
+    # the dropdown always reflects this board's real columns instead of a
+    # fixed set of semantic categories that may not match how a given board
+    # names/splits its columns (e.g. Backlog vs To Do).
+    if status_filter and status_filter.isdigit():
+        tasks = tasks.filter(column_id=int(status_filter), column__board=board)
+
     # Apply priority filter
     if priority_filter:
         tasks = tasks.filter(priority=priority_filter)
@@ -2355,6 +3877,26 @@ def gantt_chart(request, board_id):
                     'task_count': 0,
                 }
 
+        # Tasks that don't belong to any numbered phase (e.g. ideas promoted from
+        # Discovery are created without a phase) would otherwise vanish from the
+        # phase view entirely. Surface them in an "Unphased" group so the Gantt
+        # accounts for every board task, not just the phased ones.
+        phased_names = [f'Phase {i}' for i in range(1, board.num_phases + 1)]
+        unphased_tasks = tasks.exclude(phase__in=phased_names)
+        if unphased_tasks.exists():
+            unphased_starts = list(unphased_tasks.filter(
+                start_date__isnull=False
+            ).values_list('start_date', flat=True))
+            unphased_dues = list(unphased_tasks.filter(
+                due_date__isnull=False
+            ).values_list('due_date', flat=True))
+            unphased_dues_as_date = [d.date() if hasattr(d, 'date') else d for d in unphased_dues]
+            phases_data['Unphased'] = {
+                'start': min(unphased_starts).isoformat() if unphased_starts else None,
+                'end': max(unphased_dues_as_date).isoformat() if unphased_dues_as_date else None,
+                'task_count': unphased_tasks.count(),
+            }
+
         # Convert to JSON for JavaScript consumption
         phases_data_json = json.dumps(phases_data)
     else:
@@ -2367,8 +3909,15 @@ def gantt_chart(request, board_id):
     # Data for triage drawer: board columns (for status dropdown) and members (for assignee dropdown)
     board_columns = board.columns.order_by('position').values_list('id', 'name')
     board_members = User.objects.filter(
-        Q(member_boards=board) | Q(created_boards=board)
+        Q(board_memberships__board=board) | Q(created_boards=board)
     ).distinct().order_by('username')
+
+    # Human-readable name of the selected status-filter column, for the
+    # "Showing N tasks... with status: X" summary (status_filter itself is a
+    # column id, not a readable label).
+    status_filter_column_name = None
+    if status_filter and status_filter.isdigit():
+        status_filter_column_name = dict(board_columns).get(int(status_filter))
 
     context = {
         'board': board,
@@ -2382,6 +3931,7 @@ def gantt_chart(request, board_id):
         # Gantt filter context
         'search_query': search_query,
         'status_filter': status_filter,
+        'status_filter_column_name': status_filter_column_name,
         'priority_filter': priority_filter,
         'assignee_filter': assignee_filter,
         'assignees': assignees,
@@ -2397,139 +3947,275 @@ def gantt_chart(request, board_id):
 
 
 @login_required
-@login_required
 def board_calendar(request, board_id):
-    """
-    Calendar view: shows all tasks with due dates laid out by month/week.
-    Tasks with no due date are listed in a separate 'unscheduled' section.
-    Each task is colour-coded by assignee (not by priority) so a PM can
-    visually distinguish who owns what at a glance.
+    """Board calendar — unified with "My Calendar".
+
+    The board-scoped calendar used to be a separate page (calendar_view.html)
+    with a different filter UI, which caused confusion against the unified
+    cross-board calendar.  To give a single, consistent calendar experience
+    (the three-filter "My Calendar"), this now redirects to the unified
+    calendar pre-filtered to this board.
     """
     board = get_object_or_404(Board, id=board_id)
 
-    # Membership guard — only board owner/members may view this calendar
-    from django.db.models import Q as _CalQ
-    from django.contrib.auth.models import User as _CalUser
-    if not (board.created_by == request.user or
-            board.members.filter(id=request.user.id).exists()):
-        from django.http import HttpResponseForbidden
-        return HttpResponseForbidden("You are not a member of this board.")
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
 
-    # ---------------------------------------------------------------------------
-    # Assignee colour palette — distinct from priority colours
-    # (priority: #dc3545 red, #fd7e14 orange, #0d6efd blue, #198754 green)
-    # ---------------------------------------------------------------------------
-    _ASSIGNEE_PALETTE = [
-        '#7c3aed',  # violet
-        '#db2777',  # hot pink
-        '#0891b2',  # teal
-        '#ca8a04',  # golden yellow
-        '#c026d3',  # fuchsia
-        '#0f766e',  # dark teal
-        '#b45309',  # amber brown
-        '#4338ca',  # indigo
-        '#be185d',  # deep rose
-        '#0369a1',  # steel blue
-    ]
-    _UNASSIGNED_COLOR = '#9ca3af'  # neutral grey for tasks with no assignee
+    return redirect(f"{reverse('unified_calendar')}?board={board.id}")
 
-    def _assignee_color(uid):
-        if uid is None:
-            return _UNASSIGNED_COLOR
-        return _ASSIGNEE_PALETTE[uid % len(_ASSIGNEE_PALETTE)]
 
-    # Fetch all tasks that have a due date, ordered by due date
-    tasks_with_dates = (
+@login_required
+def board_list_view(request, board_id):
+    """
+    List view: flat table of all tasks with sortable columns, inline filters,
+    and grouping by column (status). Provides a dense, spreadsheet-like
+    overview that complements the Kanban, Gantt, and Calendar views.
+    """
+    board = get_object_or_404(Board, id=board_id)
+
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
+
+    # Base queryset — tasks only (no milestones)
+    tasks = (
         Task.objects
-        .filter(column__board=board, item_type='task', due_date__isnull=False)
-        .select_related('column', 'assigned_to')
-        .order_by('due_date')
+        .filter(column__board=board, item_type='task')
+        .select_related('column', 'assigned_to', 'created_by')
+        .prefetch_related('labels')
     )
 
-    tasks_without_dates = (
-        Task.objects
-        .filter(column__board=board, item_type='task', due_date__isnull=True)
-        .select_related('column', 'assigned_to')
-        .order_by('column__position', 'position')
-    )
+    # ── Filters ──────────────────────────────────────────────────────
+    search_query = request.GET.get('search', '').strip()
+    column_filter = request.GET.get('column', '')
+    priority_filter = request.GET.get('priority', '')
+    assignee_filter = request.GET.get('assignee', '')
+    label_filter = request.GET.get('label', '')
 
-    # Build a serialisable list of events for FullCalendar — colour = assignee
-    import json as _json
+    if search_query:
+        tasks = tasks.filter(
+            Q(title__icontains=search_query) | Q(description__icontains=search_query)
+        )
+    if column_filter:
+        tasks = tasks.filter(column_id=column_filter)
+    if priority_filter:
+        tasks = tasks.filter(priority=priority_filter)
+    if assignee_filter:
+        if assignee_filter == 'unassigned':
+            tasks = tasks.filter(assigned_to__isnull=True)
+        else:
+            tasks = tasks.filter(assigned_to_id=assignee_filter)
+    if label_filter:
+        tasks = tasks.filter(labels__id=label_filter)
 
-    # Collect all board members and map user_id → color (for the legend)
-    _mem_qs = _CalUser.objects.filter(
-        _CalQ(member_boards=board) | _CalQ(created_boards=board)
+    # ── Sorting ──────────────────────────────────────────────────────
+    sort_by = request.GET.get('sort', 'column')
+    sort_dir = request.GET.get('dir', 'asc')
+    sort_prefix = '' if sort_dir == 'asc' else '-'
+
+    sort_map = {
+        'title': 'title',
+        'column': 'column__position',
+        'priority': 'priority',
+        'assignee': 'assigned_to__username',
+        'due_date': 'due_date',
+        'progress': 'progress',
+        'created': 'created_at',
+    }
+    order_field = sort_map.get(sort_by, 'column__position')
+    tasks = tasks.order_by(f'{sort_prefix}{order_field}', 'position')
+
+    # ── Grouping (default: group by column/status) ───────────────────
+    group_by = request.GET.get('group', 'column')
+    columns = board.columns.order_by('position')
+
+    if group_by == 'column':
+        grouped_tasks = []
+        for col in columns:
+            col_tasks = [t for t in tasks if t.column_id == col.id]
+            if col_tasks or not (search_query or column_filter or priority_filter or assignee_filter or label_filter):
+                grouped_tasks.append({'label': col.name, 'color': col.color, 'tasks': col_tasks, 'count': len(col_tasks)})
+    elif group_by == 'priority':
+        grouped_tasks = []
+        for value, display in Task.PRIORITY_CHOICES:
+            p_tasks = [t for t in tasks if t.priority == value]
+            if p_tasks:
+                grouped_tasks.append({'label': display, 'color': None, 'tasks': p_tasks, 'count': len(p_tasks)})
+        # Tasks with no priority
+        no_p = [t for t in tasks if not t.priority]
+        if no_p:
+            grouped_tasks.append({'label': 'No Priority', 'color': None, 'tasks': no_p, 'count': len(no_p)})
+    elif group_by == 'assignee':
+        from itertools import groupby as _groupby
+        grouped_tasks = []
+        all_tasks = list(tasks)
+        assigned = sorted([t for t in all_tasks if t.assigned_to], key=lambda t: t.assigned_to.username)
+        for username, grp in _groupby(assigned, key=lambda t: t.assigned_to.username):
+            g_tasks = list(grp)
+            grouped_tasks.append({'label': username, 'color': None, 'tasks': g_tasks, 'count': len(g_tasks)})
+        unassigned = [t for t in all_tasks if not t.assigned_to]
+        if unassigned:
+            grouped_tasks.append({'label': 'Unassigned', 'color': None, 'tasks': unassigned, 'count': len(unassigned)})
+    else:
+        grouped_tasks = [{'label': 'All Tasks', 'color': None, 'tasks': list(tasks), 'count': tasks.count()}]
+
+    # ── Filter dropdown data ─────────────────────────────────────────
+    assignees = User.objects.filter(
+        assigned_tasks__column__board=board
     ).distinct().order_by('username')
 
-    _mem_data = []
-    for u in _mem_qs:
-        _mem_data.append({
-            'id': u.id,
-            'username': u.username,
-            'display': u.get_full_name() or u.username,
-            'color': _assignee_color(u.id),
-        })
-
-    # uid → color map for fast event lookup
-    _color_map = {m['id']: m['color'] for m in _mem_data}
-
-    from datetime import timedelta as _td
-
-    events = []
-    for t in tasks_with_dates:
-        due = t.due_date
-        due_date_obj = due.date() if hasattr(due, 'date') else due
-        due_str = due_date_obj.isoformat()
-
-        # Multi-day bar: use start_date if available, else fall back to due_date
-        if t.start_date:
-            start_str = t.start_date.isoformat()
-        else:
-            start_str = due_str
-
-        # FullCalendar uses exclusive end date — add 1 day
-        end_str = (due_date_obj + _td(days=1)).isoformat()
-
-        assignee_id = t.assigned_to_id
-        color = _color_map.get(assignee_id, _UNASSIGNED_COLOR)
-        assignee_display = None
-        if t.assigned_to:
-            assignee_display = t.assigned_to.get_full_name() or t.assigned_to.username
-
-        events.append({
-            'id': t.id,
-            'title': t.title,
-            'start': start_str,
-            'end': end_str,
-            'url': f'/tasks/{t.id}/',
-            'color': color,
-            'extendedProps': {
-                'source': 'task',
-                'column': t.column.name,
-                'priority': t.get_priority_display(),
-                'progress': t.progress,
-                'assignee': assignee_display,
-                'assignee_id': assignee_id,
-                'due_date_str': due_str,
-                'start_date_str': t.start_date.isoformat() if t.start_date else None,
-            }
-        })
-
-    _col_data = list(board.columns.order_by('position').values('id', 'name'))
+    labels = TaskLabel.objects.filter(board=board).order_by('name')
 
     context = {
         'board': board,
-        'tasks_without_dates': tasks_without_dates,
-        'events_json': _json.dumps(events),
-        'total_tasks': tasks_with_dates.count() + tasks_without_dates.count(),
-        'scheduled_count': tasks_with_dates.count(),
-        'unscheduled_count': tasks_without_dates.count(),
-        'columns_json': _json.dumps(_col_data),
-        'members_json': _json.dumps(_mem_data),
-        'members_with_colors_json': _json.dumps(_mem_data),
-        'participants_json': _json.dumps([m for m in _mem_data if m['id'] != request.user.id]),
+        'grouped_tasks': grouped_tasks,
+        'columns': columns,
+        'assignees': assignees,
+        'labels': labels,
+        'priority_choices': Task.PRIORITY_CHOICES,
+        'total_count': sum(g['count'] for g in grouped_tasks),
+        # Current filter/sort state (for preserving form values)
+        'search_query': search_query,
+        'column_filter': column_filter,
+        'priority_filter': priority_filter,
+        'assignee_filter': assignee_filter,
+        'label_filter': label_filter,
+        'sort_by': sort_by,
+        'sort_dir': sort_dir,
+        'group_by': group_by,
     }
-    return render(request, 'kanban/calendar_view.html', context)
+    return render(request, 'kanban/board_list_view.html', context)
+
+
+def board_epics(request, board_id):
+    """Epics view: list all Epic items on a board with their child-task summary.
+
+    Each row shows the epic's title, prefix-id, owner, priority, due date,
+    child-task progress (X of Y completed), and an expandable list of its
+    child tasks. Expansion is handled inline via a Bootstrap collapse on the
+    same page — no separate detail navigation required.
+    """
+    board = get_object_or_404(Board, id=board_id)
+
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
+
+    epics = (
+        Task.objects
+        .filter(column__board=board, item_type='epic')
+        .select_related('assigned_to', 'column')
+        .prefetch_related('subtasks__assigned_to', 'subtasks__column')
+        .order_by('column__position', 'position')
+    )
+
+    # Annotate each epic with child-task summary stats via the shared rollup
+    # helper (Task.get_epic_rollup) so the list and detail pages can't diverge.
+    # Done in Python rather than aggregated SQL so we can also surface the child
+    # rows for the inline expand view in the same template render.
+    epic_rows = []
+    for epic in epics:
+        rollup = epic.get_epic_rollup()
+        epic_rows.append({
+            'epic': epic,
+            'children': rollup['children'],
+            'total': rollup['total'],
+            'completed': rollup['completed'],
+            'progress_pct': rollup['progress_pct'],
+        })
+
+    context = {
+        'board': board,
+        'epic_rows': epic_rows,
+        'task_prefix': board.get_task_prefix(),
+        'total_epics': len(epic_rows),
+    }
+    return render(request, 'kanban/board_epics.html', context)
+
+
+@login_required
+def create_epic(request, board_id):
+    """Dedicated slim form for creating an Epic (``Task`` with ``item_type='epic'``).
+
+    Epics are container items hidden from the board whose progress/owner/dates
+    roll up from their child tasks, so they need only a handful of fields
+    (title, description, priority, target dates, owner). This mirrors the
+    Milestone creation pattern (``add_gantt_milestone``) rather than overloading
+    the task-creation form. Child tasks are linked afterward via each task's
+    Parent Task field.
+    """
+    board = get_object_or_404(Board, id=board_id)
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
+
+    # Members who can own the epic (board members + creator)
+    board_members = User.objects.filter(
+        Q(board_memberships__board=board) | Q(created_boards=board)
+    ).distinct().order_by('username')
+
+    if request.method == 'POST':
+        title = (request.POST.get('title') or '').strip()
+        if not title:
+            messages.error(request, 'Epic title is required.')
+            return render(request, 'kanban/create_epic.html', {
+                'board': board,
+                'board_members': board_members,
+                'priority_choices': Task.PRIORITY_CHOICES,
+                'task_prefix': board.get_task_prefix(),
+            })
+
+        # Resolve target column (prefer Backlog, then first by position)
+        column = (
+            Column.objects.filter(board=board, name__icontains='backlog').first()
+            or Column.objects.filter(board=board).order_by('position').first()
+        )
+        if not column:
+            messages.error(request, 'This board has no columns to place the Epic in.')
+            return redirect('board_epics', board_id=board.id)
+
+        epic_kwargs = dict(
+            title=title,
+            description=(request.POST.get('description') or '').strip(),
+            column=column,
+            item_type='epic',
+            created_by=request.user,
+            position=Task.objects.filter(column=column).count(),
+            is_seed_demo_data=False,
+        )
+
+        priority = (request.POST.get('priority') or '').lower()
+        if priority in ('low', 'medium', 'high', 'urgent'):
+            epic_kwargs['priority'] = priority
+
+        from django.utils.dateparse import parse_date, parse_datetime
+        start_raw = (request.POST.get('start_date') or '').strip()
+        if start_raw:
+            parsed = parse_date(start_raw)
+            if parsed:
+                epic_kwargs['start_date'] = parsed
+
+        due_raw = (request.POST.get('due_date') or '').strip()
+        if due_raw:
+            parsed = parse_datetime(due_raw) or parse_date(due_raw)
+            if parsed:
+                epic_kwargs['due_date'] = parsed
+
+        # Owner must be a board member (or creator)
+        assignee_raw = (request.POST.get('assigned_to') or '').strip()
+        if assignee_raw.isdigit():
+            owner = board_members.filter(id=int(assignee_raw)).first()
+            if owner:
+                epic_kwargs['assigned_to'] = owner
+
+        epic = Task.objects.create(**epic_kwargs)
+        messages.success(request, f'Epic "{epic.title}" created. Add child tasks by setting their Parent Task to this Epic.')
+        return redirect('board_epics', board_id=board.id)
+
+    return render(request, 'kanban/create_epic.html', {
+        'board': board,
+        'board_members': board_members,
+        'priority_choices': Task.PRIORITY_CHOICES,
+        'task_prefix': board.get_task_prefix(),
+    })
 
 
 def add_gantt_milestone(request, board_id):
@@ -2538,6 +4224,9 @@ def add_gantt_milestone(request, board_id):
         return JsonResponse({'error': 'Authentication required'}, status=401)
 
     board = get_object_or_404(Board, id=board_id)
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -2626,6 +4315,11 @@ def delete_gantt_milestone(request, board_id, task_id):
         return JsonResponse({'error': 'POST required'}, status=405)
 
     task = get_object_or_404(Task, id=task_id, item_type='milestone', column__board_id=board_id)
+    board = task.column.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     task.delete()
 
     # AJAX callers (Gantt JS) expect JSON; regular form submissions get a redirect
@@ -2652,6 +4346,14 @@ def milestone_detail(request, milestone_id):
         item_type='milestone'
     )
     board = milestone.column.board
+
+    if request.method == 'POST':
+        if not request.user.has_perm('prizmai.edit_board', board):
+            raise Http404
+    else:
+        if not request.user.has_perm('prizmai.view_board', board):
+            raise Http404
+
     next_url = request.GET.get('next', '')
 
     if request.method == 'POST':
@@ -2750,19 +4452,22 @@ def move_task(request):
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Authentication required'}, status=401)
         
-        # All restrictions removed - all authenticated users can move tasks
+        # RBAC: check edit permission on the board
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'You do not have permission to edit this board'}, status=403)
         
         old_column = task.column
         task.column = new_column
         task.position = position
         
-        # Auto-update progress to 100% when moved to a "Done" or "Complete" column
-        column_name_lower = new_column.name.lower()
-        if 'done' in column_name_lower or 'complete' in column_name_lower:
+        # Auto-update progress to 100% when moved to a Done-type column
+        if new_column.is_done():
             task.progress = 100
-        
+
         task.save()
-        
+
+        response_data = {'success': True, 'progress': task.progress}
+
         # Record activity (only for authenticated users)
         if request.user.is_authenticated:
             TaskActivity.objects.create(
@@ -2779,8 +4484,7 @@ def move_task(request):
                       changes={'column': {'old': old_column.name, 'new': new_column.name}})
             
             # If progress was set to 100% automatically, record that too
-            column_name_lower = new_column.name.lower()
-            if ('done' in column_name_lower or 'complete' in column_name_lower) and task.progress == 100:
+            if new_column.is_done() and task.progress == 100:
                 TaskActivity.objects.create(
                     task=task,
                     user=request.user,
@@ -2797,15 +4501,29 @@ def move_task(request):
             t.position = new_position
             t.save()
         
-        return JsonResponse({'success': True})
-    
+        return JsonResponse(response_data)
+
     return JsonResponse({'error': 'Invalid request'}, status=400)
 
 @login_required
+@demo_write_guard
 def add_board_member(request, board_id):
     board = get_object_or_404(Board, id=board_id)
+
+    # Template boards must never receive real-user memberships
+    if getattr(board, 'is_official_demo_board', False):
+        messages.error(request, "Demo template boards cannot have members added.")
+        return redirect('dashboard')
+
+    # Sandbox boards are private — no real-user additions allowed
+    if board.is_sandbox_copy:
+        messages.error(request, "Sandbox boards are private and cannot have additional members.")
+        return redirect('board_detail', board_id=board.id)
     
-    # All restrictions removed - all authenticated users can add members
+    # RBAC: only Owner / board-level owner / ancestor owner / Org Admin can invite
+    if not request.user.has_perm('prizmai.invite_board_member', board):
+        messages.error(request, "You don't have permission to add members to this board.")
+        return redirect('board_detail', board_id=board.id)
     
     if request.method == 'POST':
         user_id = request.POST.get('user_id')
@@ -2826,11 +4544,15 @@ def add_board_member(request, board_id):
                     if is_demo_board:
                         # For demo boards: add user to ALL boards in this demo organization
                         # This maintains organization-level access consistency
+                        from kanban.models import BoardMembership
                         demo_boards = Board.objects.filter(organization=board.organization)
                         added_count = 0
                         for demo_board in demo_boards:
-                            if user not in demo_board.members.all():
-                                demo_board.members.add(user)
+                            _, created = BoardMembership.objects.get_or_create(
+                                board=demo_board, user=user,
+                                defaults={'role': 'member', 'added_by': request.user}
+                            )
+                            if created:
                                 added_count += 1
                         
                         if added_count > 0:
@@ -2839,8 +4561,12 @@ def add_board_member(request, board_id):
                             messages.info(request, f'{user.username} is already a member of all demo boards.')
                     else:
                         # For regular boards: add user to this board only
-                        if user not in board.members.all():
-                            board.members.add(user)
+                        from kanban.models import BoardMembership
+                        _, created = BoardMembership.objects.get_or_create(
+                            board=board, user=user,
+                            defaults={'role': 'member', 'added_by': request.user}
+                        )
+                        if created:
                             messages.success(request, f'{user.username} added to the board successfully!')
                         else:
                             messages.info(request, f'{user.username} is already a member of this board.')
@@ -2856,18 +4582,13 @@ def add_board_member(request, board_id):
     return redirect('board_detail', board_id=board.id)
 
 @login_required
+@demo_write_guard
 def remove_board_member(request, board_id, user_id):
     board = get_object_or_404(Board, id=board_id)
     user_to_remove = get_object_or_404(User, id=user_id)
     
-    # Check if user has permission to remove members
-    # Only board creator, org admins, and org creator can remove members
-    user_profile = getattr(request.user, 'profile', None)
-    has_permission = (
-        board.created_by == request.user or  # Board creator
-        (user_profile and user_profile.is_admin) or  # Organization admin
-        (user_profile and board.organization and request.user == board.organization.created_by)  # Organization creator
-    )
+    # RBAC: reuse invite_board_member — same actors who can add can also remove
+    has_permission = request.user.has_perm('prizmai.invite_board_member', board)
     
     # Get the redirect destination (manage_board_members if came from there, else board_detail)
     referer = request.META.get('HTTP_REFERER', '')
@@ -2887,14 +4608,16 @@ def remove_board_member(request, board_id, user_id):
         return redirect('board_detail', board_id=board.id)
     
     # Check if user is actually a member of the board
-    if user_to_remove not in board.members.all():
+    from kanban.models import BoardMembership
+    membership = BoardMembership.objects.filter(board=board, user=user_to_remove).first()
+    if not membership:
         messages.error(request, "This user is not a member of the board.")
         if redirect_to_manage:
             return redirect('manage_board_members', board_id=board.id)
         return redirect('board_detail', board_id=board.id)
     
     # Remove the member
-    board.members.remove(user_to_remove)
+    membership.delete()
     messages.success(request, f'{user_to_remove.username} has been removed from the board.')
     
     if redirect_to_manage:
@@ -2902,8 +4625,14 @@ def remove_board_member(request, board_id, user_id):
     return redirect('board_detail', board_id=board.id)
 
 @login_required
+@demo_write_guard
 def delete_board(request, board_id):
     board = get_object_or_404(Board, id=board_id)
+    
+    # RBAC: only Owner / ancestor owner / Org Admin can delete
+    if not request.user.has_perm('prizmai.delete_board', board):
+        messages.error(request, "You don't have permission to delete this board.")
+        return redirect('board_detail', board_id=board_id)
     
     # Delete the board
     if request.method == 'POST':
@@ -2919,22 +4648,38 @@ def organization_boards(request):
     try:
         profile = request.user.profile
         organization = profile.organization
+
+        # Demo mode: redirect — org boards view shows real data only
+        if getattr(profile, 'is_viewing_demo', False):
+            return redirect('board_list')
+
+        # Guard against demo org leaking through (corrupted state)
+        if not organization or getattr(organization, 'is_demo', False):
+            return redirect('board_list')
         
         # Get all boards for this organization, even if user is not a member
         # EXCLUDE demo boards - demo environment is isolated
         demo_org_names = ['Demo - Acme Corporation']
         all_org_boards = Board.objects.filter(
-            organization=organization
+            organization=organization,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
         ).exclude(
             organization__name__in=demo_org_names
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
         )
         
         # Determine which boards the user is a member of
         user_boards = Board.objects.filter(
             Q(organization=organization) & 
-            (Q(created_by=request.user) | Q(members=request.user))
+            (Q(created_by=request.user) | Q(owner=request.user) | Q(memberships__user=request.user)),
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
         ).exclude(
             organization__name__in=demo_org_names
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
         ).distinct()
         
         # Create a list to track which boards the user is a member of
@@ -2952,16 +4697,48 @@ def organization_boards(request):
 def join_board(request, board_id):
     """Allow users to join boards they have access to"""
     board = get_object_or_404(Board, id=board_id)
+
+    # ── Guard: never join official demo template boards ──
+    if getattr(board, 'is_official_demo_board', False):
+        messages.error(request, 'Demo template boards cannot be joined directly.')
+        return redirect('dashboard')
+
+    # ── Guard: never join another user's sandbox copy ──
+    if getattr(board, 'is_sandbox_copy', False) and board.owner != request.user:
+        messages.error(request, 'You do not have access to this board.')
+        return redirect('dashboard')
     
-    # MVP Mode: Users can join any board they can access
-    # Access restriction removed - no organization check needed
-    
+    # Verify the board belongs to the user's active workspace — the real tenant
+    # boundary. board.organization is legacy/nullable, and the old org check was
+    # fail-OPEN (skipped entirely when board.organization was None, which is the
+    # common case), letting any user self-join any org-less board. Scope by
+    # workspace and fail CLOSED: no workspace match → no self-join. Board
+    # creators/owners are exempt (they already have access).
+    is_owner_or_creator = (
+        board.created_by_id == request.user.id
+        or (getattr(board, 'owner_id', None) and board.owner_id == request.user.id)
+    )
+    if not is_owner_or_creator:
+        profile = getattr(request.user, 'profile', None)
+        user_ws_id = getattr(getattr(profile, 'active_workspace', None), 'id', None)
+        if (
+            board.workspace_id is None
+            or user_ws_id is None
+            or board.workspace_id != user_ws_id
+        ):
+            messages.error(request, 'You do not have access to this board.')
+            return redirect('dashboard')
+
     # Check if user is already a member
-    if request.user in board.members.all() or board.created_by == request.user:
+    from kanban.models import BoardMembership
+    if BoardMembership.objects.filter(board=board, user=request.user).exists() or board.created_by == request.user:
         messages.info(request, f"You are already a member of the board '{board.name}'.")
     else:
         # Add user to board members
-        board.members.add(request.user)
+        BoardMembership.objects.get_or_create(
+            board=board, user=request.user,
+            defaults={'role': 'member'}
+        )
         messages.success(request, f"You've successfully joined the board '{board.name}'!")
     
     return redirect('board_detail', board_id=board.id)
@@ -2974,10 +4751,9 @@ def move_column(request, column_id, direction):
     column = get_object_or_404(Column, id=column_id)
     board = column.board
     
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: only board editors can reorder columns
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     # Get all columns in order of position
     columns = list(Column.objects.filter(board=board).order_by('position'))
@@ -3030,6 +4806,10 @@ def reorder_columns(request):
         column = get_object_or_404(Column, id=column_id)
         board = get_object_or_404(Board, id=board_id)
         
+        # RBAC: only board editors can reorder columns
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
         # Get all columns in order
         columns = list(Column.objects.filter(board=board).order_by('position'))
         
@@ -3074,9 +4854,10 @@ def reorder_multiple_columns(request):
             
             board = get_object_or_404(Board, id=board_id)
             
-            # Simple authentication check only - no board-level access restrictions
-            if not request.user.is_authenticated:
-                print("[reorder_multiple_columns] ERROR: User not authenticated")
+            # RBAC: user must have edit permission on the board to reorder columns
+            if request.user.is_authenticated and not request.user.has_perm('prizmai.edit_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
+            elif not request.user.is_authenticated:
                 return JsonResponse({'error': 'Authentication required'}, status=401)
             
             # Create a dictionary to map column_id to position
@@ -3124,10 +4905,10 @@ def delete_column(request, column_id):
     column = get_object_or_404(Column, id=column_id)
     board = column.board
     
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to modify this board.")
+        return redirect('board_detail', board_id=board.id)
     
     # Prevent deletion of "To Do" column as it's required for task creation
     if column.name.lower() in ['to do', 'todo']:
@@ -3175,12 +4956,25 @@ def update_task_progress(request, task_id):
         try:
             task = get_object_or_404(Task, id=task_id)
             board = task.column.board
+
+            if not request.user.has_perm('prizmai.edit_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
             
             data = json.loads(request.body)
             direction = data.get('direction')
-            
-            # Update progress based on direction
-            if direction == 'increase':
+
+            # Two ways to set progress:
+            #  • 'value' — an absolute 0-100 target. The +/- buttons debounce
+            #    clicks on the client and send the final value once, so ten
+            #    clicks = one save = one automation run (BUG-03/07).
+            #  • 'direction' — legacy single-step increase/decrease (kept for
+            #    any caller that hasn't moved to the debounced path).
+            if 'value' in data:
+                try:
+                    task.progress = max(0, min(100, int(data['value'])))
+                except (TypeError, ValueError):
+                    return JsonResponse({'error': 'Invalid value parameter'}, status=400)
+            elif direction == 'increase':
                 # Ensure we don't go above 100%
                 task.progress = min(100, task.progress + 10)
             elif direction == 'decrease':
@@ -3188,7 +4982,7 @@ def update_task_progress(request, task_id):
                 task.progress = max(0, task.progress - 10)
             else:
                 return JsonResponse({'error': 'Invalid direction parameter'}, status=400)
-            
+
             # Save the updated task
             task.save()
             
@@ -3229,6 +5023,10 @@ def export_board(request, board_id):
     """Export a board's data to JSON or CSV format"""
     board = get_object_or_404(Board, id=board_id)
     
+    # RBAC: only users who can view the board can export its data
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
+    
     export_format = request.GET.get('format', 'json')
     
     # Get all columns for this board
@@ -3260,7 +5058,7 @@ def export_board(request, board_id):
             
             task_data = {
                 'title': task.title,
-                'description': task.description,
+                'description': html_to_plain_text(task.description),
                 'position': task.position,
                 'created_at': task.created_at.isoformat(),
                 'updated_at': task.updated_at.isoformat(),
@@ -3282,7 +5080,8 @@ def export_board(request, board_id):
     elif export_format == 'csv':
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="{board.name}_export.csv"'
-        
+        response.write('﻿')  # BOM so Excel opens the file as UTF-8 instead of falling back to cp1252
+
         writer = csv.writer(response)
         writer.writerow(['Column', 'Task Title', 'Description', 'Position', 'Created At', 'Updated At', 
                          'Due Date', 'Assigned To', 'Created By', 'Labels', 'Priority', 'Progress'])
@@ -3291,10 +5090,10 @@ def export_board(request, board_id):
             tasks = Task.objects.filter(column=column, item_type='task').order_by('position')
             for task in tasks:
                 labels = ", ".join(list(task.labels.values_list('name', flat=True)))
-                writer.writerow([
+                writer.writerow([csv_safe_cell(v) for v in (
                     column.name,
                     task.title,
-                    task.description,
+                    html_to_plain_text(task.description),
                     task.position,
                     task.created_at,
                     task.updated_at,
@@ -3304,7 +5103,7 @@ def export_board(request, board_id):
                     labels,
                     task.priority,
                     task.progress
-                ])
+                )])
         
         return response
     else:
@@ -3312,6 +5111,7 @@ def export_board(request, board_id):
         return redirect('board_detail', board_id=board.id)
 
 @login_required
+@demo_write_guard
 def import_board(request):
     """
     Import a board from external PM tools (Trello, Jira, Asana) or CSV/JSON files.
@@ -3333,6 +5133,22 @@ def import_board(request):
     except UserProfile.DoesNotExist:
         messages.error(request, "You must be part of an organization to import a board.")
         return redirect('create_organization')
+
+    # Auto-create an Organization if the user doesn't have one yet
+    if not organization:
+        from accounts.models import Organization as OrgModel
+        first_name = (request.user.first_name or request.user.username).strip()
+        org_name = f"{first_name}'s Workspace"
+        organization = OrgModel.objects.create(
+            name=org_name,
+            created_by=request.user,
+        )
+        profile.organization = organization
+        profile.save(update_fields=['organization'])
+        # Ensure the org creator is in the OrgAdmin group
+        from django.contrib.auth.models import Group
+        org_admin_group, _ = Group.objects.get_or_create(name='OrgAdmin')
+        request.user.groups.add(org_admin_group)
     
     # Check if file was uploaded
     if 'import_file' not in request.FILES:
@@ -3342,24 +5158,30 @@ def import_board(request):
     import_file = request.FILES['import_file']
     filename = import_file.name
     
-    # Check file extension - now supports JSON and CSV
-    valid_extensions = ['.json', '.csv', '.tsv']
+    # Check file extension - now supports JSON, CSV, Excel
+    valid_extensions = ['.json', '.csv', '.tsv', '.xlsx', '.xls']
     if not any(filename.lower().endswith(ext) for ext in valid_extensions):
-        messages.error(request, "Supported file formats: JSON, CSV, TSV")
+        messages.error(request, "Supported file formats: JSON, CSV, TSV, Excel (.xlsx)")
         return redirect('board_list')
     
     try:
         # Read file content
         file_content = import_file.read()
         
-        # Try to decode as text
-        try:
-            file_data = file_content.decode('utf-8')
-        except UnicodeDecodeError:
+        # For Excel files, pass raw bytes directly to the adapter
+        is_excel = filename.lower().endswith(('.xlsx', '.xls'))
+        
+        if is_excel:
+            file_data = file_content  # Keep as bytes for openpyxl
+        else:
+            # Try to decode as text
             try:
-                file_data = file_content.decode('utf-8-sig')
+                file_data = file_content.decode('utf-8')
             except UnicodeDecodeError:
-                file_data = file_content.decode('latin-1')
+                try:
+                    file_data = file_content.decode('utf-8-sig')
+                except UnicodeDecodeError:
+                    file_data = file_content.decode('latin-1')
         
         # Import using the adapter system
         from kanban.utils.import_adapters import AdapterFactory, UserMatcher
@@ -3382,7 +5204,24 @@ def import_board(request):
             error_msg = '; '.join(result.errors) if result.errors else 'Unknown import error'
             messages.error(request, f"Import failed: {error_msg}")
             return redirect('board_list')
-        
+
+        # Resolve the board name: an explicit name from the dialog always wins;
+        # otherwise, when the adapter only produced a generic placeholder
+        # (e.g. "Imported from CSV"), fall back to the uploaded file's name.
+        # Adapters that extract a real title (Trello/Jira/Monday) are left intact.
+        custom_name = (request.POST.get('board_name') or '').strip()
+        if custom_name:
+            result.board_data['name'] = custom_name[:100]
+        else:
+            current_name = (result.board_data.get('name') or '').strip()
+            if not current_name or current_name.lower().startswith('imported'):
+                import os as _os
+                import re as _re
+                stem = _os.path.splitext(filename)[0]
+                pretty = _re.sub(r'[._\-]+', ' ', stem).strip()
+                if pretty:
+                    result.board_data['name'] = pretty.title()[:100]
+
         # Create the board and its contents from the import result
         new_board = _create_board_from_import_result(
             result, 
@@ -3435,14 +5274,34 @@ def _create_board_from_import_result(result, user, organization, session):
     """
     # Create the board
     board_data = result.board_data
+    # Resolve workspace for the importing user
+    ws = None
+    try:
+        ws = user.profile.active_workspace
+        if ws and ws.is_demo:
+            ws = None  # Don't put imports into demo workspace
+        if not ws:
+            from kanban.workspace_utils import get_or_create_real_workspace
+            ws = get_or_create_real_workspace(user)
+    except Exception:
+        pass
+
     new_board = Board.objects.create(
         name=board_data.get('name', 'Imported Board'),
         description=board_data.get('description', ''),
         organization=organization,
         created_by=user,
-        num_phases=board_data.get('num_phases', 0)
+        num_phases=board_data.get('num_phases', 0),
+        is_imported=True,
+        workspace=ws,
     )
-    new_board.members.add(user)
+    new_board.owner = user
+    new_board.save(update_fields=['owner'])
+    from kanban.models import BoardMembership
+    BoardMembership.objects.get_or_create(
+        board=new_board, user=user,
+        defaults={'role': 'owner', 'added_by': user}
+    )
     
     # Create labels first (so we can reference them from tasks)
     labels_map = {}  # label_name -> TaskLabel instance
@@ -3519,9 +5378,19 @@ def _create_board_from_import_result(result, user, organization, session):
                 if not assigned_user and '@' in assigned_username:
                     assigned_user = User.objects.filter(email__iexact=assigned_username).first()
                 
-                # Verify user is in the same organization
+                # Verify user is in the same organization, then ensure they are
+                # a member of the imported board before assigning. The import
+                # describes the board's team, so we add the assignee as a member
+                # — this keeps the invariant "assignee always has board access"
+                # and prevents non-member assignees from leaking conflict
+                # notifications later.
                 if assigned_user:
                     if hasattr(assigned_user, 'profile') and assigned_user.profile.organization == organization:
+                        from kanban.models import BoardMembership
+                        BoardMembership.objects.get_or_create(
+                            board=new_board, user=assigned_user,
+                            defaults={'role': 'member'}
+                        )
                         new_task.assigned_to = assigned_user
             except Exception:
                 pass  # Skip if user lookup fails
@@ -3541,16 +5410,87 @@ def _create_board_from_import_result(result, user, organization, session):
                 )
                 new_task.labels.add(label)
     
+    # Auto-add workspace members to the imported board
+    from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+    auto_add_workspace_members_to_board(new_board)
+
     return new_board
+
+@login_required
+@require_http_methods(["POST"])
+def quick_create_label(request, board_id):
+    """AJAX: create a regular label inline from the task form or task details."""
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    name = request.POST.get('name', '').strip()
+    color = request.POST.get('color', '#3B82F6').strip()
+    if not name:
+        return JsonResponse({'error': 'Label name is required'}, status=400)
+    if len(name) > 50:
+        return JsonResponse({'error': 'Label name must be 50 characters or fewer'}, status=400)
+
+    label, created = TaskLabel.objects.get_or_create(
+        board=board,
+        name=name,
+        defaults={'color': color, 'category': 'regular'},
+    )
+    return JsonResponse({'id': label.id, 'name': label.name, 'color': label.color, 'created': created})
+
+
+@login_required
+@require_http_methods(["POST"])
+def toggle_task_label(request, task_id):
+    """AJAX: add or remove a label on a task without a full form submit."""
+    task = get_object_or_404(Task, id=task_id)
+    board = task.column.board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    label_id = request.POST.get('label_id')
+    if not label_id:
+        return JsonResponse({'error': 'label_id is required'}, status=400)
+
+    label = get_object_or_404(TaskLabel, id=label_id, board=board)
+    if task.labels.filter(id=label.id).exists():
+        task.labels.remove(label)
+        action = 'removed'
+    else:
+        task.labels.add(label)
+        action = 'added'
+
+    return JsonResponse({'action': action, 'label_id': label.id})
+
+
+@login_required
+@require_http_methods(["POST"])
+def load_preset_labels(request, board_id):
+    """AJAX: seed a board with PRESET_LABELS (idempotent), return all board regular labels."""
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    for preset in TaskLabel.PRESET_LABELS:
+        TaskLabel.objects.get_or_create(
+            board=board,
+            name=preset['name'],
+            defaults={'color': preset['color'], 'category': 'regular'},
+        )
+
+    labels = list(
+        TaskLabel.objects.filter(board=board, category='regular').values('id', 'name', 'color')
+    )
+    return JsonResponse({'labels': labels})
+
 
 @login_required
 def add_lean_labels(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
     # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     if request.method == 'POST':
         # Call the management command to add the labels
@@ -3603,10 +5543,7 @@ def link_board_to_strategy_dashboard(request, board_id):
 
     board = get_object_or_404(Board, id=board_id)
 
-    # Access check: user must be the board creator or a member
-    if not (board.created_by == request.user or
-            board.is_official_demo_board or
-            board.members.filter(id=request.user.id).exists()):
+    if not request.user.has_perm('prizmai.edit_board', board):
         return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
 
     strategy_id = request.POST.get('strategy_id', '').strip()
@@ -3638,23 +5575,52 @@ def link_board_to_strategy_dashboard(request, board_id):
 
 @login_required
 def edit_board(request, board_id):
-      # Check if user is the board creator or a member
-    # Access restriction removed - all authenticated users can access
+    board = get_object_or_404(Board, id=board_id)
 
-    pass  # Original: board membership check removed
-    
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to edit this board.")
+        return redirect('board_detail', board_id=board.id)
+
+    from kanban.utils.demo_protection import get_user_strategies
+
     if request.method == 'POST':
         form = BoardForm(request.POST, instance=board)
         if form.is_valid():
             form.save()
-            messages.success(request, f'Board "{board.name}" updated successfully!')
+
+            # Handle strategy linking/unlinking — scope to the user's workspace
+            strategy_id = request.POST.get('strategy_id', '').strip()
+            if strategy_id:
+                try:
+                    new_strategy = get_user_strategies(request.user).get(id=int(strategy_id))
+                    board.strategy = new_strategy
+                    board.save(update_fields=['strategy'])
+                    messages.success(request, f'Board "{board.name}" updated and linked to strategy "{new_strategy.name}"!')
+                except (Strategy.DoesNotExist, ValueError):
+                    messages.success(request, f'Board "{board.name}" updated successfully!')
+            elif 'strategy_id' in request.POST:
+                # Empty value submitted = unlink
+                board.strategy = None
+                board.save(update_fields=['strategy'])
+                messages.success(request, f'Board "{board.name}" updated and unlinked from strategy.')
+            else:
+                messages.success(request, f'Board "{board.name}" updated successfully!')
+
             return redirect('board_detail', board_id=board.id)
     else:
         form = BoardForm(instance=board)
-    
+
+    all_strategies = list(
+        get_user_strategies(request.user)
+        .select_related('mission')
+        .order_by('mission__name', 'name')
+        .values('id', 'name', 'mission__name', 'mission_id')
+    )
+
     return render(request, 'kanban/edit_board.html', {
         'form': form,
-        'board': board
+        'board': board,
+        'all_strategies': all_strategies,
     })
 
 @login_required
@@ -3724,9 +5690,15 @@ def wizard_create_board(request):
                 name=board_name,
                 description=board_description,
                 organization=organization,
-                created_by=request.user
+                created_by=request.user,
+                owner=request.user,
+                workspace=getattr(request, 'workspace', None),
             )
-            board.members.add(request.user)
+            from kanban.models import BoardMembership
+            BoardMembership.objects.get_or_create(
+                board=board, user=request.user,
+                defaults={'role': 'owner', 'added_by': request.user}
+            )
             
             # If AI columns are requested, get AI recommendations
             if use_ai_columns:
@@ -3762,6 +5734,10 @@ def wizard_create_board(request):
                 for i, name in enumerate(default_columns):
                     Column.objects.create(name=name, board=board, position=i)
             
+            # Auto-add workspace members to the new board
+            from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+            auto_add_workspace_members_to_board(board)
+
             return JsonResponse({
                 'success': True,
                 'board_id': board.id,
@@ -3796,9 +5772,9 @@ def wizard_create_task(request):
             
             # Get the board and verify access
             board = get_object_or_404(Board, id=board_id)
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
+            # RBAC: user must have edit permission to create tasks
+            if not request.user.has_perm('prizmai.edit_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
             
             # Get the first column (To Do column)
             first_column = board.columns.first()
@@ -3879,7 +5855,10 @@ def view_dependency_tree(request, task_id):
     try:
         task = get_object_or_404(Task, id=task_id)
         
-        # Access restriction removed - all authenticated users can access
+        # RBAC: user must have view permission on the board
+        board = task.column.board
+        if not request.user.has_perm('prizmai.view_board', board):
+            raise Http404
         
         # Get all relationships
         parent_task = task.parent_task
@@ -3911,7 +5890,9 @@ def board_dependency_graph(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
         
-        # Access restriction removed - all authenticated users can access
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            raise Http404
         
         # Get all tasks with dependencies
         tasks = Task.objects.filter(column__board=board).prefetch_related(
@@ -3948,10 +5929,9 @@ def upload_task_file(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    # Check if user is board member
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: user must have edit permission on the board to upload files
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     if request.method == 'POST':
         form = TaskFileForm(request.POST, request.FILES)
@@ -3961,6 +5941,14 @@ def upload_task_file(request, task_id):
             file_obj.uploaded_by = request.user
             # Filename, size, and type are now set by form.save() with proper sanitization
             file_obj.save()
+            
+            # Record activity log for attachment upload
+            TaskActivity.objects.create(
+                task=task,
+                user=request.user,
+                activity_type='updated',
+                description=f"Uploaded attachment '{file_obj.filename}' to '{task.title}'"
+            )
             
             messages.success(request, f'File "{file_obj.filename}" uploaded successfully!')
             
@@ -3991,10 +5979,9 @@ def download_task_file(request, file_id):
     file_obj = get_object_or_404(TaskFile, id=file_id)
     board = file_obj.task.column.board
     
-    # Check if user is board member
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: user must have view permission on the board to download files
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     
     # Serve the file
     if file_obj.file:
@@ -4013,6 +6000,10 @@ def delete_task_file(request, file_id):
     file_obj = get_object_or_404(TaskFile, id=file_id)
     task = file_obj.task
     board = task.column.board
+    
+    # RBAC: user must have edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     # Check permissions - only uploader or staff can delete
     if request.user != file_obj.uploaded_by and not request.user.is_staff:
@@ -4038,10 +6029,9 @@ def list_task_files(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    # Check if user is board member
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: user must have view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     # Get non-deleted files
     files = task.file_attachments.filter(deleted_at__isnull=True).values(
@@ -4070,6 +6060,11 @@ def analyze_task_file(request, file_id):
     import time as _time
 
     file_obj = get_object_or_404(TaskFile, id=file_id)
+
+    # RBAC: user must have view permission on the board to analyze files
+    board = file_obj.task.column.board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     if file_obj.is_deleted():
         return JsonResponse({'error': 'File has been deleted.'}, status=404)
@@ -4143,6 +6138,11 @@ def create_tasks_from_task_file(request, file_id):
     Creates confirmed tasks from ai_tasks_suggested on the TaskFile.
     """
     file_obj = get_object_or_404(TaskFile, id=file_id)
+
+    # RBAC: user must have edit permission on the board to create tasks from AI analysis
+    board = file_obj.task.column.board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     if file_obj.is_deleted():
         return JsonResponse({'error': 'File has been deleted.'}, status=404)
@@ -4330,16 +6330,23 @@ def load_demo_data(request):
             demo_orgs = Organization.objects.filter(name__in=demo_org_names)
             
             if not demo_orgs.exists():
-                messages.error(request, 'Demo data not found. Please contact administrator to load the initial demo data using: python manage.py populate_test_data')
+                messages.error(request, 'Demo data not found. Please contact administrator to load the initial demo data using: python manage.py populate_all_demo_data --reset')
                 return redirect('dashboard')
-            
+
             # Get the demo boards
-            demo_board_names = ['Software Project', 'Bug Tracking', 'Marketing Campaign']
+            demo_board_names = ['Software Development']
+            # Never attach a real user to the official demo template board:
+            # membership there violates the demo isolation invariant and lets
+            # the user own artifacts (tasks/time entries) that _duplicate_board
+            # then clones into every sandbox. Users get their own sandbox copy
+            # via provisioning, not a membership on the template.
+            # See [[project_demo_reset_official_board_invariants]].
             demo_boards = Board.objects.filter(
                 organization__in=demo_orgs,
-                name__in=demo_board_names
+                name__in=demo_board_names,
+                is_official_demo_board=False,
             )
-            
+
             if not demo_boards.exists():
                 messages.error(request, 'Demo boards not found. Please contact administrator to load the initial demo data.')
                 return redirect('dashboard')
@@ -4366,7 +6373,8 @@ def load_demo_data(request):
                 return redirect('board_list')
             
             # Check if user is already a member of any demo boards
-            already_member_boards = demo_boards.filter(members=request.user)
+            from kanban.models import BoardMembership
+            already_member_boards = demo_boards.filter(memberships__user=request.user)
             
             if already_member_boards.count() >= demo_boards.count():
                 # Mark wizard as completed even if they already have access
@@ -4378,38 +6386,18 @@ def load_demo_data(request):
                 return redirect('dashboard')
             
             # Add user as member to all demo boards with proper roles
-            # NOTE: This grants organization-level access - once added to one board in a demo org,
-            # user can access all boards in that organization
-            from kanban.permission_models import BoardMembership, Role
             from messaging.models import ChatRoom
             
             added_count = 0
             for demo_board in demo_boards:
-                # Add to members list if not already
-                # This gives them the "key" to access all boards in this demo organization
-                if request.user not in demo_board.members.all():
-                    demo_board.members.add(request.user)
-                    added_count += 1
-                
-                # Create BoardMembership with Editor role (allows full access)
-                membership_exists = BoardMembership.objects.filter(
+                # Create BoardMembership with member role
+                _, created = BoardMembership.objects.get_or_create(
                     board=demo_board,
-                    user=request.user
-                ).exists()
-                
-                if not membership_exists:
-                    # Get the Editor role for the board's organization
-                    editor_role = Role.objects.filter(
-                        organization=demo_board.organization,
-                        name='Editor'
-                    ).first()
-                    
-                    if editor_role:
-                        BoardMembership.objects.create(
-                            board=demo_board,
-                            user=request.user,
-                            role=editor_role
-                        )
+                    user=request.user,
+                    defaults={'role': 'member'}
+                )
+                if created:
+                    added_count += 1
                 
                 # Add user to all chat rooms for this board
                 chat_rooms = ChatRoom.objects.filter(board=demo_board)
@@ -4461,18 +6449,27 @@ def board_status_report(request, board_id):
     """
     AI-generated stakeholder status report for a board.
     Gathers key metrics and calls Gemini to produce a concise weekly update.
+    GET  — shows the most recent saved report (if any) plus a history panel.
+    POST — generates a new report, saves it, and trims history to the last 5.
     """
     from api.ai_usage_utils import check_ai_quota, track_ai_request
     from kanban.utils.ai_utils import generate_status_report
+    from kanban.models import BoardStatusReport
     import time as _time
 
     board = get_object_or_404(Board, id=board_id)
 
-    # Only generate on POST so users explicitly trigger the AI call
     report_text = None
     report_html = None
     report_explainability = None
     error = None
+    active_provider_name = 'Google Gemini'
+    try:
+        from ai_assistant.utils.ai_router import AIRouter
+        _provider, _, _, _ = AIRouter()._resolve_provider(request.user)
+        active_provider_name = AIRouter.get_provider_display_name(_provider)
+    except Exception:
+        pass
 
     if request.method == 'POST':
         start = _time.time()
@@ -4500,15 +6497,33 @@ def board_status_report(request, board_id):
             high_risk = all_tasks.filter(risk_level__in=['high', 'critical']).count()
 
             # Budget status (optional)
+            budget_spent_pct = None
+            budget_vs_progress_note = None
             try:
                 from kanban.budget_models import ProjectBudget
                 budget = ProjectBudget.objects.filter(board=board).first()
                 if budget:
-                    utilization = round(budget.get_budget_utilization_percent(), 1)
+                    utilization = round(budget.get_budget_utilization_percent(), 1)  # spent %
+                    remaining_pct = round(100 - utilization, 1)
                     raw_status = budget.get_status()  # 'ok', 'warning', 'critical', 'over'
                     status_labels = {'ok': 'On Track', 'warning': 'Warning', 'critical': 'Critical', 'over': 'Over'}
                     status_label = status_labels.get(raw_status, raw_status.title())
-                    budget_status = f"{status_label} ({utilization}%)"
+                    spent = budget.get_spent_amount()
+                    allocated = budget.allocated_budget
+                    cur = budget.currency or ''
+                    # Explicit spent-vs-remaining so the AI cannot invert the figure.
+                    budget_status = (
+                        f"{status_label} — {utilization}% spent "
+                        f"({cur} {spent:,.0f} of {cur} {allocated:,.0f}), "
+                        f"{remaining_pct}% remaining"
+                    )
+                    budget_spent_pct = utilization
+                    # Flag spend running ahead of progress (>10pt gap) so RAG can weigh it.
+                    if utilization - completion_pct > 10:
+                        budget_vs_progress_note = (
+                            f"{utilization}% of budget spent at {completion_pct}% task "
+                            f"completion — spend is running ahead of progress"
+                        )
                 else:
                     budget_status = 'Not tracked'
             except Exception:
@@ -4531,6 +6546,8 @@ def board_status_report(request, board_id):
                 'velocity': velocity,
                 'high_risk_count': high_risk,
                 'budget_status': budget_status,
+                'budget_spent_pct': budget_spent_pct,
+                'budget_vs_progress_note': budget_vs_progress_note,
                 'tasks_by_column': tasks_by_column,
                 'report_date': today.strftime('%B %d, %Y'),
             }
@@ -4549,6 +6566,7 @@ def board_status_report(request, board_id):
 
             if report_result:
                 import markdown as _md
+                import re as _re
                 # generate_status_report now returns a dict with explainability
                 if isinstance(report_result, dict):
                     report_text = report_result.get('report', '')
@@ -4563,9 +6581,93 @@ def board_status_report(request, board_id):
                     # Backward compatibility if somehow a string is returned
                     report_text = report_result
                     report_explainability = None
-                report_html = _md.markdown(report_text, extensions=['nl2br'])
+                # Pre-process: ensure a blank line before bullet/list items so the
+                # markdown library recognises them as proper <ul>/<li> elements.
+                _processed = _re.sub(r'(?m)([^\n])\n(\s*[*\-] )', r'\1\n\n\2', report_text)
+                report_html = _md.markdown(_processed, extensions=['extra'])
+
+                # Persist and trim history to the last 5 reports per board
+                BoardStatusReport.objects.create(
+                    board=board,
+                    created_by=request.user,
+                    report_text=report_text,
+                    report_html=report_html,
+                    rag_status=report_explainability['rag_status'] if report_explainability else 'amber',
+                    rag_reasoning=report_explainability['rag_reasoning'] if report_explainability else '',
+                    confidence_score=report_explainability['confidence_score'] if report_explainability else 0.5,
+                    data_completeness=report_explainability['data_completeness'] if report_explainability else 0.5,
+                    key_data_drivers=report_explainability['key_data_drivers'] if report_explainability else [],
+                    provider_name=active_provider_name,
+                )
+                # Keep only the 5 most recent; delete older ones
+                old_ids = list(
+                    BoardStatusReport.objects.filter(board=board)
+                    .order_by('-created_at')
+                    .values_list('id', flat=True)[5:]
+                )
+                if old_ids:
+                    BoardStatusReport.objects.filter(id__in=old_ids).delete()
+                # Post/Redirect/Get: avoid re-submitting the generate POST (and
+                # re-calling the AI) on a browser refresh or reload() after this.
+                return redirect(reverse('board_status_report', args=[board.id]) + '?generated=1')
             else:
                 error = 'AI could not generate the report at this time. Please try again shortly.'
+                report_generated_at = None
+
+    else:
+        # GET: load the most recent saved report so the page is never blank
+        latest = BoardStatusReport.objects.filter(board=board).first()
+        if latest:
+            report_text = latest.report_text
+            report_html = latest.report_html
+            report_explainability = {
+                'rag_status': latest.rag_status,
+                'rag_reasoning': latest.rag_reasoning,
+                'confidence_score': latest.confidence_score,
+                'data_completeness': latest.data_completeness,
+                'key_data_drivers': latest.key_data_drivers,
+            }
+            if latest.provider_name:
+                active_provider_name = latest.provider_name
+            report_generated_at = latest.created_at
+        else:
+            report_generated_at = None
+
+    # History list for the sidebar panel (excludes the one currently shown)
+    history_qs = BoardStatusReport.objects.filter(board=board).order_by('-created_at')
+    if report_text:
+        # Exclude the currently displayed report from the history list
+        history_qs = history_qs[1:]
+    past_reports = list(history_qs[:5])
+
+    def _report_summary(text):
+        """Extract the first meaningful sentence from the report text for the history list."""
+        import re as _re
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            # Strip markdown bold/italic/bullets
+            clean = _re.sub(r'\*{1,3}([^*]*)\*{1,3}', r'\1', line).strip('*- ').strip()
+            if len(clean) > 25:
+                return clean[:100] + ('…' if len(clean) > 100 else '')
+        return ''
+
+    past_reports_data = [
+        {
+            'id': rpt.id,
+            'html': rpt.report_html,
+            'rag_status': rpt.rag_status,
+            'rag_reasoning': rpt.rag_reasoning,
+            'confidence_score': rpt.confidence_score,
+            'data_completeness': rpt.data_completeness,
+            'key_data_drivers': rpt.key_data_drivers,
+            'provider_name': rpt.provider_name,
+            'created_at': timezone.localtime(rpt.created_at).strftime('%b %d, %Y %H:%M'),
+            'summary': _report_summary(rpt.report_text),
+        }
+        for rpt in past_reports
+    ]
 
     context = {
         'board': board,
@@ -4573,8 +6675,30 @@ def board_status_report(request, board_id):
         'report_html': report_html if report_text else None,
         'report_explainability': report_explainability if report_text else None,
         'error': error,
+        'active_provider_name': active_provider_name,
+        'past_reports': past_reports,
+        'past_reports_data': past_reports_data,
+        'report_generated_at': report_generated_at if report_text else None,
+        'report_is_cached': request.method == 'GET' and bool(report_text) and request.GET.get('generated') != '1',
     }
     return render(request, 'kanban/status_report.html', context)
+
+
+@login_required
+@require_POST
+def delete_status_report(request, board_id, report_id):
+    """Delete a single saved AI status report snapshot for a board."""
+    from kanban.models import BoardStatusReport
+    from kanban.permissions import is_demo_context
+
+    board = get_object_or_404(Board, id=board_id)
+    report = get_object_or_404(BoardStatusReport, id=report_id, board=board)
+
+    if not is_demo_context(request, board=board) and not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'You do not have permission to delete this report.'}, status=403)
+
+    report.delete()
+    return JsonResponse({'success': True})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4588,10 +6712,14 @@ def task_quick_view(request, task_id):
         Task.objects.select_related(
             'column', 'column__board', 'assigned_to', 'assigned_to__profile',
             'created_by',
-        ).prefetch_related('labels', 'dependencies', 'subtasks'),
+        ).prefetch_related('labels', 'dependencies', 'subtasks', 'checklist_items'),
         id=task_id,
     )
     board = task.column.board
+
+    # RBAC: check view permission on the parent board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     # Overdue / at-risk flags
     now = timezone.now()
@@ -4606,17 +6734,6 @@ def task_quick_view(request, task_id):
         and task.progress < 100
     )
 
-    # Prediction data (reuse pattern from task_detail)
-    prediction_data = None
-    if task.predicted_completion_date:
-        confidence_pct = int((task.prediction_confidence or 0) * 100)
-        based_on = (task.prediction_metadata or {}).get('based_on_tasks', 0)
-        prediction_data = {
-            'predicted_date': task.predicted_completion_date,
-            'confidence_percentage': confidence_pct,
-            'based_on_tasks': based_on,
-        }
-
     # Dependencies
     blocked_by = task.dependencies.all()
     blocking = Task.objects.filter(dependencies=task, item_type='task')
@@ -4629,7 +6746,7 @@ def task_quick_view(request, task_id):
     # Board columns (for status dropdown) and members (for assignee picker)
     columns = Column.objects.filter(board=board).order_by('position')
     board_members = User.objects.filter(
-        id__in=board.members.values_list('id', flat=True)
+        board_memberships__board=board
     ).select_related('profile')
 
     return render(request, 'kanban/task_quick_view.html', {
@@ -4637,7 +6754,6 @@ def task_quick_view(request, task_id):
         'board': board,
         'is_overdue': is_overdue,
         'is_at_risk': is_at_risk,
-        'prediction_data': prediction_data,
         'blocked_by': blocked_by,
         'blocking': blocking,
         'stakeholders': stakeholders,
@@ -4684,6 +6800,12 @@ def _card_json(task):
 def task_update_status(request, task_id):
     """Inline status change from the quick-view drawer or card hover bar."""
     task = get_object_or_404(Task, id=task_id)
+    board = task.column.board
+
+    # RBAC: check edit permission on the parent board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     new_column_id = request.POST.get('column_id')
     if not new_column_id:
         return JsonResponse({'error': 'column_id required'}, status=400)
@@ -4692,9 +6814,8 @@ def task_update_status(request, task_id):
     old_column = task.column
     task.column = new_column
 
-    # Auto-progress when moved to Done/Complete
-    col_lower = new_column.name.lower()
-    if 'done' in col_lower or 'complete' in col_lower:
+    # Auto-progress when moved to a Done-type column
+    if new_column.is_done():
         task.progress = 100
 
     task.save()
@@ -4711,13 +6832,35 @@ def task_update_status(request, task_id):
 def task_update_assignee(request, task_id):
     """Inline assignee change from the quick-view drawer or card hover bar."""
     task = get_object_or_404(Task, id=task_id)
+    board = task.column.board
+
+    # RBAC: check edit permission on the parent board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     assignee_id = request.POST.get('assignee_id')
+
+    # Capture old calendar event id before changing the assignee so the sync
+    # task can delete the stale event from the old assignee's calendar.
+    task._prev_calendar_event_id = task.google_calendar_event_id
 
     if assignee_id:
         user = get_object_or_404(User, id=assignee_id)
+        # RBAC: only board members (or owner/creator/scoped org admin) can be
+        # assigned — never a user without access to this board.
+        from kanban.simple_access import can_be_assigned_to_board
+        if not can_be_assigned_to_board(user, board):
+            return JsonResponse(
+                {'error': 'That user is not a member of this board and cannot be assigned.'},
+                status=400,
+            )
         task.assigned_to = user
     else:
         task.assigned_to = None
+
+    # Clear the stored event id — sync_task_to_calendar will create a fresh
+    # event for the new assignee instead of trying to update the old one.
+    task.google_calendar_event_id = None
 
     task.save()
 
@@ -4737,6 +6880,8 @@ def task_update_assignee(request, task_id):
 def column_update_wip(request, column_id):
     """Set or clear the WIP limit on a column."""
     column = get_object_or_404(Column, id=column_id)
+    if not request.user.has_perm('prizmai.edit_board', column.board):
+        return JsonResponse({'error': 'You do not have permission to modify this board.'}, status=403)
     raw = request.POST.get('wip_limit', '').strip()
     if raw == '' or raw.lower() == 'none':
         column.wip_limit = None
@@ -4751,26 +6896,128 @@ def column_update_wip(request, column_id):
 
 @login_required
 @require_http_methods(["POST"])
+def column_update_color(request, column_id):
+    """Set the color badge on a column header."""
+    column = get_object_or_404(Column, id=column_id)
+    color = request.POST.get('color', '').strip()
+    valid_colors = [c[0] for c in Column.COLOR_CHOICES]
+    if color not in valid_colors:
+        return JsonResponse({'error': 'Invalid color'}, status=400)
+    column.color = color
+    column.save(update_fields=['color'])
+    return JsonResponse({'success': True, 'color': column.color})
+
+
+@login_required
+@require_http_methods(["POST"])
+def column_update_aging(request, column_id):
+    """Set the per-column task-aging override from the column ellipsis popover.
+
+    Accepts: aging_mode ('inherit'|'custom'|'disabled') and, when mode='custom',
+    aging_warning_days + aging_critical_days. Returns the resolved effective config.
+    """
+    column = get_object_or_404(Column, id=column_id)
+    if not request.user.has_perm('prizmai.edit_board', column.board):
+        return JsonResponse({'error': 'You do not have permission to modify this board.'}, status=403)
+
+    mode = request.POST.get('aging_mode', '').strip()
+    if mode not in ('inherit', 'custom', 'disabled'):
+        return JsonResponse({'error': 'Invalid aging mode'}, status=400)
+
+    column.aging_mode = mode
+    if mode == 'custom':
+        try:
+            warning = int(request.POST.get('aging_warning_days', ''))
+            critical = int(request.POST.get('aging_critical_days', ''))
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Warning and critical days must be numbers.'}, status=400)
+        if warning < 1 or critical <= warning:
+            return JsonResponse(
+                {'error': 'Critical days must be greater than warning days (min 1).'}, status=400)
+        column.aging_warning_days = warning
+        column.aging_critical_days = critical
+    else:
+        # inherit / disabled don't use custom values
+        column.aging_warning_days = None
+        column.aging_critical_days = None
+
+    column.save(update_fields=['aging_mode', 'aging_warning_days', 'aging_critical_days'])
+
+    eff = column.effective_aging()
+    return JsonResponse({'success': True, 'aging_mode': column.aging_mode, 'effective': eff})
+
+
+@login_required
+@require_http_methods(["POST"])
 def task_update_fields(request, task_id):
-    """Update priority, due_date, and/or progress from the quick-view drawer."""
+    """Batch-update quick-view drawer fields in a SINGLE task.save().
+
+    Accepts any of: column_id (status), assignee_id, priority, due_date,
+    progress. The drawer stages the user's edits and posts only the fields they
+    actually changed, then this applies them all and saves ONCE — so the
+    automation engine sees one event and its per-field before/after diff fires
+    *every* applicable trigger from that one save (e.g. changing both assignee
+    and priority fires task_assigned AND task_priority_changed). Only genuinely
+    changed values are applied, so no-op fields don't force phantom triggers.
+    """
     from datetime import datetime as _dt
     from django.utils import timezone as _tz
 
     task = get_object_or_404(Task, id=task_id)
+    board = task.column.board
+
+    # RBAC: check edit permission on the parent board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     changes = []
+    moved_column = None
+
+    # Status / column
+    if request.POST.get('column_id'):
+        new_column = get_object_or_404(Column, id=request.POST['column_id'], board=board)
+        if new_column.id != task.column_id:
+            task.column = new_column
+            if new_column.is_done():
+                task.progress = 100
+            changes.append(f"Status → {new_column.name}")
+            moved_column = new_column
+
+    # Assignee — '' means unassign. Mirror task_update_assignee's calendar handling.
+    if 'assignee_id' in request.POST:
+        assignee_id = request.POST['assignee_id']
+        if assignee_id:
+            user = get_object_or_404(User, id=assignee_id)
+            from kanban.simple_access import can_be_assigned_to_board
+            if not can_be_assigned_to_board(user, board):
+                return JsonResponse(
+                    {'error': 'That user is not a member of this board and cannot be assigned.'},
+                    status=400,
+                )
+            if task.assigned_to_id != user.id:
+                task._prev_calendar_event_id = task.google_calendar_event_id
+                task.assigned_to = user
+                task.google_calendar_event_id = None
+                changes.append(f"Assignee → {user.get_full_name() or user.username}")
+        elif task.assigned_to_id is not None:
+            task._prev_calendar_event_id = task.google_calendar_event_id
+            task.assigned_to = None
+            task.google_calendar_event_id = None
+            changes.append("Unassigned")
 
     if 'priority' in request.POST:
         valid = [c[0] for c in Task.PRIORITY_CHOICES]
         prio = request.POST['priority']
-        if prio in valid:
+        if prio in valid and prio != task.priority:
             task.priority = prio
             changes.append(f"Priority → {prio}")
 
     if 'due_date' in request.POST:
         raw = request.POST['due_date'].strip()
         if raw == '':
-            task.due_date = None
-            changes.append("Due date cleared")
+            if task.due_date is not None:
+                task.due_date = None
+                changes.append("Due date cleared")
         else:
             try:
                 nd = _dt.strptime(raw, '%Y-%m-%d').date()
@@ -4789,8 +7036,9 @@ def task_update_fields(request, task_id):
     if 'progress' in request.POST:
         try:
             val = max(0, min(100, int(request.POST['progress'])))
-            task.progress = val
-            changes.append(f"Progress → {val}%")
+            if val != task.progress:
+                task.progress = val
+                changes.append(f"Progress → {val}%")
         except (ValueError, TypeError):
             return JsonResponse({'error': 'Invalid progress value'}, status=400)
 
@@ -4802,4 +7050,258 @@ def task_update_fields(request, task_id):
             activity_type='updated',
             description='; '.join(changes),
         )
-    return JsonResponse({'success': True, 'card': _card_json(task)})
+
+    resp = {'success': True, 'card': _card_json(task), 'changes': changes}
+    if moved_column is not None:
+        resp['new_column_id'] = moved_column.id
+        resp['new_column_name'] = moved_column.name
+    return JsonResponse(resp)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Workspace Preset Settings
+# ═══════════════════════════════════════════════════════════════════════════
+
+@login_required
+def workspace_preset_settings(request):
+    """
+    GET  → render workspace preset cards + AI provider settings card
+    POST (form_type=preset)      → update the global preset  (Org Admin only)
+    POST (form_type=ai_settings) → update AI provider settings (Org Admin only)
+    """
+    from kanban.preset_models import WorkspacePreset, PRESET_CHOICES, PRESET_ORDER
+    from kanban.permissions import is_user_org_admin
+    from kanban.forms.ai_forms import OrganizationAISettingsForm
+    from ai_assistant.models import OrganizationAISettings, PROVIDER_CHOICES
+    from ai_assistant.utils.ai_router import AIRouter
+    from django.core.exceptions import ImproperlyConfigured
+    from django.utils import timezone as tz
+    from django.http import HttpResponseForbidden
+
+    profile = request.user.profile
+    workspace = profile.active_workspace
+
+    if workspace is None:
+        messages.warning(request, "You don't have an active workspace yet.")
+        return redirect('dashboard')
+
+    if not is_user_org_admin(request.user):
+        messages.error(request, "Only workspace admins can change workspace settings.")
+        return redirect('dashboard')
+
+    # Both the preset (feature level) and AI provider settings are keyed on the
+    # workspace (the tenant boundary), so each workspace has its own feature
+    # level and BYOK/provider config even when several share one organisation.
+    preset_obj = None
+    if workspace is not None:
+        preset_obj, _created = WorkspacePreset.objects.get_or_create(
+            workspace=workspace,
+            defaults={'global_preset': 'lean'},
+        )
+
+    # ai_form is set to a bound form only when we need to re-render with errors
+    ai_form = None
+
+    # -------------------------------------------------------------------
+    # POST handler
+    # -------------------------------------------------------------------
+    if request.method == 'POST':
+        form_type = request.POST.get('form_type', 'preset')
+
+        if form_type == 'ai_settings':
+            # Belt-and-suspenders RBAC check (top-level check already covers this)
+            if not is_user_org_admin(request.user):
+                return HttpResponseForbidden()
+
+            ai_form = OrganizationAISettingsForm(request.POST)
+            if ai_form.is_valid():
+                cd = ai_form.cleaned_data
+                raw_key = cd.get('raw_api_key', '').strip()
+                byok_prov = cd.get('byok_provider', '')
+                remove_key = cd.get('remove_byok_key', False)
+                byok_model_val = (cd.get('byok_model') or '').strip() or None
+
+                ai_settings, _ = OrganizationAISettings.objects.get_or_create(
+                    workspace=workspace,
+                    defaults={'provider': 'gemini'},
+                )
+                ai_settings.provider = cd['provider']
+                ai_settings.allow_user_provider_override = cd['allow_user_provider_override']
+
+                save_ok = True
+
+                if remove_key:
+                    ai_settings.encrypted_api_key = None
+                    ai_settings.byok_provider = None
+                    ai_settings.key_last_four = None
+                    ai_settings.key_validated_at = None
+                    ai_settings.byok_model = None
+
+                elif raw_key:
+                    router = AIRouter()
+                    # If user entered a custom model name, validate it against
+                    # the provider before encrypting and storing the key.
+                    if byok_model_val and save_ok:
+                        is_model_valid = router.validate_api_key(byok_prov, raw_key, model=byok_model_val)
+                        if not is_model_valid:
+                            ai_form.add_error(
+                                None,
+                                'The custom model name was not recognised by the provider. '
+                                'Please check the model name and try again.'
+                            )
+                            save_ok = False
+
+                    if save_ok:
+                        try:
+                            is_valid = router.validate_api_key(byok_prov, raw_key)
+                        except ImproperlyConfigured:
+                            ai_form.add_error(
+                                None,
+                                'API key encryption is not configured on this server. '
+                                'Contact your administrator.'
+                            )
+                            save_ok = False
+                            is_valid = False
+
+                        if save_ok and not is_valid:
+                            ai_form.add_error(
+                                None,
+                                'The API key could not be validated. '
+                                'Please check the key and try again.'
+                            )
+                            save_ok = False
+
+                    if save_ok:
+                        try:
+                            ai_settings.encrypted_api_key = router._encrypt_key(raw_key)
+                        except ImproperlyConfigured:
+                            ai_form.add_error(
+                                None,
+                                'API key encryption is not configured on this server. '
+                                'Contact your administrator.'
+                            )
+                            save_ok = False
+
+                    if save_ok:
+                        ai_settings.key_last_four = '••••' + raw_key[-4:]
+                        ai_settings.byok_provider = byok_prov
+                        ai_settings.key_validated_at = tz.now()
+                        ai_settings.byok_model = byok_model_val
+
+                elif byok_model_val is not None:
+                    # No new key submitted but model preference changed — update model only
+                    ai_settings.byok_model = byok_model_val
+
+                if save_ok:
+                    ai_settings.updated_by = request.user
+                    ai_settings.save()
+                    messages.success(request, 'AI provider settings saved.')
+                    return redirect('workspace_preset_settings')
+                # Validation failed — fall through to re-render with errors
+
+        else:
+            # Preset form (form_type='preset' or absent)
+            if preset_obj is None:
+                messages.error(request, "You don't have an active workspace to configure yet.")
+                return redirect('dashboard')
+            new_preset = request.POST.get('global_preset', '').strip()
+            if new_preset in PRESET_ORDER:
+                preset_obj.global_preset = new_preset
+                preset_obj.save()
+                messages.success(
+                    request,
+                    f"Workspace mode updated to "
+                    f"{dict(PRESET_CHOICES).get(new_preset, new_preset)}."
+                )
+            else:
+                messages.error(request, "Invalid preset selection.")
+            return redirect('workspace_preset_settings')
+
+    # -------------------------------------------------------------------
+    # GET context (also used when re-rendering after failed AI settings POST)
+    # -------------------------------------------------------------------
+    ai_settings_obj = None
+    try:
+        ai_settings_obj = workspace.ai_settings
+    except OrganizationAISettings.DoesNotExist:
+        pass
+
+    if ai_form is None:
+        # Fresh GET — pre-populate with saved values (or defaults)
+        if ai_settings_obj:
+            ai_form = OrganizationAISettingsForm(initial={
+                'provider': ai_settings_obj.provider,
+                'allow_user_provider_override': ai_settings_obj.allow_user_provider_override,
+                'byok_provider': ai_settings_obj.byok_provider or '',
+                'byok_model': ai_settings_obj.byok_model or '',
+            })
+        else:
+            ai_form = OrganizationAISettingsForm(initial={'provider': 'gemini'})
+
+    has_byok_key = bool(ai_settings_obj and ai_settings_obj.encrypted_api_key)
+    current_ai_provider = dict(PROVIDER_CHOICES).get(
+        ai_settings_obj.provider if ai_settings_obj else 'gemini',
+        'Google Gemini',
+    )
+
+    context = {
+        'preset_obj': preset_obj,
+        'preset_choices': PRESET_CHOICES,
+        'current_preset': preset_obj.global_preset if preset_obj else 'lean',
+        'ai_settings_form': ai_form,
+        'ai_settings': ai_settings_obj,
+        'has_byok_key': has_byok_key,
+        'current_ai_provider': current_ai_provider,
+    }
+    return render(request, 'kanban/workspace_preset_settings.html', context)
+
+
+@login_required
+@require_POST
+def board_preset_update(request, board_id):
+    """
+    AJAX POST — update the local preset for a specific board.
+    Only Board Owners and Org Admins may do this.
+    The local preset cannot exceed the global ceiling.
+    """
+    from kanban.preset_models import BoardPreset, WorkspacePreset, PRESET_ORDER
+    board = get_object_or_404(Board, id=board_id)
+
+    # Permission check — use canonical helper that checks OrgAdmin group,
+    # org.created_by, AND profile.is_admin
+    from kanban.permissions import is_user_org_admin
+    is_owner = board.owner == request.user
+    if not is_owner and not is_user_org_admin(request.user):
+        return JsonResponse({'error': 'Permission denied. Only board owners and org admins can change this.'}, status=403)
+
+    new_preset = request.POST.get('local_preset', '').strip()
+
+    # Allow clearing (inherit global) by sending empty or 'inherit'
+    if new_preset in ('', 'inherit'):
+        bp, _ = BoardPreset.objects.get_or_create(board=board)
+        bp.local_preset = None
+        bp.save()
+        return JsonResponse({'success': True, 'effective': bp.effective_preset()})
+
+    if new_preset not in PRESET_ORDER:
+        return JsonResponse({'error': 'Invalid preset.'}, status=400)
+
+    # Enforce ceiling: local cannot exceed global
+    global_preset = 'lean'
+    try:
+        if board.workspace:
+            global_preset = board.workspace.workspace_preset.global_preset
+    except WorkspacePreset.DoesNotExist:
+        pass
+
+    global_idx = PRESET_ORDER.index(global_preset)
+    local_idx = PRESET_ORDER.index(new_preset)
+    if local_idx > global_idx:
+        return JsonResponse({
+            'error': f'Cannot set board to {new_preset}. Your organization is limited to {global_preset}.'
+        }, status=400)
+
+    bp, _ = BoardPreset.objects.get_or_create(board=board)
+    bp.local_preset = new_preset
+    bp.save()
+    return JsonResponse({'success': True, 'effective': bp.effective_preset()})

@@ -10,7 +10,7 @@
     @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
     .signal-row:hover { background: rgba(0,0,0,.03); }
     .bet-card { border-left: 4px solid #0d6efd; }
-    .credibility-bar-wrap { background: #e9ecef; border-radius: 4px; height: 6px; }
+    .credibility-bar-wrap { background: var(--bg-tertiary); border-radius: 4px; height: 6px; }
     .credibility-bar { height: 6px; border-radius: 4px; background:#0d6efd; }
     .option-card { cursor: pointer; transition: all .15s ease; border: 2px solid transparent; }
     .option-card:hover { border-color: #0d6efd; box-shadow: 0 2px 8px rgba(13,110,253,.2); }
@@ -25,10 +25,18 @@
   <!-- View Mode Tabs -->
   <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
     <li class="nav-item"><a class="nav-link" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+    {% if features.show_gantt %}
     <li class="nav-item"><a class="nav-link" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
+    {% endif %}
     <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
-    <li class="nav-item"><a class="nav-link active" href="{% url 'commitment_dashboard' board.id %}"><i class="fas fa-shield-halved me-1"></i>Commitments</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'board_list_view' board.id %}"><i class="fas fa-list me-1"></i>List</a></li>
   </ul>
+
+  <div class="mb-3">
+    <a href="{% url 'commitment_dashboard' board.id %}" class="btn-prizm-back">
+      <i class="fas fa-arrow-left"></i> Back to Commitments
+    </a>
+  </div>
 
   <!-- Breadcrumb -->
   <nav aria-label="breadcrumb" class="mb-3">
@@ -65,7 +73,10 @@
       <div class="card border-0 shadow-sm text-center py-3">
         <div class="fs-2 fw-bold text-info">{% if market.consensus %}{{ market.consensus|floatformat:0 }}%{% else %}—{% endif %}</div>
         <div class="text-muted small">Market Consensus</div>
-        {% if not market.show_market %}<div class="text-muted" style="font-size:.7rem;">Need 3+ bets</div>{% endif %}
+        {% if not market.show_market %}
+        <div class="text-muted mt-1" style="font-size:.75rem;">No market yet · Place a bet to open the market</div>
+        <a href="#place-bet" class="btn btn-sm btn-outline-info mt-1" data-bs-toggle="collapse" data-bs-target="#betForm"><i class="fas fa-gavel me-1"></i>Place Bet</a>
+        {% endif %}
       </div>
     </div>
     <div class="col-md-3">
@@ -284,7 +295,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="{% static 'js/chart.umd.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
 (function () {
   // ── Confidence Curve (Chart.js) ──────────────────────────────────────

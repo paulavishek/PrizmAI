@@ -90,7 +90,21 @@ class UserSession(models.Model):
         ],
         default='unknown'
     )
-    
+
+    # Workspace context at session start
+    workspace_preset = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text="Workspace preset tier at session start: lean/professional/enterprise"
+    )
+    byok_active = models.BooleanField(
+        default=False,
+        help_text="Whether user was using their own API key during this session"
+    )
+    ai_provider_used = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text="AI provider active during session: gemini/openai/anthropic"
+    )
+
     class Meta:
         ordering = ['-session_start']
         indexes = [
@@ -178,7 +192,13 @@ class UserSession(models.Model):
             delta = self.last_activity - self.session_start
         
         self.duration_minutes = int(delta.total_seconds() / 60)
-        self.save(update_fields=['duration_minutes'])
+        try:
+            self.save(update_fields=['duration_minutes'])
+        except Exception:
+            # Row may have been deleted or never committed; refresh and retry
+            if self.pk and type(self).objects.filter(pk=self.pk).exists():
+                self.save(update_fields=['duration_minutes'])
+            # else: silently skip — stale session object
     
     def end_session(self, reason='logout', exit_page=''):
         """End the session and calculate final metrics"""
@@ -1128,8 +1148,21 @@ class DemoAbusePrevention(models.Model):
             models.Index(fields=['is_blocked']),
             models.Index(fields=['last_seen']),
         ]
-        # Allow same IP with different fingerprints (shared networks)
-        unique_together = [['ip_address', 'browser_fingerprint']]
+        # Per-fingerprint uniqueness: one record per (ip, fingerprint) when fingerprint is known.
+        # Per-IP uniqueness: one record per IP when fingerprint is absent (prevents fragmentation
+        # of rate-limit counters for the same IP on NULL fingerprints, since SQL NULL != NULL).
+        constraints = [
+            models.UniqueConstraint(
+                fields=['ip_address', 'browser_fingerprint'],
+                condition=models.Q(browser_fingerprint__isnull=False),
+                name='unique_ip_fingerprint_when_set',
+            ),
+            models.UniqueConstraint(
+                fields=['ip_address'],
+                condition=models.Q(browser_fingerprint__isnull=True),
+                name='unique_ip_when_no_fingerprint',
+            ),
+        ]
     
     def __str__(self):
         return f"Abuse Prevention: {self.ip_address} (AI: {self.total_ai_generations}, Sessions: {self.total_sessions_created})"
@@ -1137,24 +1170,40 @@ class DemoAbusePrevention(models.Model):
     def check_rate_limit(self):
         """Check if this IP/fingerprint is creating sessions too fast"""
         from datetime import timedelta
-        
+
+        now = timezone.now()
+        dirty = False  # track whether we need a save
+
         # Reset hourly counter if needed
         if self.last_rate_limit_reset:
-            if timezone.now() - self.last_rate_limit_reset > timedelta(hours=1):
+            elapsed = now - self.last_rate_limit_reset
+            if elapsed > timedelta(hours=24):
+                # Both windows have expired
                 self.sessions_last_hour = 0
-                self.last_rate_limit_reset = timezone.now()
+                self.sessions_last_24h = 0
+                self.last_rate_limit_reset = now
+                dirty = True
+            elif elapsed > timedelta(hours=1):
+                # Only the hourly window has expired
+                self.sessions_last_hour = 0
+                self.last_rate_limit_reset = now
+                dirty = True
         else:
-            self.last_rate_limit_reset = timezone.now()
-        
+            self.last_rate_limit_reset = now
+            dirty = True
+
+        if dirty:
+            self.save(update_fields=['sessions_last_hour', 'sessions_last_24h', 'last_rate_limit_reset'])
+
         # Rate limits (increased for development)
         MAX_SESSIONS_PER_HOUR = 50
         MAX_SESSIONS_PER_24H = 100
-        
+
         if self.sessions_last_hour >= MAX_SESSIONS_PER_HOUR:
             return False, "Too many demo sessions. Please try again later."
         if self.sessions_last_24h >= MAX_SESSIONS_PER_24H:
             return False, "Daily demo session limit reached. Please create an account for unlimited access."
-        
+
         return True, None
     
     def check_ai_limit(self):
@@ -1194,3 +1243,219 @@ class DemoAbusePrevention(models.Model):
         """Call when a project is created in any demo session"""
         self.total_projects_created += count
         self.save(update_fields=['total_projects_created', 'last_seen'])
+
+
+class DemoEmailCapture(models.Model):
+    """
+    Capture email addresses from demo users who opt in to reminders.
+    Replaced the deleted demo_user_email field on DemoSession (removed in migration 0013)
+    with a proper standalone model so email capture is decoupled from session lifecycle.
+    """
+    session_id = models.CharField(max_length=255, db_index=True)
+    demo_session = models.ForeignKey(
+        DemoSession,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='email_captures',
+        help_text="Associated demo session (nullable in case session is later deleted)"
+    )
+    email = models.EmailField()
+    captured_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-captured_at']
+        verbose_name = 'Demo Email Capture'
+        verbose_name_plural = 'Demo Email Captures'
+        indexes = [
+            models.Index(fields=['captured_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.email} — Session {self.session_id[:8]}"
+
+
+# ---------------------------------------------------------------------------
+# Feature Adoption Event
+# ---------------------------------------------------------------------------
+
+class FeatureAdoptionEvent(models.Model):
+    """
+    Tracks the first-use and deep-use of every named feature per user.
+    Powers the feature adoption matrix in the analytics dashboard.
+    """
+
+    FEATURE_CHOICES = [
+        # Core views
+        ('kanban_board',         'Kanban Board'),
+        ('gantt_chart',          'Gantt Chart'),
+        ('burndown_chart',       'Burndown Chart'),
+        ('calendar_view',        'Calendar View'),
+        ('time_tracking',        'Time Tracking'),
+        ('budget_roi',           'Budget & ROI'),
+        ('task_dependency',      'Task Dependencies'),
+        ('board_automation',     'Board Automations'),
+        ('requirements_mgmt',    'Requirements Management'),
+        # AI features
+        ('spectra_query',        'Spectra AI Query'),
+        ('ai_coach',             'AI Coach'),
+        ('ai_retrospective',     'AI Retrospective'),
+        ('skill_gap',            'Skill Gap Analyser'),
+        ('conflict_detection',   'Conflict Detection'),
+        ('scope_creep',          'Scope Creep Monitor'),
+        ('resource_leveling',    'Resource Levelling'),
+        ('requirements_ai',      'Requirements AI'),
+        ('knowledge_graph',      'Knowledge Graph'),
+        ('cognitive_load',       'Cognitive Load Analyser'),
+        ('ai_bubble_up',         'AI Bubble-Up Insights'),
+        ('semantic_search',      'Semantic Search'),
+        ('ai_onboarding',        'AI Onboarding'),
+        # Enterprise AI features
+        ('premortem',            'Pre-Mortem Analysis'),
+        ('stress_test',          'Stress Test'),
+        ('what_if',              'What-If Scenarios'),
+        ('shadow_board',         'Shadow Board'),
+        ('scope_autopsy',        'Scope Autopsy'),
+        ('exit_protocol',        'Exit Protocol'),
+        ('prizm_brief',          'PrizmBrief'),
+        ('triple_constraint',    'Triple Constraint'),
+        ('commitments',          'Commitments Tracker'),
+        # Collaboration & integration
+        ('team_invite',          'Team Invite'),
+        ('real_time_chat',       'Real-Time Chat'),
+        ('wiki',                 'Wiki'),
+        ('board_import',         'Board Import'),
+        ('board_export',         'Board Export'),
+        ('webhook',              'Webhooks'),
+        ('google_calendar',      'Google Calendar Sync'),
+        ('byok_setup',           'BYOK Key Setup'),
+        ('github_webhook',       'GitHub Webhook'),
+    ]
+
+    CATEGORY_CHOICES = [
+        ('core',           'Core Feature'),
+        ('ai',             'AI Feature'),
+        ('enterprise_ai',  'Enterprise AI Feature'),
+        ('collaboration',  'Collaboration'),
+        ('integration',    'Integration'),
+    ]
+
+    EVENT_TYPE_CHOICES = [
+        ('first_use',  'First Use'),
+        ('repeat_use', 'Repeat Use'),
+        ('deep_use',   'Deep Use'),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, db_index=True,
+        related_name='feature_adoption_events'
+    )
+    user_session = models.ForeignKey(
+        UserSession, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='feature_adoption_events'
+    )
+    feature = models.CharField(max_length=30, choices=FEATURE_CHOICES, db_index=True)
+    feature_category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    event_type = models.CharField(max_length=15, choices=EVENT_TYPE_CHOICES, default='repeat_use')
+    workspace_preset = models.CharField(max_length=20, blank=True, default='')
+    using_byok = models.BooleanField(default=False)
+    ai_provider = models.CharField(max_length=20, blank=True, default='')
+    metadata = models.JSONField(default=dict, blank=True)
+    timestamp = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = 'Feature Adoption Event'
+        verbose_name_plural = 'Feature Adoption Events'
+        indexes = [
+            models.Index(fields=['feature', 'event_type'], name='analytics_fae_feature_type_idx'),
+            models.Index(fields=['user', 'feature'],       name='analytics_fae_user_feature_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} — {self.feature} ({self.event_type})"
+
+
+# ---------------------------------------------------------------------------
+# AI Quota Event
+# ---------------------------------------------------------------------------
+
+class AIQuotaEvent(models.Model):
+    """
+    Tracks AI quota milestones per user: warnings, exhaustion, BYOK setup.
+    Powers the AI quota funnel in the analytics dashboard.
+    """
+
+    EVENT_TYPE_CHOICES = [
+        ('quota_warning',    'Quota Warning (80%)'),
+        ('quota_exhausted',  'Quota Exhausted (100%)'),
+        ('feature_blocked',  'Feature Blocked by Quota'),
+        ('byok_configured',  'BYOK Key Configured'),
+        ('byok_removed',     'BYOK Key Removed'),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, db_index=True,
+        related_name='ai_quota_events'
+    )
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPE_CHOICES, db_index=True)
+    quota_used = models.IntegerField(default=0)
+    quota_limit = models.IntegerField(default=25)
+    feature_blocked = models.CharField(max_length=50, blank=True, default='')
+    provider_configured = models.CharField(max_length=20, blank=True, default='')
+    days_since_first_use = models.IntegerField(
+        default=0,
+        help_text="How many days since the user first used an AI feature"
+    )
+    timestamp = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = 'AI Quota Event'
+        verbose_name_plural = 'AI Quota Events'
+        indexes = [
+            models.Index(fields=['event_type', 'timestamp'], name='analytics_aqe_type_ts_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} — {self.get_event_type_display()} @ {self.timestamp:%Y-%m-%d}"
+
+
+# ---------------------------------------------------------------------------
+# Workspace Preset Event
+# ---------------------------------------------------------------------------
+
+class WorkspacePresetEvent(models.Model):
+    """
+    Records every time an organisation's workspace preset changes tier.
+    Powers the tier progression chart in the analytics dashboard.
+    """
+
+    PRESET_CHOICES = [
+        ('lean',         'Lean'),
+        ('professional', 'Professional'),
+        ('enterprise',   'Enterprise'),
+    ]
+
+    organization = models.ForeignKey(
+        'accounts.Organization', on_delete=models.CASCADE, db_index=True,
+        related_name='preset_events'
+    )
+    changed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='preset_change_events'
+    )
+    from_preset = models.CharField(max_length=20, choices=PRESET_CHOICES, blank=True, default='')
+    to_preset = models.CharField(max_length=20, choices=PRESET_CHOICES)
+    timestamp = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = 'Workspace Preset Event'
+        verbose_name_plural = 'Workspace Preset Events'
+
+    def __str__(self):
+        return (
+            f"{self.organization} — {self.from_preset or '?'} → {self.to_preset} "
+            f"({self.timestamp:%Y-%m-%d})"
+        )

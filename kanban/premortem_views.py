@@ -8,19 +8,21 @@ AI plays devil's advocate and simulates 5 ways the project could fail.
 import json
 import time
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.conf import settings
 
 from kanban.models import Board, Task
 from kanban.premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
 from kanban.audit_utils import log_audit
+from kanban.decorators import demo_write_guard, demo_ai_guard
+from kanban.simple_access import check_access_or_403, check_modify_or_403
 from api.ai_usage_utils import track_ai_request, require_ai_quota, check_ai_quota
 
 logger = logging.getLogger(__name__)
@@ -79,7 +81,7 @@ def _collect_board_snapshot(board):
     no_deadline_count = task_count - no_deadline_count  # tasks WITHOUT a due date
 
     # Team size – union of board members and distinct assignees
-    member_ids = set(board.members.values_list('id', flat=True))
+    member_ids = set(board.memberships.values_list('user_id', flat=True))
     assignee_ids = set(
         tasks.filter(assigned_to__isnull=False)
         .values_list('assigned_to_id', flat=True)
@@ -113,13 +115,17 @@ def _collect_board_snapshot(board):
     except Exception:
         budget_info = None
 
-    # Existing active conflicts
+    # Existing active conflicts, broken down by type (resource/schedule/dependency)
+    # so the AI can reference real categories instead of guessing at them.
     conflict_count = 0
+    conflict_type_breakdown = {}
     try:
         from kanban.conflict_models import ConflictDetection
-        conflict_count = ConflictDetection.objects.filter(
-            board=board, status='active'
-        ).count()
+        active_conflicts = ConflictDetection.objects.filter(board=board, status='active')
+        conflict_count = active_conflicts.count()
+        if conflict_count:
+            for row in active_conflicts.values('conflict_type').annotate(n=Count('id')):
+                conflict_type_breakdown[row['conflict_type']] = row['n']
     except Exception:
         pass
 
@@ -138,6 +144,7 @@ def _collect_board_snapshot(board):
         'days_remaining': days_remaining,
         'budget_info': budget_info,
         'conflict_count': conflict_count,
+        'conflict_type_breakdown': conflict_type_breakdown,
     }
     return snapshot
 
@@ -156,7 +163,12 @@ def _build_gemini_prompt(snapshot):
         "- Do NOT give generic project management advice.\n"
         "- Do NOT be reassuring or diplomatic. Be direct about risks.\n"
         "- Each failure scenario must be distinct — no overlapping causes.\n"
-        "- Think like a skeptic, not a cheerleader.\n\n"
+        "- Think like a skeptic, not a cheerleader.\n"
+        "- Only state an assumption in confidence_note about data that is genuinely "
+        "absent from PROJECT DATA below. Never guess at, or contradict, a fact that "
+        "is already given to you (e.g. if conflict types are listed, don't assume "
+        "their types; if no spend history is provided, don't assert whether burn "
+        "rate is linear or accelerating — that data was not given to you).\n\n"
         "Return ONLY valid JSON. No markdown, no backticks, no explanation outside the JSON."
     )
 
@@ -166,6 +178,13 @@ def _build_gemini_prompt(snapshot):
             f"{snapshot['days_available']} days total "
             f"({snapshot['days_remaining']} days remaining)"
         )
+
+    conflict_breakdown = snapshot.get('conflict_type_breakdown') or {}
+    if conflict_breakdown:
+        parts = [f"{count} {ctype}" for ctype, count in conflict_breakdown.items()]
+        conflicts_str = f"{snapshot['conflict_count']} ({', '.join(parts)})"
+    else:
+        conflicts_str = str(snapshot['conflict_count'])
 
     user_prompt = (
         "Analyze this project and generate a Pre-Mortem analysis.\n\n"
@@ -179,8 +198,9 @@ def _build_gemini_prompt(snapshot):
         f"- Tasks with no due date: {snapshot['no_deadline_count']}\n"
         f"- Team size: {snapshot['team_size']} people\n"
         f"- Timeline: {timeline_str}\n"
-        f"- Budget: {snapshot['budget_info'] or 'Not set'}\n"
-        f"- Existing conflicts detected: {snapshot['conflict_count']}\n\n"
+        f"- Budget: {snapshot['budget_info'] or 'Not set'} (single point-in-time snapshot — "
+        "no spend-over-time history is available, so do not assume a burn-rate trend)\n"
+        f"- Existing conflicts detected: {conflicts_str}\n\n"
         'Return this exact JSON structure:\n'
         '{\n'
         '  "failure_scenarios": [\n'
@@ -196,8 +216,10 @@ def _build_gemini_prompt(snapshot):
         '    }\n'
         '  ],\n'
         '  "overall_risk_level": "High" or "Medium" or "Low",\n'
-        '  "confidence_note": "One sentence describing what assumptions you made '
-        'due to missing data"\n'
+        '  "confidence_note": "One sentence naming ONLY data fields that are missing '
+        'or not set above (e.g. no budget, no deadline) and how that limits this '
+        'analysis. If nothing relevant is missing, state that the analysis is based '
+        'on complete project data instead of inventing an assumption."\n'
         '}'
     )
 
@@ -206,26 +228,27 @@ def _build_gemini_prompt(snapshot):
 
 def _call_gemini(system_prompt, user_prompt):
     """
-    Call Gemini and return parsed JSON dict.
+    Call AI router and return parsed JSON dict.
     Raises on failure.
     """
-    import google.generativeai as genai
+    from ai_assistant.utils.ai_router import AIRouter
+    from kanban_board.ai_cache import get_cached_ai_response
 
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    model = genai.GenerativeModel(
-        'gemini-2.5-flash-lite',
-        system_instruction=system_prompt,
+    # Use combined prompt as cache key (system + user)
+    full_prompt = f"{system_prompt}\n---\n{user_prompt}"
+    router = AIRouter()
+    raw = get_cached_ai_response(
+        prompt=full_prompt,
+        model_call=lambda: router.complete(
+            prompt=user_prompt,
+            user=None,
+            system_prompt=system_prompt,
+            complexity='simple',
+        )['text'],
+        operation='premortem',
     )
-
-    generation_config = {
-        'temperature': 0.4,
-        'top_p': 0.8,
-        'top_k': 40,
-        'max_output_tokens': 4096,
-    }
-
-    response = model.generate_content(user_prompt, generation_config=generation_config)
-    raw = response.text.strip()
+    if not raw:
+        raise RuntimeError('AI pre-mortem analysis returned no response')
 
     # Strip markdown fences if accidentally returned
     if raw.startswith('```'):
@@ -248,8 +271,13 @@ def premortem_dashboard(request, board_id):
     Main Pre-Mortem page. Shows locked / unlocked / results state.
     """
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     readiness = board_premortem_ready(board)
     latest = board.pre_mortems.first()  # ordered by -created_at
+
+    # Flag stale analyses (older than 7 days)
+    if latest:
+        latest.is_stale = (timezone.now() - latest.created_at) > timedelta(days=7)
 
     # Gather acknowledgments and enrich scenario data for the template
     enriched_scenarios = []
@@ -296,11 +324,16 @@ def premortem_dashboard(request, board_id):
 @login_required
 @require_POST
 @require_ai_quota('premortem')
+@demo_ai_guard
 def run_premortem(request, board_id):
     """
     Run a new Pre-Mortem AI analysis for the board.
     """
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: verify user has access to this board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     # Verify readiness
     readiness = board_premortem_ready(board)
@@ -309,6 +342,12 @@ def run_premortem(request, board_id):
             'success': False,
             'error': 'Board does not meet the Pre-Mortem unlock conditions.',
         }, status=400)
+
+    # Async mode: enqueue Celery task and return task_id for WebSocket streaming
+    if request.headers.get('X-Request-Async'):
+        from kanban.tasks.ai_streaming_tasks import run_premortem_task
+        result = run_premortem_task.delay(board_id, request.user.id)
+        return JsonResponse({'task_id': result.id, 'status': 'queued'})
 
     start_time = time.time()
     snapshot = _collect_board_snapshot(board)
@@ -388,11 +427,13 @@ def run_premortem(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def acknowledge_scenario(request, premortem_id, scenario_index):
     """
     Mark a Pre-Mortem scenario as addressed / acknowledged.
     """
     analysis = get_object_or_404(PreMortemAnalysis, id=premortem_id)
+    check_modify_or_403(request.user, analysis.board)
 
     if scenario_index < 0 or scenario_index > 4:
         return JsonResponse({'success': False, 'error': 'Invalid scenario index.'}, status=400)
@@ -447,6 +488,7 @@ def get_latest_premortem(request, board_id):
     Return the most recent Pre-Mortem analysis for a board as JSON.
     """
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     latest = board.pre_mortems.first()
 
     if not latest:

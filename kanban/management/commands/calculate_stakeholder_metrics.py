@@ -27,11 +27,11 @@ class Command(BaseCommand):
                 success, message = self._calculate_for_board(board)
                 if success:
                     self.stdout.write(
-                        self.style.SUCCESS(f'✓ {message}')
+                        self.style.SUCCESS(f'[OK] {message}')
                     )
                 else:
                     self.stdout.write(
-                        self.style.ERROR(f'✗ {message}')
+                        self.style.ERROR(f'[FAIL] {message}')
                     )
             except Board.DoesNotExist:
                 self.stdout.write(
@@ -50,15 +50,15 @@ class Command(BaseCommand):
                 if success:
                     success_count += 1
                     self.stdout.write(
-                        self.style.SUCCESS(f'✓ {board.name}: {message}')
+                        self.style.SUCCESS(f'[OK] {board.name}: {message}')
                     )
                 else:
                     self.stdout.write(
-                        self.style.ERROR(f'✗ {board.name}: {message}')
+                        self.style.ERROR(f'[FAIL] {board.name}: {message}')
                     )
             
             self.stdout.write(
-                self.style.SUCCESS(f'\n✓ Completed: {success_count}/{total} boards processed successfully')
+                self.style.SUCCESS(f'\n[OK] Completed: {success_count}/{total} boards processed successfully')
             )
 
     @staticmethod

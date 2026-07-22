@@ -1,7 +1,4 @@
-{# ============================================================
-   Shared skeleton for Goal / Mission / Strategy detail pages.
-   Child templates extend this and fill the blocks.
-   ============================================================ #}
+{# Shared skeleton for Goal / Mission / Strategy detail pages. Child templates extend this and fill the blocks. #}
 {% extends 'base.html' %}
 {% load static %}
 
@@ -20,6 +17,15 @@
         {% block breadcrumb_items %}{% endblock %}
     </ol>
 </nav>
+
+{# --- Back button --- #}
+<div class="mb-3">
+    {% block back_button %}
+    <a href="{% url 'dashboard' %}" class="btn-prizm-back">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+    {% endblock %}
+</div>
 
 {# --- Header card --- #}
 <div class="card shadow-sm mb-4 strategic-header {{ header_class }}">
@@ -53,8 +59,8 @@
 {% if ai_is_stale %}
 <div class="stale-banner mb-3" id="stale-ai-banner">
     <i class="fas fa-exclamation-triangle text-warning"></i>
-    <span>AI insights may be <strong>outdated</strong> — the {{ level_name }} was modified after the last summary.</span>
-    <button class="btn btn-sm btn-outline-warning ms-auto" id="btn-regenerate-ai"
+    <span>This {{ level_name }} was edited on {{ record.updated_at|date:"M d" }}. Some AI summaries below were generated before this change.</span>
+    <button class="btn btn-sm btn-outline-warning ms-auto btn-regenerate-ai"
             data-url="{% url 'regenerate_summary' level=level_name pk=record.pk %}">
         <i class="fas fa-sync-alt me-1"></i>Regenerate
     </button>
@@ -111,7 +117,8 @@
 
             {# ---- Updates tab ---- #}
             <div class="tab-pane" id="tab-updates">
-                {# Post update form #}
+                {# Post update form — only shown to users with edit permission #}
+                {% if can_edit %}
                 <div class="card shadow-sm mb-3">
                     <div class="card-body py-3">
                         <form id="strategic-update-form" method="post"
@@ -139,6 +146,15 @@
                         </form>
                     </div>
                 </div>
+                {% else %}
+                <div class="card shadow-sm mb-3">
+                    <div class="card-body py-3 text-center">
+                        <p class="text-muted small mb-0">
+                            <i class="fas fa-lock me-1"></i>Only the owner of this {{ level_name|title }} can post updates.
+                        </p>
+                    </div>
+                </div>
+                {% endif %}
 
                 {# Update feed #}
                 {% block tab_updates %}
@@ -168,16 +184,30 @@
                 {% if record.ai_summary %}
                 <div class="card border-0 shadow-sm">
                     <div class="card-body" id="ai-summary-body">
-                        <p class="mb-1">{{ record.ai_summary }}</p>
+                        <p class="mb-1" style="white-space:pre-line;">{{ record.ai_summary }}</p>
                         {% if record.ai_summary_generated_at %}
                         <small class="text-muted">Generated {{ record.ai_summary_generated_at|date:"M d, Y H:i" }}</small>
                         {% endif %}
                     </div>
                 </div>
+                {% if can_edit %}
+                <div class="text-end mt-2">
+                    <button class="btn btn-sm btn-outline-warning btn-regenerate-ai"
+                            data-url="{% url 'regenerate_summary' level=level_name pk=record.pk %}">
+                        <i class="fas fa-sync-alt me-1"></i>Regenerate
+                    </button>
+                </div>
+                {% endif %}
                 {% else %}
                 <div class="text-center py-4 text-muted">
                     <i class="fas fa-robot fa-2x mb-2" style="opacity:0.3;"></i>
                     <p class="small">No AI summary available yet.</p>
+                    {% if can_edit %}
+                    <button class="btn btn-sm btn-primary btn-regenerate-ai"
+                            data-url="{% url 'regenerate_summary' level=level_name pk=record.pk %}">
+                        <i class="fas fa-magic me-1"></i>Generate AI Summary
+                    </button>
+                    {% endif %}
                 </div>
                 {% endif %}
                 {% endblock %}

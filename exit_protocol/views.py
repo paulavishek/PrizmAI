@@ -4,6 +4,7 @@ Views for Exit Protocol: Hospice, Organ Transplant, Cemetery.
 
 import json
 import logging
+import re
 from datetime import timedelta
 from io import BytesIO
 
@@ -12,21 +13,138 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import HttpResponseBadRequest, JsonResponse, HttpResponse
+from django.http import Http404, HttpResponseBadRequest, JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from kanban.models import Board
-from kanban.simple_access import check_access_or_403, check_management_or_403
+from kanban.models import Board, BoardMembership
+from kanban.simple_access import check_access_or_403, check_modify_or_403, check_management_or_403
 from kanban.audit_utils import log_audit
 
 from .models import (
     ProjectHealthSignal, HospiceSession, ProjectOrgan,
     OrganTransplant, CemeteryEntry, HospiceDismissal,
 )
+from kanban.decorators import demo_write_guard, demo_ai_guard
 
 logger = logging.getLogger(__name__)
+
+
+# ──────────────────────────
+# Knowledge Preserved helpers
+# ──────────────────────────
+# The autopsy report (on-screen and PDF) both render the "Knowledge Preserved"
+# section from a board's MemoryNodes. These helpers build one de-duplicated,
+# ordered list so the two renderers can never diverge.
+
+# em / en / figure / horizontal-bar / minus — autopsy AI prose mixes these with
+# plain hyphens, which would otherwise leave the same lesson recorded twice.
+_DASH_CHARS = ('—', '–', '‒', '―', '−')
+
+_COMPLETION_RE = re.compile(r'\d+\s*/\s*\d+\s+tasks completed\s*\([\d.]+%\)')
+
+
+def _normalize_node_title(title):
+    """Collapse dash style, whitespace and case so near-identical titles dedupe."""
+    t = (title or '').strip()
+    for dash in _DASH_CHARS:
+        t = t.replace(dash, '-')
+    t = re.sub(r'\s+', ' ', t)
+    return t.lower()
+
+
+def _scope_growth_key(node):
+    """Dedup key grouping scope-growth records (forensic Scope Autopsy runs and
+    scope-creep alerts) by their growth percentage, so repeated analyses of the
+    same event collapse to one. Returns None for non-growth scope changes (e.g.
+    a scope *reduction*) and non-scope nodes, which fall back to title dedup."""
+    if node.node_type != 'scope_change':
+        return None
+    ctx = node.context_data or {}
+    pct = ctx.get('growth_pct', ctx.get('scope_increase_pct'))
+    if pct is None:
+        return None
+    try:
+        return ('scope_growth', round(float(pct), 1))
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_newer(node, other):
+    a, b = node.created_at, other.created_at
+    if a is None:
+        return False
+    if b is None:
+        return True
+    return a > b
+
+
+def _reconcile_outcome_content(node, entry):
+    """Rewrite a project-completion outcome's task figures to match the cemetery
+    entry's archived board snapshot — the same source Vital Statistics uses — so
+    the two sections can't report contradictory completion numbers."""
+    if node.node_type != 'outcome':
+        return
+    content = node.content or ''
+    if not _COMPLETION_RE.search(content):
+        return
+    total = entry.total_tasks or 0
+    completed = entry.completed_tasks or 0
+    pct = round(completed / total * 100) if total else 0
+    node.content = _COMPLETION_RE.sub(
+        f'{completed}/{total} tasks completed ({pct}%)', content,
+    )
+
+
+def _align_project_name(node, entry):
+    """Display the cemetery entry's project name in preserved records that still
+    refer to the source board's internal name, so the whole autopsy reads as one
+    project (e.g. a board internally named 'Software Development' archived as
+    'Legacy Bug Tracker v1'). Rewrites are in-memory only — stored data is left
+    untouched."""
+    board_name = (entry.board.name if entry.board else '') or ''
+    project_name = entry.project_name or ''
+    if not board_name or not project_name or board_name == project_name:
+        return
+    pattern = re.compile(r'\b' + re.escape(board_name) + r'\b')
+    if node.title:
+        node.title = pattern.sub(project_name, node.title)
+    if node.content:
+        node.content = pattern.sub(project_name, node.content)
+
+
+def build_preserved_knowledge(entry):
+    """Ordered, de-duplicated MemoryNodes for the autopsy 'Knowledge Preserved'
+    section, shared by the on-screen report and the PDF export.
+
+    Records whose titles differ only by dash style, whitespace or case are
+    collapsed (most recent kept). Scope Autopsy summaries and scope-creep alerts
+    reporting the same growth percentage collapse to one event; distinct growth
+    figures and scope reductions are preserved. Project-completion figures are
+    reconciled against the entry's archived snapshot, and source-board name
+    references are shown under the entry's project name.
+    """
+    from knowledge_graph.models import MemoryNode
+
+    best_by_key = {}
+    for node in MemoryNode.objects.filter(board=entry.board):
+        key = _scope_growth_key(node) or (node.node_type, _normalize_node_title(node.title))
+        current = best_by_key.get(key)
+        if current is None or _is_newer(node, current):
+            best_by_key[key] = node
+
+    nodes = list(best_by_key.values())
+    for node in nodes:
+        _reconcile_outcome_content(node, entry)
+        _align_project_name(node, entry)
+
+    nodes.sort(key=lambda n: (
+        n.node_type,
+        -(n.importance_score or 0.0),
+        -(n.created_at.timestamp() if n.created_at else 0.0),
+    ))
+    return nodes
 
 
 # ──────────────────────────
@@ -53,30 +171,20 @@ def exit_protocol_dashboard(request, board_id):
         board=board, user=request.user, expires_at__gt=now
     ).exists()
 
-    # Build per-dimension score breakdown
+    # Build per-dimension score breakdown. The gauge score and the breakdown
+    # bars are both derived from the same factor set (see exit_protocol.scoring)
+    # so they can never contradict each other — even if a stored score is stale.
     score_breakdown = []
     if last_signal and last_signal.score_is_valid:
-        WEIGHTS = {'velocity': 0.30, 'budget': 0.25, 'deadlines': 0.25, 'activity': 0.20}
-        available = {}
-        if last_signal.velocity_decline_pct is not None:
-            available['velocity'] = min(max(last_signal.velocity_decline_pct / 100, 0.0), 1.0)
-        if last_signal.budget_spent_pct is not None and last_signal.tasks_complete_pct is not None:
-            available['budget'] = min(
-                (last_signal.budget_spent_pct / 100) * (1 - last_signal.tasks_complete_pct / 100), 1.0
-            )
-        if last_signal.deadlines_missed_30d is not None:
-            available['deadlines'] = min(last_signal.deadlines_missed_30d / 10, 1.0)
-        available['activity'] = min(last_signal.days_since_last_activity / 30, 1.0)
+        from .scoring import score_and_breakdown
+        current_score, score_breakdown = score_and_breakdown(last_signal)
 
-        total_weight = sum(WEIGHTS[k] for k in available)
-        for dim, factor in available.items():
-            adjusted_weight = WEIGHTS[dim] / total_weight
-            score_breakdown.append({
-                'label': dim.replace('_', ' ').title(),
-                'factor_pct': round(factor * 100),
-                'contribution_pct': round(factor * adjusted_weight * 100),
-                'status': 'danger' if factor >= 0.75 else 'warning' if factor >= 0.40 else 'success',
-            })
+    # Determine if any individual dimension is in a concerning state
+    # even when the overall score is below the hospice threshold
+    concern_dimensions = [
+        dim['label'] for dim in score_breakdown
+        if dim['status'] in ('warning', 'danger')
+    ]
 
     return render(request, 'exit_protocol/dashboard.html', {
         'board': board,
@@ -87,27 +195,31 @@ def exit_protocol_dashboard(request, board_id):
         'banner_dismissed': banner_dismissed,
         'score_breakdown': score_breakdown,
         'last_signal': last_signal,
+        'concern_dimensions': concern_dimensions,
     })
 
 
 @login_required
 @require_POST
+@demo_write_guard
 def recalculate_health_score(request, board_id):
     """Manually triggers a health score recomputation for this board."""
     board = get_object_or_404(Board, id=board_id)
-    check_access_or_403(request.user, board)
+    check_modify_or_403(request.user, board)
 
     from .tasks import compute_board_health_score
-    compute_board_health_score.delay(board_id)
+    # Run synchronously with force=True to bypass the new-board age guard.
+    compute_board_health_score(board_id, force=True)
 
     return JsonResponse({
-        'status': 'recalculating',
-        'message': 'Health score recalculation started. Refresh in a few seconds.',
+        'status': 'done',
+        'message': 'Health score recalculated.',
     })
 
 
 @login_required
 @require_POST
+@demo_write_guard
 def initiate_hospice(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     check_management_or_403(request.user, board)
@@ -144,9 +256,10 @@ def initiate_hospice(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def complete_checklist_item(request, board_id, item_id):
     board = get_object_or_404(Board, id=board_id)
-    check_access_or_403(request.user, board)
+    check_modify_or_403(request.user, board)
 
     session = get_object_or_404(HospiceSession, board=board)
 
@@ -168,11 +281,19 @@ def complete_checklist_item(request, board_id, item_id):
 
 
 @login_required
+@demo_write_guard
 def view_transition_memos(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     check_access_or_403(request.user, board)
 
-    session = get_object_or_404(HospiceSession, board=board)
+    session = HospiceSession.objects.filter(board=board).first()
+
+    if session is None:
+        return render(request, 'exit_protocol/transition_memos.html', {
+            'board': board,
+            'hospice_session': None,
+            'memos': [],
+        })
 
     if request.method == 'POST':
         try:
@@ -216,6 +337,7 @@ def view_transition_memos(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def bury_project(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     check_management_or_403(request.user, board)
@@ -229,11 +351,37 @@ def bury_project(request, board_id):
             '"I confirm I want to archive this project"'
         )
 
-    from .tasks import perform_burial
-    perform_burial.delay(session.id)
+    # Create a stub CemeteryEntry immediately so the cemetery page shows the project
+    # right after redirect. perform_burial (Celery) will fill in AI-generated fields.
+    if not CemeteryEntry.objects.filter(hospice_session=session).exists():
+        from kanban.models import Task as KanbanTask
+        _total = KanbanTask.objects.filter(column__board=board).count()
+        _done = KanbanTask.objects.filter(column__board=board, completed_at__isnull=False).count()
+        try:
+            from kanban.models import BoardMembership
+            _team = BoardMembership.objects.filter(board=board).count()
+        except Exception:
+            _team = 0
+        CemeteryEntry.objects.create(
+            board=board,
+            hospice_session=session,
+            project_name=board.name,
+            project_description=board.description or '',
+            board_id_snapshot=board.id,
+            team_size=_team,
+            total_tasks=_total,
+            completed_tasks=_done,
+            start_date=board.created_at.date() if board.created_at else None,
+            end_date=timezone.now().date(),
+            cause_of_death='zombie_death',
+            autopsy_summary=f"Archiving '{board.name}'\u2026 AI analysis in progress.",
+        )
 
     session.status = 'burial_pending'
     session.save(update_fields=['status'])
+
+    from .tasks import perform_burial
+    perform_burial.delay(session.id)
 
     messages.success(
         request,
@@ -245,8 +393,13 @@ def bury_project(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def dismiss_hospice_banner(request, board_id):
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     HospiceDismissal.objects.update_or_create(
         board=board,
@@ -263,6 +416,31 @@ def dismiss_hospice_banner(request, board_id):
 # Organ Transplant Views
 # ──────────────────────────
 
+def _organ_to_dict(organ):
+    """Serialize a ProjectOrgan for the client-side organ detail modal.
+
+    Payload shapes are not fixed per organ_type (AI-extracted organs from
+    ``scan_and_extract_organs`` and hand-seeded demo organs both use free-form
+    JSON), so the modal renders whatever keys are present generically rather
+    than assuming a schema.
+    """
+    return {
+        'id': organ.id,
+        'name': organ.name,
+        'organ_type': organ.organ_type,
+        'organ_type_display': organ.get_organ_type_display(),
+        'description': organ.description,
+        'reusability_score': organ.reusability_score,
+        'status': organ.status,
+        'status_display': organ.get_status_display(),
+        'ai_rationale': organ.ai_rationale,
+        'best_suited_for': organ.best_suited_for,
+        'cautions': organ.cautions,
+        'payload': organ.payload or {},
+        'source_board_name': organ.source_board.name if organ.source_board_id else '',
+    }
+
+
 @login_required
 def organ_bank(request, board_id):
     board = get_object_or_404(Board, id=board_id)
@@ -275,13 +453,21 @@ def organ_bank(request, board_id):
     return render(request, 'exit_protocol/organ_bank.html', {
         'board': board,
         'organs': organs,
+        'organs_json': [_organ_to_dict(o) for o in organs],
     })
 
 
 @login_required
 def organ_library(request):
+    # RBAC: scope organs to the boards the user can actually access (workspace-
+    # scoped via the single source of truth). The previous filter used
+    # source_board__organization=user_org, which is null on most boards and so
+    # surfaced nothing for real users while pooling null-org tenants together.
+    from kanban.utils.demo_protection import get_user_boards
+    accessible_board_ids = get_user_boards(request.user).values_list('id', flat=True)
     organs = ProjectOrgan.objects.filter(
-        status='available'
+        status='available',
+        source_board_id__in=accessible_board_ids,
     ).order_by('-reusability_score')
 
     # Filters
@@ -296,9 +482,15 @@ def organ_library(request):
         except (ValueError, TypeError):
             pass
 
+    # Free-text search. Historically this only matched the source project's
+    # name (the "From: ..." line on each card), which surprised users who typed
+    # the organ's own title — the text most prominent on the card. Match both.
     source_project = request.GET.get('source_project')
     if source_project:
-        organs = organs.filter(source_board__name__icontains=source_project)
+        organs = organs.filter(
+            Q(name__icontains=source_project) |
+            Q(source_board__name__icontains=source_project)
+        )
 
     # Lazy compatibility scoring for target board
     target_board_id = request.GET.get('target_board_id')
@@ -344,11 +536,14 @@ def organ_library(request):
         'target_board_id': target_board_id,
         'compatibility_scores': compatibility_scores,
         'organ_type_choices': ProjectOrgan.ORGAN_TYPE_CHOICES,
+        'organs_json': [_organ_to_dict(o) for o in organs],
+        'has_active_filters': bool(organ_type or min_score or source_project),
     })
 
 
 @login_required
 @require_POST
+@demo_write_guard
 def transplant_organ(request, organ_id):
     organ = get_object_or_404(ProjectOrgan, id=organ_id, status='available')
 
@@ -399,12 +594,9 @@ def transplant_organ(request, organ_id):
             created_id = node.id
 
         elif organ.organ_type == 'role_definition':
-            from kanban.permission_models import Role
-            role = Role.objects.create(
-                name=organ.payload.get('role_name', organ.name),
-                description=(organ.payload.get('description', '') + provenance_note)[:500],
-            )
-            created_id = role.id
+            # Role definitions no longer stored as separate model objects
+            # Just track the organ as transplanted
+            created_id = None
 
         else:
             # goal_framework, checklist, etc. → create as knowledge entry
@@ -426,7 +618,7 @@ def transplant_organ(request, organ_id):
     OrganTransplant.objects.create(
         organ=organ,
         target_board=target_board,
-        transplanted_by=request.user,
+        approved_by=request.user,
         compatibility_score=0,
     )
 
@@ -451,8 +643,14 @@ def transplant_organ(request, organ_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def reject_organ(request, organ_id):
     organ = get_object_or_404(ProjectOrgan, id=organ_id)
+
+    # RBAC: check board access via the organ's source board
+    if organ.source_board and not request.user.has_perm('prizmai.edit_board', organ.source_board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     organ.status = 'rejected'
     organ.save(update_fields=['status'])
     return JsonResponse({'rejected': True})
@@ -464,7 +662,10 @@ def reject_organ(request, organ_id):
 
 @login_required
 def cemetery(request):
-    entries = CemeteryEntry.objects.all().order_by('-buried_at')
+    # RBAC: scope entries to user's boards (workspace-aware)
+    from kanban.utils.demo_protection import get_user_boards
+    user_boards = get_user_boards(request.user)
+    entries = CemeteryEntry.objects.filter(board__in=user_boards).order_by('-buried_at')
 
     # Search
     q = request.GET.get('q', '').strip()
@@ -502,21 +703,35 @@ def cemetery(request):
 def autopsy_report(request, entry_id):
     entry = get_object_or_404(CemeteryEntry, id=entry_id)
 
+    # RBAC: verify user has access to this board (workspace-scoped)
+    from kanban.utils.demo_protection import get_user_boards
+    if entry.board_id not in get_user_boards(request.user).values_list('id', flat=True):
+        raise Http404
+
     # Get related organ transplants
     transplants = OrganTransplant.objects.filter(
         organ__source_board=entry.board
-    ).select_related('organ', 'target_board', 'transplanted_by')
+    ).select_related('organ', 'target_board', 'approved_by')
+
+    memory_nodes = build_preserved_knowledge(entry)
 
     return render(request, 'exit_protocol/cemetery/autopsy_report.html', {
         'entry': entry,
         'transplants': transplants,
+        'memory_nodes': memory_nodes,
     })
 
 
 @login_required
 @require_POST
+@demo_write_guard
 def update_lessons(request, entry_id):
     entry = get_object_or_404(CemeteryEntry, id=entry_id)
+
+    # RBAC: verify user has access to this board (workspace-scoped)
+    from kanban.utils.demo_protection import get_user_boards
+    if entry.board_id not in get_user_boards(request.user).values_list('id', flat=True):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     try:
         data = json.loads(request.body)
@@ -579,13 +794,24 @@ def update_lessons(request, entry_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def resurrect_project(request, entry_id):
     entry = get_object_or_404(CemeteryEntry, id=entry_id)
+
+    # RBAC: fail-closed access check on the entry's board. The previous check
+    # compared organizations and was fail-OPEN — when board.organization was
+    # null (the common case) it skipped the guard and granted access, letting
+    # any user resurrect/export another tenant's cemetery entry. can_access_board
+    # is membership-based and denies on null org.
+    check_access_or_403(request.user, entry.board)
 
     if entry.is_resurrected:
         return HttpResponseBadRequest("This project has already been resurrected.")
 
-    # 1. Create new Board
+    # 1. Create new Board — inherit tenant placement (workspace + legacy org)
+    # from the source board so the resurrected board lands in the same workspace
+    # the user resurrected it from (workspace is the real tenant key; see
+    # check_access_or_403 above, which already confirmed access to entry.board).
     new_board = Board.objects.create(
         name=f"{entry.project_name} — Resurrected",
         description=(
@@ -593,9 +819,11 @@ def resurrect_project(request, entry_id):
             f"Original cause of death: {entry.get_cause_of_death_display()}."
         ),
         created_by=request.user,
+        organization=entry.board.organization,
+        workspace=entry.board.workspace,
     )
     # Add creator as member
-    new_board.members.add(request.user)
+    BoardMembership.objects.get_or_create(board=new_board, user=request.user, defaults={'role': 'member'})
 
     # 2. Import surviving knowledge nodes
     try:
@@ -688,6 +916,13 @@ def export_autopsy_pdf(request, entry_id):
 
     entry = get_object_or_404(CemeteryEntry, id=entry_id)
 
+    # RBAC: fail-closed access check on the entry's board. The previous check
+    # compared organizations and was fail-OPEN — when board.organization was
+    # null (the common case) it skipped the guard and granted access, letting
+    # any user resurrect/export another tenant's cemetery entry. can_access_board
+    # is membership-based and denies on null org.
+    check_access_or_403(request.user, entry.board)
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=letter,
@@ -756,7 +991,7 @@ def export_autopsy_pdf(request, entry_id):
             evt_desc = event.get('event', event.get('event_description', ''))
             severity = event.get('severity', '?')
             elements.append(Paragraph(
-                f"<b>{evt_date}:</b> {evt_desc} (Severity: {severity}/5)",
+                f"<b>{evt_date}:</b> {evt_desc} (Severity: {severity}/100)",
                 styles['Normal'],
             ))
         elements.append(Spacer(1, 0.2 * inch))
@@ -803,7 +1038,49 @@ def export_autopsy_pdf(request, entry_id):
         elements.append(Paragraph("[Not specified]", styles['Normal']))
     elements.append(Spacer(1, 0.3 * inch))
 
-    # Section 5: Organ Transplants
+    # Section 5: Knowledge Preserved — mirrors the on-screen autopsy report so a
+    # downloaded PDF carries the same depth (decisions, risks, conflicts, etc.).
+    from xml.sax.saxutils import escape
+
+    node_labels = {
+        'decision': 'Decisions Made',
+        'lesson': 'Lessons (Knowledge Graph)',
+        'risk_event': 'Risk Events',
+        'outcome': 'Outcomes',
+        'conflict_resolution': 'Conflict Resolutions',
+        'scope_change': 'Scope Changes',
+        'milestone': 'Milestones',
+        'ai_recommendation': 'AI Recommendations',
+        'manual_log': 'Manual Logs',
+    }
+    grouped_nodes = {}
+    for node in build_preserved_knowledge(entry):
+        grouped_nodes.setdefault(node.node_type, []).append(node)
+
+    if grouped_nodes:
+        elements.append(PageBreak())
+        elements.append(Paragraph("<b>Knowledge Preserved</b>", styles['Heading2']))
+        elements.append(Paragraph(
+            "Records captured while the project was active and preserved in "
+            "Organizational Memory.",
+            styles['Normal'],
+        ))
+        elements.append(Spacer(1, 0.15 * inch))
+        for node_type, nodes in grouped_nodes.items():
+            label = node_labels.get(node_type, node_type.replace('_', ' ').title())
+            elements.append(Paragraph(f"<b>{escape(label)}</b>", styles['Heading3']))
+            for node in nodes:
+                title = escape((node.title or '').strip())
+                content = (node.content or '').strip()
+                if content:
+                    snippet = escape(content[:200]) + ('…' if len(content) > 200 else '')
+                    elements.append(Paragraph(f"• <b>{title}</b> — {snippet}", styles['Normal']))
+                else:
+                    elements.append(Paragraph(f"• <b>{title}</b>", styles['Normal']))
+            elements.append(Spacer(1, 0.1 * inch))
+        elements.append(Spacer(1, 0.2 * inch))
+
+    # Section 6: Organ Transplants
     transplants = OrganTransplant.objects.filter(
         organ__source_board=entry.board
     ).select_related('organ', 'target_board')
@@ -817,11 +1094,13 @@ def export_autopsy_pdf(request, entry_id):
                 styles['Normal'],
             ))
 
-    # Footer
+    # Footer — use the viewer's local timezone (activated per-request by
+    # accounts.middleware), not UTC, to match the rest of the app.
+    local_now = timezone.localtime()
     elements.append(Spacer(1, 0.5 * inch))
     elements.append(Paragraph(
         f"<i>Generated by PrizmAI Exit Protocol | "
-        f"{timezone.now().strftime('%Y-%m-%d %H:%M')}</i>",
+        f"{local_now.strftime('%Y-%m-%d %H:%M')}</i>",
         styles['Normal'],
     ))
 
@@ -832,6 +1111,6 @@ def export_autopsy_pdf(request, entry_id):
     response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
     response['Content-Disposition'] = (
         f'attachment; filename="autopsy_{safe_name}_'
-        f'{timezone.now().strftime("%Y%m%d")}.pdf"'
+        f'{local_now.strftime("%Y%m%d")}.pdf"'
     )
     return response

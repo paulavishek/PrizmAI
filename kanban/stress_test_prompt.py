@@ -87,7 +87,11 @@ STRESS_TEST_SYSTEM_PROMPT = (
     "  ]\n"
     "}\n\n"
     "RULES:\n"
-    "- Return exactly 5 chaos_scenarios and exactly 5 vaccines.\n"
+    "- ALWAYS return exactly 5 chaos_scenarios (IDs 1–5) and exactly 5 vaccines (IDs 1–5). "
+    "No exceptions. Never fewer. The arrays must have 5 elements each — count them before outputting.\n"
+    "- The vaccines[] array in YOUR OUTPUT is a list of FRESH PRESCRIPTIONS for this session. "
+    "It must NEVER be empty. It is completely separate from any historical fixes mentioned in "
+    "the user context — do not confuse the two.\n"
     "- Every scenario must have exactly one matching vaccine.\n"
     "- outcome must be one of: \"FAIL\", \"SURVIVED\", \"SURVIVED_BARELY\".\n"
     "- effort_level must be one of: \"LOW\", \"MEDIUM\", \"HIGH\".\n"
@@ -96,6 +100,15 @@ STRESS_TEST_SYSTEM_PROMPT = (
     "- has_recovery_path must be a boolean (true or false).\n"
     "- Vaccines must be STRUCTURAL — redundancies, buffers, decoupling, fallback paths.\n"
     "- Bad vaccines: 'communicate better', 'have a standup', 'monitor this'.\n"
+    "- assumptions_made must only list data genuinely absent from PROJECT DATA below "
+    "(e.g. no budget set, no deadline set). Never guess at, or contradict, a fact "
+    "already given to you — e.g. if conflict types are listed, don't assume their "
+    "types; the 'Existing conflicts' line already states how many conflicts sit on "
+    "the critical path, so never assert or imply a different critical-path "
+    "involvement for conflicts than what that line says; if no spend-over-time "
+    "history is provided, don't assert whether burn rate is linear or accelerating. "
+    "Modeling the pessimistic CASE is fine — inventing pessimistic DATA that wasn't "
+    "given to you is not.\n"
     "- All vaccines together should theoretically bring score to 80+.\n"
     "- projected_score_improvement must be honest — LOW effort targeting severe "
     "failure adds 8-12 pts, HIGH effort adds 15-20 pts.\n\n"
@@ -104,23 +117,36 @@ STRESS_TEST_SYSTEM_PROMPT = (
     "- 40-69 = MODERATE   (survives minor shocks, fails major ones)\n"
     "- 70-89 = RESILIENT  (survives most real-world disruptions)\n"
     "- 90-100 = ANTIFRAGILE (built-in redundancy, gets stronger under pressure)\n\n"
-    "PROGRESSIVE SCORING RULES (CRITICAL):\n"
+    "PROGRESSIVE SCORING RULES (NON-NEGOTIABLE):\n"
     "- If the project has PREVIOUSLY ADDRESSED SCENARIOS, give credit. "
     "The team has acknowledged those risks and committed to handling them. "
     "Each addressed scenario should improve the base score by 3-8 points "
     "depending on its severity.\n"
-    "- If the project has APPLIED VACCINES, give substantial credit. "
+    "- If the project has APPLIED VACCINES, give MANDATORY credit. "
     "These are structural fixes the team has committed to implementing. "
-    "Each applied vaccine should improve the base score by its stated "
-    "projected_score_improvement value (or close to it).\n"
-    "- DO NOT repeat attack types that have already been addressed with applied vaccines. "
-    "Find NEW, DIFFERENT vulnerabilities instead.\n"
+    "Each applied vaccine MUST improve the score by AT LEAST 60% of its stated "
+    "projected_score_improvement value, even if you find new vulnerabilities. "
+    "New attack scenarios MUST NOT be used to fully cancel out vaccine credit — "
+    "the user has to see visible score improvement on every re-run after applying "
+    "vaccines, or the feature breaks its core promise.\n"
+    "- Prefer DIFFERENT attack types from those already addressed/vaccinated, but if the board only "
+    "has a few distinct vulnerabilities you MAY revisit an attack type from a NEW angle. "
+    "You MUST still produce exactly 5 scenarios regardless.\n"
     "- The overall_immunity_score MUST reflect the cumulative benefit of all "
     "addressed scenarios and applied vaccines on top of the raw board state score.\n"
-    "- If previous sessions exist, the score should generally trend upward "
-    "when vaccines have been applied and scenarios addressed — not stay flat.\n"
+    "- The SCORE CALCULATION GUIDANCE section in the user prompt gives you the "
+    "last session score, the total vaccine credit, and the MINIMUM score you are "
+    "allowed to return. You MUST NOT return a score below that minimum under any "
+    "circumstance. If you believe the project's true score is lower, set the score "
+    "to the minimum and explain the reasoning in score_rationale instead.\n"
+    "- A project with applied vaccines CANNOT score lower than the previous session. "
+    "Vaccines are structural commitments — if the AI thinks new attacks justify a "
+    "downward move, raise that concern in score_rationale, but the numeric score "
+    "MUST stay at or above the computed minimum.\n"
+    "- Score trends should be upward when vaccines have been applied and scenarios "
+    "addressed. Downward trends require explicit justification in score_rationale.\n"
     "- A project with 5+ applied vaccines and 5+ addressed scenarios should "
-    "score at LEAST 15-30 points higher than one with none, even if the "
+    "score at LEAST 20-30 points higher than one with none, even if the "
     "underlying board data hasn't changed yet."
 )
 
@@ -144,10 +170,12 @@ def build_stress_test_user_prompt(board_data):
         f"High-priority tasks: {board_data.get('high_priority_tasks', 0)}\n"
         f"Team size: {board_data.get('member_count', 0)} members\n"
         f"Team members: {', '.join(board_data.get('member_names', []))}\n"
-        f"Budget: {board_data.get('budget_info') or 'Not set'}\n"
+        f"Budget: {board_data.get('budget_info') or 'Not set'} (single point-in-time "
+        "snapshot — no spend-over-time history is available, so do not assume a "
+        "burn-rate trend)\n"
         f"Project start date: {board_data.get('start_date', 'Not set')}\n"
         f"Project deadline: {board_data.get('project_deadline', 'Not set')}\n"
-        f"Existing conflicts: {board_data.get('conflict_count', 0)}\n"
+        f"Existing conflicts: {_format_conflict_breakdown(board_data.get('conflict_count', 0), board_data.get('conflict_type_breakdown', {}), board_data.get('conflicts_on_critical_path', 0))}\n"
         f"Dependency count: {board_data.get('dependency_count', 0)}\n"
         f"Board columns: {', '.join(board_data.get('column_names', []))}\n"
         f"Pre-mortem scenarios identified: {board_data.get('premortem_scenario_count', 0)}\n"
@@ -161,14 +189,52 @@ def build_stress_test_user_prompt(board_data):
         f"{_format_score_history(board_data.get('score_history', []))}\n\n"
         "ADDRESSED SCENARIOS (team has acknowledged and committed to handling these):\n"
         f"{_format_addressed_scenarios(board_data.get('addressed_scenarios', []))}\n\n"
-        "APPLIED VACCINES (structural fixes the team has committed to implementing):\n"
+        "PRIOR STRUCTURAL FIXES APPLIED (HISTORICAL CONTEXT ONLY — DO NOT OUTPUT THESE):\n"
         f"{_format_applied_vaccines_detail(board_data.get('applied_vaccines_detail', []))}\n\n"
+        "SCORE CALCULATION GUIDANCE (MANDATORY — READ BEFORE SETTING overall_immunity_score):\n"
+        f"  Last session score  : {board_data.get('last_immunity_score', 'N/A')}/100 "
+        f"({board_data.get('last_immunity_band', 'N/A')})\n"
+        f"  Applied vaccine credit: +{board_data.get('total_vaccine_improvement', 0)} pts "
+        f"(sum of all projected_score_improvement values above)\n"
+        f"  Number of applied vaccines: {len(board_data.get('applied_vaccines_detail', []))}\n"
+        f"  Minimum allowed score: "
+        f"{max(1, (board_data.get('last_immunity_score') or 0) + int((board_data.get('total_vaccine_improvement') or 0) * 0.6))}/100  "
+        "(last_score + 60% of vaccine credit)\n"
+        "  Vaccines MUST visibly move the score upward — never let new attack scenarios "
+        "fully cancel vaccine credit.  If the last score was 58 and vaccines add +20 pts, "
+        "the new score must be AT LEAST 70 (58 + 12).  Only set it higher if the raw board "
+        "assessment also improves.\n"
+        "  This floor is non-negotiable.  If you genuinely believe the project is more "
+        "vulnerable than before, set the score to the floor and explain the new risks in "
+        "score_rationale — never drop below the floor.\n\n"
         "IMPORTANT: Give credit for the addressed scenarios and applied vaccines above. "
-        "The overall_immunity_score must be HIGHER than it would be without these mitigations. "
-        "Do NOT repeat attack types already covered by applied vaccines — find NEW vulnerabilities.\n\n"
-        "Choose the 5 attack types that will cause the most damage to THIS specific plan.\n"
+        "The overall_immunity_score must be HIGHER than it would be without these mitigations.\n\n"
+        "Choose the 5 attack types that will cause the most damage to THIS specific plan RIGHT NOW.\n\n"
+        "MANDATORY OUTPUT VERIFICATION (check before generating):\n"
+        "- chaos_scenarios MUST have exactly 5 objects with IDs 1, 2, 3, 4, 5\n"
+        "- vaccines MUST have exactly 5 objects with IDs 1, 2, 3, 4, 5\n"
+        "- vaccines[] in your output are FRESH PRESCRIPTIONS for this session — they are NOT "
+        "the historical structural fixes listed above, and the array must NOT be empty\n"
+        "- The pre-mortem count above is project context; always generate all 5 attack scenarios\n\n"
         "Respond with ONLY the JSON object. No other text."
     )
+
+
+def _format_conflict_breakdown(conflict_count, breakdown, conflicts_on_critical_path=0):
+    """Format conflict count with its type breakdown and verified critical-path
+    overlap, if any, for the prompt. The critical-path figure is computed
+    deterministically from real dependency/date data (see
+    _estimate_critical_path_task_ids in stress_test_data.py) — it is a fact,
+    not something the AI should guess at."""
+    if not breakdown:
+        return str(conflict_count)
+    parts = [f"{count} {ctype}" for ctype, count in breakdown.items()]
+    path_note = (
+        f"; {conflicts_on_critical_path} of these involve a task on the critical path"
+        if conflicts_on_critical_path
+        else "; none of these involve a task on the critical path"
+    )
+    return f"{conflict_count} ({', '.join(parts)}){path_note}"
 
 
 def _format_assignee_breakdown(breakdown):
@@ -214,13 +280,15 @@ def _format_addressed_scenarios(scenarios):
 
 
 def _format_applied_vaccines_detail(vaccines):
-    """Format applied vaccines with descriptions for the prompt."""
+    """Format applied vaccines with descriptions and projected improvements for the prompt."""
     if not vaccines:
         return "  None yet."
     lines = []
     for v in vaccines:
+        improvement = v.get('projected_score_improvement', 0) or 0
         lines.append(
-            f"  - {v.get('name', 'Unnamed')} ({v.get('effort_level', 'MEDIUM')} effort): "
+            f"  - {v.get('name', 'Unnamed')} ({v.get('effort_level', 'MEDIUM')} effort, "
+            f"+{improvement}pts credit): "
             f"{v.get('description', '')}"
         )
     return "\n".join(lines)

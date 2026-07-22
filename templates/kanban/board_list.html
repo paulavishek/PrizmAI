@@ -1,22 +1,26 @@
 ﻿{% extends 'base.html' %}
 {% load crispy_forms_tags %}
 {% load kanban_filters %}
+{% load avatar_tags %}
 
 {% block title %}Boards - PrizmAI{% endblock %}
 {% block page_title %}Boards{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
+<div class="row mb-4 mt-3">
     <div class="col-md-12">
         <div class="d-sm-flex align-items-center justify-content-between mb-4">
             <h1 class="h3 mb-0 text-gray-800">Your Boards</h1>
             <div>
-                <button onclick="goBack()" class="btn btn-outline-secondary shadow-sm me-2">
+                <a href="{% url 'dashboard' %}" class="btn-prizm-back shadow-sm me-2">
                     <i class="fas fa-arrow-left fa-sm me-1"></i> Back
-                </button>
+                </a>
                 <button class="btn btn-outline-success shadow-sm me-2" data-bs-toggle="modal" data-bs-target="#importBoardModal">
                     <i class="fas fa-file-import fa-sm me-1"></i> Import Board
                 </button>
+                <a href="{% url 'integrations:migrate_start' %}" class="btn btn-outline-primary shadow-sm me-2">
+                    <i class="fas fa-cloud-download-alt fa-sm me-1"></i> Migrate from Tool
+                </a>
                 <a href="{% url 'create_board' %}" class="d-none d-sm-inline-block btn btn-primary shadow-sm">
                     <i class="fas fa-plus fa-sm text-white-50 me-2"></i> New Board
                 </a>
@@ -113,8 +117,8 @@
 </div>
 
 <div class="row">
-    {% if boards %}
-        {% for board in boards %}
+    {% if owned_boards %}
+        {% for board in owned_boards %}
         <div class="col-md-4 mb-4">
             <div class="card dashboard-card h-100 shadow-sm">
                 <div class="card-body">
@@ -134,7 +138,10 @@
                     </div>
                 </div>
                 <div class="card-footer bg-transparent border-top-0 d-flex justify-content-between align-items-center">
-                    <small class="text-muted">Created {{ board.created_at|date:"M d, Y" }}</small>
+                    <div class="d-flex align-items-center gap-2">
+                        <small class="text-muted">Created {{ board.created_at|date:"M d, Y" }}</small>
+                        {% if board.member_list %}{% avatar_stack board.member_list|extract_users max_avatars=4 size="sm" %}{% endif %}
+                    </div>
                     <div class="dropdown">
                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                             <i class="fas fa-ellipsis-v"></i>
@@ -144,7 +151,7 @@
                             <li><a class="dropdown-item" href="{% url 'budget_dashboard' board.id %}">
                                 <i class="fas fa-dollar-sign me-2"></i>Budget & ROI
                             </a></li>
-                            {% if board.created_by == user or user.profile.is_admin or user == board.organization.created_by %}
+                            {% if board.created_by == user or user.profile.is_admin %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}">Edit Board</a></li>
                             <li><a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#deleteBoardModal{{ board.id }}">Delete Board</a></li>
@@ -192,65 +199,48 @@
     {% endif %}
 </div>
 
-<!-- Create Board Modal -->
-<div class="modal fade" id="createBoardModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Create New Board</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+{% if shared_boards %}
+<!-- ============================================================= -->
+<!-- Shared with me (boards from other users' workspaces)          -->
+<!-- ============================================================= -->
+<div class="row mt-2">
+    <div class="col-12 mb-3">
+        <h5 class="mb-0 text-gray-800"><i class="fas fa-user-friends me-2"></i>Shared with me</h5>
+        <small class="text-muted">Boards you collaborate on, owned by other workspaces</small>
+    </div>
+    {% for board in shared_boards %}
+    <div class="col-md-4 mb-4">
+        <div class="card dashboard-card h-100 shadow-sm" style="border-left:4px solid #64748b;">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <h5 class="card-title">{{ board.name }}</h5>
+                    {% with my_role=my_board_roles|get_item:board.id %}
+                    <span class="badge {% if my_role == 'viewer' %}bg-secondary{% else %}bg-info{% endif %}">{{ my_role|default:"member"|title }}</span>
+                    {% endwith %}
+                </div>
+                <p class="card-text text-muted small">
+                    {% if board.description %}{{ board.description|truncatechars:100 }}{% else %}No description provided.{% endif %}
+                </p>
+                <div class="text-end mt-2">
+                    <a href="{% url 'board_detail' board.id %}" class="btn btn-sm btn-primary">Open Board</a>
+                    <a href="{% url 'board_analytics' board.id %}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-chart-pie fa-sm"></i>
+                    </a>
+                </div>
             </div>
-            <form method="post">
-                <div class="modal-body">
-                    {% csrf_token %}
-                    {{ form|crispy }}
-                    
-                    <!-- AI Column Recommendations Section -->
-                    <div class="mt-4">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="mb-0">Column Structure</h6>
-                            <button type="button" id="recommend-columns-btn" class="btn btn-sm btn-outline-info">
-                                <i class="fas fa-magic me-1"></i> Get AI Recommendations
-                            </button>
-                        </div>
-                        <div id="columns-ai-spinner" class="d-none text-center mb-3">
-                            <div class="spinner-border spinner-border-sm text-info" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <span class="ms-2 text-muted small">Analyzing optimal column structure...</span>
-                        </div>
-                        <div id="column-recommendations-result" class="d-none"></div>
-                        
-                        <!-- Additional project context for better recommendations -->
-                        <div class="row mt-3">
-                            <div class="col-md-6">
-                                <label for="project_type" class="form-label">Project Type</label>
-                                <input type="text" class="form-control" id="project_type" name="project_type" 
-                                       placeholder="e.g., Software Development, Marketing, Design" 
-                                       value="General">
-                                <small class="form-text text-muted">Enter your project type</small>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="team_size" class="form-label">Team Size</label>
-                                <select class="form-select" id="team_size" name="team_size">
-                                    <option value="solo">Solo</option>
-                                    <option value="small" selected>Small</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="large">Large</option>
-                                    <option value="enterprise">Enterprise</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create Board</button>
-                </div>
-            </form>
+            <div class="card-footer bg-transparent border-top-0 d-flex justify-content-between align-items-center">
+                <small class="text-muted"><i class="fas fa-user-circle me-1"></i>{{ board.created_by.get_full_name|default:board.created_by.username|default:"Unknown" }}</small>
+                {% if board.member_list %}{% avatar_stack board.member_list|extract_users max_avatars=4 size="sm" %}{% endif %}
+            </div>
         </div>
     </div>
+    {% endfor %}
 </div>
+{% endif %}
+
+<!-- Note: board creation uses the dedicated create_board page (the "Create Board"
+     button links there). A legacy create-board modal was removed from here as it
+     was never opened and posted nowhere. -->
 
 <!-- Import Board Modal -->
 <div class="modal fade" id="importBoardModal" tabindex="-1" aria-hidden="true">
@@ -265,10 +255,22 @@
                     {% csrf_token %}
                     <div class="mb-3">
                         <label for="import_file" class="form-label">Select File to Import</label>
-                        <input type="file" class="form-control" id="import_file" name="import_file" accept=".json,.csv,.tsv" required>
+                        <input type="file" class="form-control" id="import_file" name="import_file" accept=".json,.csv,.tsv,.xlsx,.xls" required>
                         <div class="form-text">Upload a file exported from another project management tool.</div>
                     </div>
-                    
+
+                    <div class="mb-3">
+                        <label for="board_name" class="form-label">Board Name <span class="text-muted">(optional)</span></label>
+                        <input type="text" class="form-control" id="board_name" name="board_name" maxlength="100" placeholder="Defaults to the file name">
+                        <div class="form-text">Leave blank to name the board after the uploaded file.</div>
+                    </div>
+
+                    {% if is_viewing_demo %}
+                    <div class="alert alert-warning py-2 mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Imported boards will appear in your <strong>My Workspace</strong>, not in the Demo Workspace.
+                    </div>
+                    {% endif %}
                     <div class="mb-3">
                         <label class="form-label">Supported Formats</label>
                         <div class="row g-2">
@@ -298,6 +300,16 @@
                                         <small class="d-flex align-items-center">
                                             <i class="fas fa-tasks text-warning me-2"></i>
                                             <span><strong>Asana</strong> - CSV or JSON</span>
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-0 bg-light">
+                                    <div class="card-body py-2 px-3">
+                                        <small class="d-flex align-items-center">
+                                            <i class="fas fa-calendar-alt text-danger me-2"></i>
+                                            <span><strong>Monday.com</strong> - Excel export</span>
                                         </small>
                                     </div>
                                 </div>
@@ -387,13 +399,13 @@
                 {% if all_tasks.has_other_pages %}
                 <nav class="mt-3"><ul class="pagination justify-content-center">
                     {% if all_tasks.has_previous %}
-                    <li class="page-item"><a class="page-link" href="?all_tasks_page=1">First</a></li>
-                    <li class="page-item"><a class="page-link" href="?all_tasks_page={{ all_tasks.previous_page_number }}">Previous</a></li>
+                    <li class="page-item"><a class="page-link" href="?all_tasks_page=1" data-modal="totalTasksModal">First</a></li>
+                    <li class="page-item"><a class="page-link" href="?all_tasks_page={{ all_tasks.previous_page_number }}" data-modal="totalTasksModal">Previous</a></li>
                     {% endif %}
                     <li class="page-item active"><span class="page-link">Page {{ all_tasks.number }} of {{ all_tasks.paginator.num_pages }}</span></li>
                     {% if all_tasks.has_next %}
-                    <li class="page-item"><a class="page-link" href="?all_tasks_page={{ all_tasks.next_page_number }}">Next</a></li>
-                    <li class="page-item"><a class="page-link" href="?all_tasks_page={{ all_tasks.paginator.num_pages }}">Last</a></li>
+                    <li class="page-item"><a class="page-link" href="?all_tasks_page={{ all_tasks.next_page_number }}" data-modal="totalTasksModal">Next</a></li>
+                    <li class="page-item"><a class="page-link" href="?all_tasks_page={{ all_tasks.paginator.num_pages }}" data-modal="totalTasksModal">Last</a></li>
                     {% endif %}
                 </ul></nav>
                 {% endif %}
@@ -449,13 +461,13 @@
                 {% if completed_tasks.has_other_pages %}
                 <nav class="mt-3"><ul class="pagination justify-content-center">
                     {% if completed_tasks.has_previous %}
-                    <li class="page-item"><a class="page-link" href="?completed_tasks_page=1">First</a></li>
-                    <li class="page-item"><a class="page-link" href="?completed_tasks_page={{ completed_tasks.previous_page_number }}">Previous</a></li>
+                    <li class="page-item"><a class="page-link" href="?completed_tasks_page=1" data-modal="completedTasksModal">First</a></li>
+                    <li class="page-item"><a class="page-link" href="?completed_tasks_page={{ completed_tasks.previous_page_number }}" data-modal="completedTasksModal">Previous</a></li>
                     {% endif %}
                     <li class="page-item active"><span class="page-link">Page {{ completed_tasks.number }} of {{ completed_tasks.paginator.num_pages }}</span></li>
                     {% if completed_tasks.has_next %}
-                    <li class="page-item"><a class="page-link" href="?completed_tasks_page={{ completed_tasks.next_page_number }}">Next</a></li>
-                    <li class="page-item"><a class="page-link" href="?completed_tasks_page={{ completed_tasks.paginator.num_pages }}">Last</a></li>
+                    <li class="page-item"><a class="page-link" href="?completed_tasks_page={{ completed_tasks.next_page_number }}" data-modal="completedTasksModal">Next</a></li>
+                    <li class="page-item"><a class="page-link" href="?completed_tasks_page={{ completed_tasks.paginator.num_pages }}" data-modal="completedTasksModal">Last</a></li>
                     {% endif %}
                 </ul></nav>
                 {% endif %}
@@ -564,13 +576,13 @@
                 {% if overdue_tasks.has_other_pages %}
                 <nav class="mt-3"><ul class="pagination justify-content-center">
                     {% if overdue_tasks.has_previous %}
-                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page=1">First</a></li>
-                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page={{ overdue_tasks.previous_page_number }}">Previous</a></li>
+                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page=1" data-modal="overdueTasksModal">First</a></li>
+                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page={{ overdue_tasks.previous_page_number }}" data-modal="overdueTasksModal">Previous</a></li>
                     {% endif %}
                     <li class="page-item active"><span class="page-link">Page {{ overdue_tasks.number }} of {{ overdue_tasks.paginator.num_pages }}</span></li>
                     {% if overdue_tasks.has_next %}
-                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page={{ overdue_tasks.next_page_number }}">Next</a></li>
-                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page={{ overdue_tasks.paginator.num_pages }}">Last</a></li>
+                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page={{ overdue_tasks.next_page_number }}" data-modal="overdueTasksModal">Next</a></li>
+                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page={{ overdue_tasks.paginator.num_pages }}" data-modal="overdueTasksModal">Last</a></li>
                     {% endif %}
                 </ul></nav>
                 {% endif %}
@@ -637,13 +649,13 @@
                 {% if due_soon_tasks.has_other_pages %}
                 <nav class="mt-3"><ul class="pagination justify-content-center">
                     {% if due_soon_tasks.has_previous %}
-                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page=1">First</a></li>
-                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page={{ due_soon_tasks.previous_page_number }}">Previous</a></li>
+                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page=1" data-modal="dueSoonTasksModal">First</a></li>
+                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page={{ due_soon_tasks.previous_page_number }}" data-modal="dueSoonTasksModal">Previous</a></li>
                     {% endif %}
                     <li class="page-item active"><span class="page-link">Page {{ due_soon_tasks.number }} of {{ due_soon_tasks.paginator.num_pages }}</span></li>
                     {% if due_soon_tasks.has_next %}
-                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page={{ due_soon_tasks.next_page_number }}">Next</a></li>
-                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page={{ due_soon_tasks.paginator.num_pages }}">Last</a></li>
+                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page={{ due_soon_tasks.next_page_number }}" data-modal="dueSoonTasksModal">Next</a></li>
+                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page={{ due_soon_tasks.paginator.num_pages }}" data-modal="dueSoonTasksModal">Last</a></li>
                     {% endif %}
                 </ul></nav>
                 {% endif %}
@@ -662,15 +674,57 @@
 {% load static %}
 <script src="{% static 'js/ai_features.js' %}?v={{ STATIC_VERSION|default:'2' }}"></script>
 <script>
-// Handle back navigation to previous page
-function goBack() {
-    // Check if there's a previous page in history
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        // Fallback to dashboard if no history
-        window.location.href = '{% url "dashboard" %}';
-    }
+
+// Handle pagination clicks within modals via AJAX
+function handleModalPagination() {
+    const paginationLinks = document.querySelectorAll('.modal .pagination a.page-link');
+    paginationLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const url = this.getAttribute('href');
+            const modalId = this.getAttribute('data-modal');
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+
+            const modalBody = modal.querySelector('.modal-body');
+            const originalContent = modalBody.innerHTML;
+            modalBody.innerHTML = '<div class="text-center py-5"><i class="fas fa-spinner fa-spin fa-3x text-primary"></i><p class="mt-3">Loading...</p></div>';
+
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newModal = doc.getElementById(modalId);
+                if (newModal) {
+                    const newModalBody = newModal.querySelector('.modal-body');
+                    const newModalFooter = newModal.querySelector('.modal-footer');
+                    if (newModalBody) {
+                        modal.querySelector('.modal-body').innerHTML = newModalBody.innerHTML;
+                    }
+                    if (newModalFooter) {
+                        modal.querySelector('.modal-footer').innerHTML = newModalFooter.innerHTML;
+                    }
+                    handleModalPagination();
+                } else {
+                    modalBody.innerHTML = originalContent;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading page:', error);
+                modalBody.innerHTML = '<div class="text-center py-5"><i class="fas fa-exclamation-triangle fa-3x text-danger"></i><p class="mt-3">Error loading content. Please try again.</p></div>';
+            });
+        });
+    });
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    handleModalPagination();
+
+    // Initialise Bootstrap tooltips (used by the Immunity Score badge)
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el, { trigger: 'hover', placement: 'top' });
+    });
+});
 </script>
 {% endblock %}

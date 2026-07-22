@@ -144,6 +144,9 @@ class PrioritySuggestionWidget {
         this.isVisible = true;
         container.style.display = 'block';
 
+        // Record the inputs this suggestion was based on for cascade invalidation.
+        this._snapshotBaseline();
+
         // Show no-due-date warning banner if the backend flagged it
         if (this.suggestion.no_due_date) {
             const warningId = 'priority-no-due-date-warning';
@@ -537,48 +540,84 @@ class PrioritySuggestionWidget {
         }
 
         button.onclick = () => {
-            // Require due date before suggesting priority
-            const dueDateField = document.getElementById('id_due_date');
-            const hasDueDate = dueDateField && dueDateField.value && dueDateField.value.trim() !== '';
-
-            if (!hasDueDate) {
-                // Show inline message inside the suggestion container
-                const container = document.getElementById(this.containerId);
-                if (container) {
-                    container.style.display = 'block';
-                    container.innerHTML = `
-                        <div class="alert alert-warning d-flex align-items-start gap-2 mb-0" role="alert">
-                            <i class="fas fa-calendar-exclamation mt-1"></i>
-                            <div>
-                                <strong>Due date required</strong><br>
-                                <span class="small">Please set a due date before requesting a priority suggestion.
-                                The AI uses the deadline to assess urgency and give a more accurate recommendation.</span>
-                            </div>
-                        </div>`;
-                }
-                return;
-            }
-
+            // A due date sharpens urgency assessment, but priority can still be
+            // derived from risk/severity signals without it. Don't block — show a
+            // non-blocking note and proceed. The backend handles a missing due date
+            // gracefully (caps at 'high' and lowers confidence).
+            // Proceed regardless of due date; the backend returns a `no_due_date`
+            // flag and the result view renders a non-blocking note for that case.
             this._triggerSuggestion();
         };
     }
     
     /**
      * Setup auto-triggers for suggestions
+     *
+     * DESIGN NOTE: Priority suggestion should NOT auto-fire on due-date change.
+     * Accurate priority requires AI Complexity Analysis and AI Deadline Prediction
+     * to have completed first. Auto-firing before those are available produces
+     * a decision based on incomplete data. The user should click "Suggest"
+     * manually after running complexity analysis and deadline prediction.
      */
     _setupAutoTriggers() {
-        // Auto-suggest when due date is set/changed — only if a value is actually present
-        const dueDateField = document.getElementById('id_due_date');
-        if (dueDateField) {
-            dueDateField.addEventListener('change', () => {
-                const hasDueDate = dueDateField.value && dueDateField.value.trim() !== '';
-                if (hasDueDate && !this.isVisible) {
-                    setTimeout(() => this._triggerSuggestion(), 500);
-                }
-            });
+        // No auto-triggers — priority suggestion should only fire on explicit
+        // user click ("Suggest" button) so that AI complexity score and AI
+        // deadline prediction are available as inputs.
+        //
+        // We DO watch complexity and due date so that, once a suggestion exists,
+        // a later change to those inputs marks the result stale with a one-click
+        // re-run (cascade invalidation — no automatic AI calls).
+        const complexity = document.querySelector('input[name="complexity_score"]');
+        if (complexity) {
+            complexity.addEventListener('change', () => this._markStaleIfNeeded('complexity'));
         }
-        // Note: complexity-score changes no longer auto-trigger priority suggestion.
-        // Priority requires a due date to assess urgency accurately.
+        const dueDate = document.getElementById('id_due_date');
+        if (dueDate) {
+            dueDate.addEventListener('change', () => this._markStaleIfNeeded('due date'));
+        }
+    }
+
+    /** Snapshot the inputs the current suggestion was based on. */
+    _snapshotBaseline() {
+        const complexity = document.querySelector('input[name="complexity_score"]');
+        const aiC = window.currentTaskBreakdown ? window.currentTaskBreakdown.complexity_score : null;
+        const dueDate = document.getElementById('id_due_date');
+        this._baseline = {
+            complexity: aiC || (complexity ? (parseInt(complexity.value, 10) || null) : null),
+            dueDate: dueDate ? (dueDate.value || '') : ''
+        };
+    }
+
+    /** Flag the visible suggestion as stale when a driving input changed. */
+    _markStaleIfNeeded(what) {
+        if (!this.isVisible || !this._baseline) return;
+        const container = document.getElementById(this.containerId);
+        if (!container || document.getElementById('priority-stale-banner')) return;
+
+        const complexity = document.querySelector('input[name="complexity_score"]');
+        const aiC = window.currentTaskBreakdown ? window.currentTaskBreakdown.complexity_score : null;
+        const curComplexity = aiC || (complexity ? (parseInt(complexity.value, 10) || null) : null);
+        const dueDate = document.getElementById('id_due_date');
+        const curDue = dueDate ? (dueDate.value || '') : '';
+
+        const changed = (curComplexity && curComplexity !== this._baseline.complexity) ||
+                        (curDue !== this._baseline.dueDate);
+        if (!changed) return;
+
+        const banner = document.createElement('div');
+        banner.id = 'priority-stale-banner';
+        banner.className = 'alert alert-warning d-flex align-items-center gap-2 py-2 px-3 mb-2 small';
+        banner.innerHTML = `
+            <i class="fas fa-rotate"></i>
+            <span class="flex-grow-1">This priority was based on earlier inputs — ${what} changed.
+                Re-run for an accurate recommendation.</span>
+            <button type="button" class="btn btn-sm btn-warning" id="priority-rerun-btn">Re-run</button>`;
+        container.insertBefore(banner, container.firstChild);
+        const rerun = document.getElementById('priority-rerun-btn');
+        if (rerun) rerun.addEventListener('click', () => {
+            const btn = document.getElementById('suggest-priority-btn');
+            if (btn) btn.click();
+        });
     }
     
     /**
@@ -671,6 +710,20 @@ class PrioritySuggestionWidget {
                 data.complexity_risks_text = breakdown.risk_considerations
                     .map(r => typeof r === 'string' ? r : r.risk || '')
                     .join(' ');
+            }
+        }
+        
+        // Include AI Deadline Prediction results if available
+        if (window.currentDeadlinePrediction) {
+            const deadline = window.currentDeadlinePrediction;
+            if (deadline.recommended_deadline) {
+                data.ai_predicted_deadline = deadline.recommended_deadline;
+            }
+            if (deadline.estimated_days_to_complete) {
+                data.ai_predicted_days = deadline.estimated_days_to_complete;
+            }
+            if (deadline.confidence_level) {
+                data.deadline_confidence = deadline.confidence_level;
             }
         }
         

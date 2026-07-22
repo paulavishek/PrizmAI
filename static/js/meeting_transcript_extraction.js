@@ -539,16 +539,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function showLoading(title, message) {
-        // Simple loading implementation - you can enhance this
         showProcessing();
         const processingBody = aiProcessing.querySelector('.card-body');
         processingBody.innerHTML = `
-            <div class="spinner-border text-info mb-3" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <h5>${title}</h5>
-            <p class="text-muted">${message}</p>
+            <div class="prizm-spinner mb-3"></div>
+            <h5>${DOMPurify ? DOMPurify.sanitize(title) : title}</h5>
+            <p class="prizm-loading-message-inline" id="mt-loading-msg">${DOMPurify ? DOMPurify.sanitize(message) : message}</p>
         `;
+        if (typeof PrizmLoading !== 'undefined') PrizmLoading.rotateMessages(document.getElementById('mt-loading-msg'), PrizmLoading.messages.meetingTranscript);
     }
     
     function hideLoading() {

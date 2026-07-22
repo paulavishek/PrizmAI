@@ -5,8 +5,8 @@ AI-powered scope creep detection and analysis
 
 from django.utils import timezone
 from django.db.models import Q, Sum
-import google.generativeai as genai
 from django.conf import settings
+from kanban_board.ai_cache import get_cached_ai_response
 
 
 def analyze_scope_changes_with_ai(snapshot, baseline_snapshot):
@@ -101,10 +101,9 @@ Format your response as JSON:
 """
     
     try:
-        # Configure Gemini
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        
+        # Use AI router for provider-agnostic AI call
+        from ai_assistant.utils.ai_router import AIRouter
+
         # Generation config for scope analysis
         generation_config = {
             'temperature': 0.4,  # Analytical task
@@ -112,13 +111,24 @@ Format your response as JSON:
             'top_k': 40,
             'max_output_tokens': 2048,  # Adequate for scope analysis JSON
         }
-        
-        # Generate analysis
-        response = model.generate_content(prompt, generation_config=generation_config)
+
+        router = AIRouter()
+        # Generate analysis with caching
+        response_text = get_cached_ai_response(
+            prompt=prompt,
+            model_call=lambda: router.complete(
+                prompt=prompt,
+                user=None,
+                complexity='complex',
+            )['text'],
+            operation='scope_analysis',
+            context_id=f"board_{board.id}",
+        )
+        if not response_text:
+            return generate_rule_based_analysis(scope_pct, complexity_pct, task_change, complexity_change)
         
         # Parse response
         import json
-        response_text = response.text.strip()
         
         # Remove markdown code blocks if present
         if response_text.startswith('```json'):
@@ -251,14 +261,15 @@ def create_scope_alert_if_needed(snapshot):
     if not severity:
         return None
     
-    # Check if there's already an active alert for this board
+    # Check any existing alert for the same baseline (regardless of status) to prevent
+    # re-alerting at the same level after an alert was dismissed or resolved.
     from kanban.models import ScopeCreepAlert
     existing_alert = ScopeCreepAlert.objects.filter(
         board=snapshot.board,
-        status__in=['active', 'acknowledged']
+        snapshot__baseline_snapshot=snapshot.baseline_snapshot,
     ).order_by('-detected_at').first()
-    
-    # Only create new alert if scope has increased since last alert
+
+    # Only create a new alert if scope has genuinely grown beyond the last alerted level
     if existing_alert and existing_alert.scope_increase_percentage >= snapshot.scope_change_percentage:
         return None
     

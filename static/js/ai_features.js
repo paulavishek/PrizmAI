@@ -35,6 +35,38 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize AI assignee suggestion
     initAssigneeSuggestion();
+
+    // Initialize AI Smart Assignee suggestion (AI Analysis section)
+    initSmartAssigneeSuggestion();
+
+    // Restore AI results from sessionStorage after form validation round-trips
+    try {
+        var savedBreakdown = sessionStorage.getItem('prizmai_taskBreakdown');
+        if (savedBreakdown) {
+            var breakdownData = JSON.parse(savedBreakdown);
+            if (breakdownData && document.getElementById('task-breakdown-result')) {
+                displayTaskBreakdown(breakdownData);
+            }
+        }
+        var savedDeadline = sessionStorage.getItem('prizmai_deadlinePrediction');
+        if (savedDeadline) {
+            var deadlineData = JSON.parse(savedDeadline);
+            if (deadlineData && document.getElementById('deadline-prediction-result')) {
+                displayDeadlinePrediction(deadlineData);
+            }
+        }
+    } catch(e) { /* sessionStorage unavailable or data corrupt — ignore */ }
+
+    // Clear AI sessionStorage on successful form submission
+    var taskForm = document.querySelector('form');
+    if (taskForm) {
+        taskForm.addEventListener('submit', function() {
+            try {
+                sessionStorage.removeItem('prizmai_taskBreakdown');
+                sessionStorage.removeItem('prizmai_deadlinePrediction');
+            } catch(e) {}
+        });
+    }
 });
 
 /**
@@ -64,6 +96,37 @@ function initAITaskDescription() {
             const taskId = generateButton.getAttribute('data-task-id');
             if (taskId) {
                 requestBody.task_id = taskId;
+            }
+
+            // Enrich with context the user has already entered on the form so the
+            // generated description reflects the real tech stack, tags and risk signals
+            // (on a brand-new task there is no task_id, so this is the only context).
+            const _val = (id) => { const el = document.getElementById(id); return el && el.value ? el.value.trim() : ''; };
+            const priorityVal = _val('id_priority');
+            if (priorityVal) requestBody.priority = priorityVal;
+            const riskLevelVal = _val('id_risk_level');
+            if (riskLevelVal) requestBody.risk_level = riskLevelVal;
+            const riskIndicators = _val('id_risk_indicators_text');
+            if (riskIndicators) requestBody.risk_indicators = riskIndicators;
+            const mitigation = _val('id_mitigation_strategies_text');
+            if (mitigation) requestBody.mitigation_strategies = mitigation;
+
+            // Required skills — hidden field stores a JSON array of {name, level}
+            try {
+                const skillsRaw = _val('id_required_skills');
+                if (skillsRaw) {
+                    const names = JSON.parse(skillsRaw)
+                        .map(s => (typeof s === 'string' ? s : (s && s.name) || ''))
+                        .filter(Boolean);
+                    if (names.length) requestBody.required_skills = names;
+                }
+            } catch (e) { /* ignore malformed skills */ }
+
+            // Tags/labels — read selected option text from the hidden multi-select
+            const labelsSelect = document.getElementById('id_labels');
+            if (labelsSelect && labelsSelect.selectedOptions) {
+                const tags = Array.from(labelsSelect.selectedOptions).map(o => o.text.trim()).filter(Boolean);
+                if (tags.length) requestBody.tags = tags;
             }
             
             // Make API call to our backend endpoint
@@ -97,6 +160,12 @@ function initAITaskDescription() {
                                 parts.push('\n• ' + item);
                             });
                         }
+                        if (data.description.immediate_mitigation && Array.isArray(data.description.immediate_mitigation)) {
+                            parts.push('\n\n⚠️ Immediate Mitigation / Fallback:');
+                            data.description.immediate_mitigation.forEach(item => {
+                                parts.push('\n• ' + item);
+                            });
+                        }
                         if (data.description.action_steps && Array.isArray(data.description.action_steps)) {
                             parts.push('\n\nAction Steps:');
                             data.description.action_steps.forEach(item => {
@@ -127,6 +196,12 @@ function initAITaskDescription() {
                         descriptionText = data.description;
                     }
                     descriptionTextarea.value = descriptionText;
+                    // If the Tiptap editor is active, load the generated text into it too.
+                    // The text is plain, so wrap it in paragraph HTML for Tiptap.
+                    if (window.tiptapDescriptionEditor) {
+                        var htmlContent = '<p>' + descriptionText.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+                        window.tiptapDescriptionEditor.commands.setContent(htmlContent, true);
+                    }
                 } else {
                     alert('Could not generate description. Please try again or enter description manually.');
                 }
@@ -984,7 +1059,11 @@ function predictTaskDeadline(taskData, callback) {
     
     if (aiSpinner) aiSpinner.classList.remove('d-none');
     if (predictButton) predictButton.disabled = true;
-    
+
+    // Always use synchronous fetch for deadline prediction.
+    // The async Celery+WebSocket path causes frequent timeouts because
+    // the AI generation can take 60s+ and the WebSocket disconnects
+    // before the result arrives.  Synchronous fetch is more reliable.
     fetch('/api/predict-deadline/', {
         method: 'POST',
         headers: {
@@ -1380,8 +1459,8 @@ function initDeadlinePrediction() {
                         <div>
                             <strong>Task Complexity Analysis required</strong><br>
                             <span class="small">Please run <em>Analyze &amp; Break Down</em> in the AI Analysis section before
-                            predicting the due date. The AI uses the complexity score from that analysis
-                            to estimate a realistic timeline.</span>
+                            predicting the due date. The AI uses the complexity score <em>and the decomposed
+                            subtask effort</em> from that analysis to estimate a realistic, effort-aware timeline.</span>
                         </div>
                     </div>`;
             }
@@ -1417,6 +1496,12 @@ function initDeadlinePrediction() {
         const hourlyRateInput = document.getElementById('id_hourly_rate');
         const startDateInput = document.getElementById('id_start_date');
         
+        // Prefer AI complexity score from task breakdown analysis if available,
+        // so the user doesn't need to manually "Apply" the AI score first.
+        const userComplexity = complexityScoreInput ? parseInt(complexityScoreInput.value) || 5 : 5;
+        const aiBreakdownComplexity = window.currentTaskBreakdown ? window.currentTaskBreakdown.complexity_score : null;
+        const effectiveComplexity = aiBreakdownComplexity || userComplexity;
+
         const taskData = {
             title: titleInput.value.trim(),
             description: descriptionInput ? descriptionInput.value : '',
@@ -1426,8 +1511,11 @@ function initDeadlinePrediction() {
             task_id: taskId,
             // Start date for proper deadline calculation (deadline = start_date + estimated_days)
             start_date: startDateInput && startDateInput.value ? startDateInput.value : null,
-            // Enhanced prediction fields
-            complexity_score: complexityScoreInput ? parseInt(complexityScoreInput.value) || 5 : 5,
+            // Enhanced prediction fields — use AI complexity score when available
+            complexity_score: effectiveComplexity,
+            // AI-decomposed effort total (days) from the subtask breakdown, when run
+            subtask_effort_days: window.currentTaskBreakdown ? (window.currentTaskBreakdown.subtask_effort_days || null) : null,
+            subtask_count: window.currentTaskBreakdown ? (window.currentTaskBreakdown.subtask_count || null) : null,
             workload_impact: workloadImpactSelect ? workloadImpactSelect.value || 'medium' : 'medium',
             skill_match_score: skillMatchScoreInput && skillMatchScoreInput.value ? parseInt(skillMatchScoreInput.value) : null,
             collaboration_required: collaborationRequiredCheckbox ? collaborationRequiredCheckbox.checked : false,
@@ -1462,9 +1550,32 @@ function initDeadlinePrediction() {
 function displayDeadlinePrediction(data) {
     const resultDiv = document.getElementById('deadline-prediction-result');
     if (!resultDiv) return;
+
+    // Store deadline prediction globally so priority suggestion can use it
+    window.currentDeadlinePrediction = data;
+
+    // Snapshot the inputs this prediction was based on, so we can flag it as stale
+    // if the assignee or complexity later changes (cascade invalidation).
+    window._deadlineBaseline = {
+        assignee: cascadeAssigneeText(),
+        complexity: cascadeComplexity()
+    };
     
     // Use AIExplainability module for enhanced visualization
-    let html = `
+    let html = '';
+
+    // Warn if the recommended deadline is in the past
+    if (data.date_is_past) {
+        html += `
+            <div class="alert alert-danger mb-3">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                <strong>Warning:</strong> The AI-recommended deadline (<strong>${formatDate(data.recommended_deadline)}</strong>) is in the past.
+                This usually means the task requires more lead time than is available. Consider reducing scope, adding resources, or choosing a later start date.
+            </div>
+        `;
+    }
+
+    html += `
         <div class="alert alert-success mb-3">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
@@ -1672,6 +1783,9 @@ function displayDeadlinePrediction(data) {
     
     resultDiv.innerHTML = html;
     resultDiv.classList.remove('d-none');
+
+    // Persist to sessionStorage so data survives form validation round-trips
+    try { sessionStorage.setItem('prizmai_deadlinePrediction', JSON.stringify(data)); } catch(e) {}
 }
 
 /**
@@ -2225,8 +2339,8 @@ function applyColumnRecommendations() {
         return;
     }
     
-    // Find the form
-    const form = document.querySelector('form[method="post"]') || document.querySelector('form');
+    // Find the board creation form specifically (not any form on the page)
+    const form = document.getElementById('create-board-form') || document.querySelector('form[method="post"]:not([action])');
     if (!form) {
         alert('Error: Could not find the form. Please refresh the page and try again.');
         return;
@@ -2422,7 +2536,7 @@ function displayTaskBreakdown(data) {
             </div>
             
             <p><strong>Breakdown Recommended:</strong> ${data.is_breakdown_recommended ? 'Yes' : 'No'}</p>
-            <p><strong>Analysis:</strong> ${data.reasoning}</p>
+            <p><strong>Analysis:</strong> ${formatReasoningAsBullets(data.reasoning)}</p>
 
             <!-- ── Explainability Panel ───────────────────────────── -->
             ${(data.factors_considered && data.factors_considered.length > 0) || (data.factors_missing && data.factors_missing.length > 0) ? `
@@ -2470,6 +2584,19 @@ function displayTaskBreakdown(data) {
             </div>` : ''}
             <!-- ── End Explainability Panel ───────────────────────── -->
     `;
+
+    // Estimate contradiction warning — manual hours vs the AI's own subtask breakdown
+    if (data.estimate_contradiction && data.estimate_contradiction.message) {
+        html += `
+            <div class="alert alert-warning mt-3 mb-0 d-flex align-items-start gap-2" role="alert">
+                <i class="fas fa-scale-unbalanced-flip mt-1"></i>
+                <div>
+                    <strong>Estimate looks inconsistent</strong><br>
+                    <span class="small">${escapeHtmlAttr(data.estimate_contradiction.message)}</span>
+                </div>
+            </div>
+        `;
+    }
 
     // High Complexity Warning
     if (data.complexity_score >= 7) {
@@ -2538,12 +2665,7 @@ function displayTaskBreakdown(data) {
         
         html += `
             <div class="mt-3">
-                <button type="button" class="btn btn-sm btn-success me-2" onclick="createSubtasksFromBreakdown()">
-                    Create as Separate Tasks
-                </button>
-                <button type="button" class="btn btn-sm btn-info" onclick="addBreakdownToDescription()">
-                    Add to Description
-                </button>
+                ${renderSmartBreakdownButtons(data)}
             </div>
         `;
     }
@@ -2553,8 +2675,141 @@ function displayTaskBreakdown(data) {
     resultDiv.innerHTML = html;
     resultDiv.classList.remove('d-none');
     
+    // Derive a numeric effort total from the AI subtask estimates so downstream
+    // widgets (deadline prediction) can reason about the decomposed effort instead
+    // of only the manual estimated_hours field.
+    data.subtask_effort_days = computeSubtaskEffortDays(data);
+    data.subtask_count = (data.subtasks && data.subtasks.length) || 0;
+
     // Store breakdown data for later use
     window.currentTaskBreakdown = data;
+
+    // Persist to sessionStorage so data survives form validation round-trips
+    try { sessionStorage.setItem('prizmai_taskBreakdown', JSON.stringify(data)); } catch(e) {}
+
+    // Now that decomposed effort is known, re-check the calendar feasibility.
+    if (typeof checkScheduleConflict === 'function') checkScheduleConflict();
+}
+
+/**
+ * Sum the AI subtask day-estimates into a single number of days.
+ * Parses strings like "0.5 day", "1.0 day", "0.5-1 day" (ranges are averaged).
+ * Returns null when nothing parseable is found.
+ */
+function computeSubtaskEffortDays(data) {
+    if (!data || !Array.isArray(data.subtasks) || data.subtasks.length === 0) {
+        return null;
+    }
+    let total = 0;
+    let matched = 0;
+    data.subtasks.forEach(st => {
+        const raw = (st && st.estimated_effort) ? String(st.estimated_effort) : '';
+        const nums = raw.match(/\d+(?:\.\d+)?/g);
+        if (!nums || nums.length === 0) return;
+        // Range like "0.5-1" → average the endpoints; single value → itself.
+        const isRange = /\d\s*-\s*\d/.test(raw) && nums.length >= 2;
+        const value = isRange
+            ? (parseFloat(nums[0]) + parseFloat(nums[1])) / 2
+            : parseFloat(nums[0]);
+        if (!isNaN(value)) {
+            // Treat hour-denominated estimates as days if the label says "hour".
+            total += /hour|hr/i.test(raw) ? value / 8 : value;
+            matched += 1;
+        }
+    });
+    if (matched === 0) return null;
+    return Math.round(total * 10) / 10;
+}
+
+
+/**
+ * Render the appropriate action buttons based on task complexity/size.
+ *
+ * Thresholds:
+ *   complexity >= 8 AND estimated_hours > 16  →  recommend Epic
+ *   Otherwise                                 →  recommend Checklist
+ */
+function renderSmartBreakdownButtons(data) {
+    const complexity = data.complexity_score || 0;
+    // estimated_hours may come from the form, grab it from the input
+    const hoursInput = document.getElementById('id_estimated_hours');
+    const estimatedHours = hoursInput ? parseFloat(hoursInput.value) || 0 : 0;
+    const isEpicCandidate = complexity >= 8 && estimatedHours > 16;
+
+    // Check if we're on the create-task page (no saved task yet) or the task detail page
+    const isCreatePage = window.location.pathname.includes('/create-task');
+
+    if (isEpicCandidate) {
+        if (isCreatePage) {
+            // On create page for epic candidates: primary = save with checklist, secondary = epic
+            return `
+                <div class="alert alert-info py-2 mb-2" style="font-size:0.88em;">
+                    <i class="fas fa-bolt me-1"></i>
+                    <strong>Large scope detected</strong> — complexity ${complexity}/10, ${estimatedHours}h estimated.
+                    Click <strong>Save with Checklist</strong> to create the task with sub-tasks tracked inside, or choose Epic to split into separate board cards.
+                </div>
+                <button type="button" class="btn btn-sm btn-success me-2" onclick="saveTaskWithChecklist()">
+                    <i class="fas fa-tasks me-1"></i>Save Task with Checklist
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-warning me-2" onclick="createEpicWithChildren()">
+                    <i class="fas fa-crown me-1"></i>Create as Epic with Child Tasks
+                    <small class="d-block" style="font-size:0.75em;">(hides parent from board)</small>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addBreakdownToDescription()">
+                    <i class="fas fa-file-alt me-1"></i>Add to Description
+                </button>
+            `;
+        } else {
+            return `
+                <div class="alert alert-info py-2 mb-2" style="font-size:0.88em;">
+                    <i class="fas fa-bolt me-1"></i>
+                    <strong>Large scope detected</strong> — this task has high complexity (${complexity}/10) and ${estimatedHours}h estimated.
+                    Creating it as an <strong>Epic</strong> keeps the board clean while letting team members own individual child tasks.
+                </div>
+                <button type="button" class="btn btn-sm btn-warning me-2" onclick="createEpicWithChildren()">
+                    <i class="fas fa-crown me-1"></i>Create as Epic with Child Tasks
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-success me-2" onclick="createChecklistFromBreakdown()">
+                    <i class="fas fa-tasks me-1"></i>Add as Sub-task Checklist
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addBreakdownToDescription()">
+                    <i class="fas fa-file-alt me-1"></i>Add to Description
+                </button>
+            `;
+        }
+    } else {
+        if (isCreatePage) {
+            // On create page: primary = save with checklist
+            return `
+                <div class="alert alert-success py-2 mb-2" style="font-size:0.88em;">
+                    <i class="fas fa-check-square me-1"></i>
+                    Click <strong>Save with Checklist</strong> to create this task with the AI sub-tasks tracked as a checklist inside the card.
+                </div>
+                <button type="button" class="btn btn-sm btn-success me-2" onclick="saveTaskWithChecklist()">
+                    <i class="fas fa-tasks me-1"></i>Save Task with Checklist
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addBreakdownToDescription()">
+                    <i class="fas fa-file-alt me-1"></i>Add to Description
+                </button>
+            `;
+        } else {
+            return `
+                <div class="alert alert-success py-2 mb-2" style="font-size:0.88em;">
+                    <i class="fas fa-check-square me-1"></i>
+                    AI sub-tasks will be saved as a <strong>checklist inside this card</strong>, keeping the board clean.
+                </div>
+                <button type="button" class="btn btn-sm btn-success me-2" onclick="createChecklistFromBreakdown()">
+                    <i class="fas fa-tasks me-1"></i>Add as Sub-task Checklist
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-warning me-2" onclick="createEpicWithChildren()">
+                    <i class="fas fa-crown me-1"></i>Create as Epic with Child Tasks
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addBreakdownToDescription()">
+                    <i class="fas fa-file-alt me-1"></i>Add to Description
+                </button>
+            `;
+        }
+    }
 }
 
 /**
@@ -2586,8 +2841,223 @@ function addBreakdownToDescription() {
     alert('Subtask breakdown added to description!');
 }
 
+
 /**
- * Create separate tasks from breakdown
+ * Save the task via the create-task form AND attach checklist items in one step.
+ * Works on the create-task page where no task_id exists yet.
+ * Stores the breakdown data as a hidden field so the server can create
+ * ChecklistItem records immediately after the task is saved.
+ */
+function saveTaskWithChecklist() {
+    const data = window.currentTaskBreakdown;
+    if (!data || !data.subtasks) {
+        alert('No subtask data available. Please generate a breakdown first.');
+        return;
+    }
+
+    const form = document.getElementById('task-create-form');
+    if (!form) {
+        alert('Task creation form not found. Please refresh and try again.');
+        return;
+    }
+
+    // Inject (or update) a hidden field with the AI breakdown JSON
+    let hiddenInput = document.getElementById('checklist_breakdown_data');
+    if (!hiddenInput) {
+        hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = 'checklist_breakdown_data';
+        hiddenInput.id = 'checklist_breakdown_data';
+        form.appendChild(hiddenInput);
+    }
+    hiddenInput.value = JSON.stringify(data.subtasks);
+
+    // Submit the form normally — the server will create the task + checklist items
+    form.submit();
+}
+
+
+/**
+ * Create checklist items from AI-generated breakdown (Method 1 — Checklist Approach)
+ * Items stay inside the parent card; no new board cards are created.
+ */
+function createChecklistFromBreakdown() {
+    const data = window.currentTaskBreakdown;
+    if (!data || !data.subtasks) {
+        alert('No subtask data available. Please generate a breakdown first.');
+        return;
+    }
+
+    // Determine the task id — we need a saved task
+    const taskIdInput = document.querySelector('input[name="task_id"]') ||
+                        document.querySelector('[data-task-id]');
+    let taskId = null;
+
+    // Method 1: data attribute on the page (task_detail)
+    const detailContainer = document.querySelector('[data-task-id]');
+    if (detailContainer) taskId = detailContainer.dataset.taskId;
+
+    // Method 2: hidden input
+    if (!taskId) {
+        const hiddenInput = document.querySelector('input[name="task_id"]');
+        if (hiddenInput) taskId = hiddenInput.value;
+    }
+
+    // Method 3: URL pattern  /tasks/<id>/
+    if (!taskId) {
+        const urlMatch = window.location.pathname.match(/\/tasks\/(\d+)/);
+        if (urlMatch) taskId = urlMatch[1];
+    }
+
+    if (!taskId) {
+        alert('Please save the task first before adding a checklist. The task needs to exist in the database.');
+        return;
+    }
+
+    if (!confirm(`This will add ${data.subtasks.length} checklist items to this task. Proceed?`)) return;
+
+    const btn = document.querySelector('button[onclick="createChecklistFromBreakdown()"]');
+    const busy = btn ? PrizmLoading.buttonBusy(btn, { label: 'Adding…' }) : null;
+
+    fetch('/api/create-checklist-items/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({ task_id: parseInt(taskId), subtasks: data.subtasks })
+    })
+    .then(r => { if (!r.ok) throw new Error('Network error'); return r.json(); })
+    .then(result => {
+        if (result.success) {
+            alert(`✅ Added ${result.created_count} checklist items! Reloading page…`);
+            window.location.reload();
+        } else {
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    })
+    .catch(err => { console.error(err); alert('Failed to create checklist items.'); })
+    .finally(() => { if (busy) busy.done(); });
+}
+
+
+/**
+ * Create an Epic from the parent task and populate child tasks (Method 2 — Epic / Child Model)
+ * The parent task is converted to item_type='epic' (hidden from board).
+ * Child tasks appear as standard cards in the column.
+ */
+function createEpicWithChildren() {
+    const data = window.currentTaskBreakdown;
+    if (!data || !data.subtasks) {
+        alert('No subtask data available. Please generate a breakdown first.');
+        return;
+    }
+
+    const predictButton = document.getElementById('predict-deadline-btn');
+    const boardId = predictButton ? predictButton.dataset.boardId : null;
+    if (!boardId) {
+        alert('Board information not found. Please refresh and try again.');
+        return;
+    }
+
+    // Column from URL or form
+    let columnId = null;
+    const pathMatch = window.location.pathname.match(/\/columns\/(\d+)\/create-task/);
+    if (pathMatch) columnId = pathMatch[1];
+    if (!columnId) {
+        const colInput = document.querySelector('input[name="column"]') || document.querySelector('select[name="column"]');
+        if (colInput) columnId = colInput.value;
+    }
+
+    // Existing task id (if on detail page)
+    let taskId = null;
+    const detailEl = document.querySelector('[data-task-id]');
+    if (detailEl) taskId = detailEl.dataset.taskId;
+    if (!taskId) {
+        const urlMatch = window.location.pathname.match(/\/tasks\/(\d+)/);
+        if (urlMatch) taskId = urlMatch[1];
+    }
+
+    const titleInput = document.getElementById('id_title');
+    const descInput = document.getElementById('id_description');
+
+    const msg = taskId
+        ? `This will convert the current task into an Epic (hidden from the board) and create ${data.subtasks.length} child tasks as separate cards. Proceed?`
+        : `This will create an Epic plus ${data.subtasks.length} child tasks on the board. Proceed?`;
+
+    if (!confirm(msg)) return;
+
+    const btn = document.querySelector('button[onclick="createEpicWithChildren()"]');
+    const busy = btn ? PrizmLoading.buttonBusy(btn, { label: 'Creating…' }) : null;
+
+    const requestData = {
+        board_id: parseInt(boardId),
+        column_id: columnId ? parseInt(columnId) : null,
+        subtasks: data.subtasks,
+    };
+    if (taskId) {
+        requestData.task_id = parseInt(taskId);
+    } else {
+        requestData.title = titleInput ? titleInput.value.trim() : 'Epic';
+        requestData.description = descInput ? descInput.value : '';
+
+        // Capture all form fields so the API doesn't lose user input
+        const priorityInput = document.getElementById('id_priority');
+        if (priorityInput && priorityInput.value) requestData.priority = priorityInput.value;
+
+        const startDateInput = document.getElementById('id_start_date');
+        if (startDateInput && startDateInput.value) requestData.start_date = startDateInput.value;
+
+        const dueDateInput = document.getElementById('id_due_date');
+        if (dueDateInput && dueDateInput.value) requestData.due_date = dueDateInput.value;
+
+        const assignedToInput = document.getElementById('id_assigned_to');
+        if (assignedToInput && assignedToInput.value) requestData.assigned_to = assignedToInput.value;
+
+        const estimatedHoursInput = document.getElementById('id_estimated_hours');
+        if (estimatedHoursInput && estimatedHoursInput.value) requestData.estimated_hours = parseFloat(estimatedHoursInput.value);
+
+        const complexityInput = document.getElementById('id_complexity_score');
+        if (complexityInput && complexityInput.value) requestData.complexity_score = parseInt(complexityInput.value);
+
+        const progressInput = document.getElementById('id_progress');
+        if (progressInput && progressInput.value) requestData.progress = parseInt(progressInput.value);
+    }
+
+    fetch('/api/create-epic-children/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(requestData)
+    })
+    .then(r => { if (!r.ok) throw new Error('Network error'); return r.json(); })
+    .then(result => {
+        if (result.success) {
+            let message = `🎉 Epic "${result.epic_title}" created with ${result.created_count} child tasks!`;
+            if (result.errors && result.errors.length) {
+                message += `\n\n⚠️ Issues:\n${result.errors.join('\n')}`;
+            }
+            alert(message);
+            // Redirect to board to see the new child cards
+            const boardLink = document.querySelector('a[href*="/boards/"]');
+            if (boardLink) {
+                window.location.href = boardLink.href;
+            } else {
+                window.location.reload();
+            }
+        } else {
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    })
+    .catch(err => { console.error(err); alert('Failed to create Epic.'); })
+    .finally(() => { if (busy) busy.done(); });
+}
+
+
+/**
+ * Create separate tasks from breakdown (legacy — kept for backward compatibility)
  */
 function createSubtasksFromBreakdown() {
     const data = window.currentTaskBreakdown;
@@ -2792,6 +3262,69 @@ function applyAIComplexityScore(aiScore) {
             successMsg.remove();
         }, 3000);
     }
+
+    // Offer to scale the Story Points custom field to match the new complexity.
+    maybeSuggestStoryPoints(aiScore);
+}
+
+/**
+ * Map a 1-10 AI complexity score to a Fibonacci-ish story-point value.
+ * Aligns with treating complexity as the story-point proxy used elsewhere
+ * (e.g. burndown analytics), rounded to a conventional planning-poker value.
+ */
+function complexityToStoryPoints(score) {
+    const map = { 1: 1, 2: 1, 3: 2, 4: 3, 5: 5, 6: 5, 7: 8, 8: 8, 9: 13, 10: 13 };
+    return map[Math.max(1, Math.min(10, Math.round(score)))] || 5;
+}
+
+/**
+ * Locate the "Story Points" custom-field input (a workspace custom field that
+ * may not exist) and, if its value differs from the complexity-derived points,
+ * render a one-click "Bump" chip. Never overwrites silently; no-op if absent.
+ */
+function maybeSuggestStoryPoints(aiScore) {
+    const suggested = complexityToStoryPoints(aiScore);
+
+    // Find a custom-field label reading "Story Points" and its sibling input.
+    let targetInput = null;
+    document.querySelectorAll('.cf-task-widget label.form-label').forEach(label => {
+        if (targetInput) return;
+        const text = (label.textContent || '').trim().toLowerCase();
+        if (text === 'story points' || text.startsWith('story points')) {
+            const group = label.closest('.mb-3') || label.parentElement;
+            if (group) {
+                targetInput = group.querySelector('input[type="number"]');
+            }
+        }
+    });
+
+    if (!targetInput) return; // No Story Points field in this workspace — nothing to do.
+
+    const current = parseInt(targetInput.value, 10);
+    if (!isNaN(current) && current === suggested) return; // Already matches.
+
+    // Avoid stacking duplicate chips.
+    const existing = document.getElementById('story-points-suggest-chip');
+    if (existing) existing.remove();
+
+    const chip = document.createElement('div');
+    chip.id = 'story-points-suggest-chip';
+    chip.className = 'alert alert-info d-flex align-items-center gap-2 py-2 px-3 mt-2 mb-0 small';
+    chip.innerHTML = `
+        <i class="fas fa-magic"></i>
+        <span>AI complexity is ${aiScore}/10 — bump <strong>Story Points</strong> to <strong>${suggested}</strong>?</span>
+        <button type="button" class="btn btn-sm btn-info ms-auto" id="story-points-apply-btn">Apply</button>
+        <button type="button" class="btn-close btn-close-sm" aria-label="Dismiss"></button>
+    `;
+    targetInput.closest('.mb-3')?.appendChild(chip);
+
+    chip.querySelector('#story-points-apply-btn').addEventListener('click', () => {
+        targetInput.value = suggested;
+        targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+        targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+        chip.remove();
+    });
+    chip.querySelector('.btn-close').addEventListener('click', () => chip.remove());
 }
 
 /**
@@ -2802,6 +3335,37 @@ function getComplexityBadgeClass(score) {
     if (score >= 6) return 'warning';
     if (score >= 4) return 'info';
     return 'success';
+}
+
+/**
+ * Format AI reasoning text as bullet points.
+ * Splits on sentence-ending patterns like ". -", ". Factor:", or numbered items,
+ * and renders each as a list item for readability.
+ */
+function formatReasoningAsBullets(text) {
+    if (!text) return '';
+    // Split on patterns: ". - ", ". Factor", period followed by a capital factor keyword
+    // Also handle "- " at the start of segments (markdown-style bullets)
+    let segments = text
+        .replace(/\.\s*-\s+/g, '.\n- ')           // ". - Foo" => newline bullet
+        .replace(/\.\s+(?=[A-Z][a-z]+ (?:Level|Impact|Match|Required|Hours|Dependencies|Score|Workload))/g, '.\n- ')  // ". Risk Level" => newline bullet
+        .split('\n')
+        .map(s => s.replace(/^-\s*/, '').trim())
+        .filter(s => s.length > 0);
+
+    if (segments.length <= 1) {
+        // No meaningful split — return as-is
+        return text;
+    }
+
+    // First segment is the base analysis intro, rest are factor adjustments
+    let html = segments[0];
+    html += '<ul class="mt-2 mb-0" style="padding-left:1.2em;">';
+    for (let i = 1; i < segments.length; i++) {
+        html += `<li>${segments[i]}</li>`;
+    }
+    html += '</ul>';
+    return html;
 }
 
 /**
@@ -3466,7 +4030,7 @@ function displayAssigneeSuggestion(data) {
                             <div class="flex-grow-1">
                                 <div class="small">
                                     <strong>${escapeHtmlAttr(altName)}</strong>
-                                    <span class="badge bg-secondary ms-1">${altScore}/100</span>
+                                    <span class="badge bg-secondary ms-1" title="Overall multi-factor score (not skill match alone)">Overall ${altScore}/100</span>
                                 </div>
                                 <div class="small text-muted">${escapeHtmlAttr(altReason)}</div>
                             </div>
@@ -3559,6 +4123,513 @@ function escapeHtmlAttr(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+
+/**
+ * Initialize AI Smart Assignee Suggestion (AI Analysis section)
+ * Gathers ALL form context to make a comprehensive assignee recommendation.
+ * Attaches click handler to #smart-suggest-assignee-btn
+ */
+function initSmartAssigneeSuggestion() {
+    const smartBtn = document.getElementById('smart-suggest-assignee-btn');
+    if (!smartBtn) return;
+
+    smartBtn.addEventListener('click', function() {
+        const titleInput = document.getElementById('id_title');
+        if (!titleInput || !titleInput.value.trim()) {
+            alert('Please enter a task title first so AI can analyze the task.');
+            return;
+        }
+
+        const boardId = this.dataset.boardId;
+
+        // Gather ALL form fields for comprehensive analysis
+        const descriptionInput = document.getElementById('id_description');
+        const complexityInput = document.getElementById('id_complexity_score');
+        const workloadInput = document.getElementById('id_workload_impact');
+        const skillsInput = document.getElementById('id_required_skills');
+        const priorityInput = document.getElementById('id_priority');
+        const dueDateInput = document.getElementById('id_due_date');
+        const estimatedHoursInput = document.getElementById('id_estimated_hours');
+        const collaborationInput = document.getElementById('id_collaboration_required');
+        const dependenciesInput = document.getElementById('id_dependencies');
+        const riskLevelInput = document.getElementById('id_risk_level');
+        const riskLikelihoodInput = document.getElementById('id_risk_likelihood');
+        const riskImpactInput = document.getElementById('id_risk_impact');
+        const skillMatchInput = document.getElementById('id_skill_match_score');
+        const estimatedCostInput = document.getElementById('id_estimated_cost');
+        const hourlyRateInput = document.getElementById('id_hourly_rate');
+        const startDateInput = document.getElementById('id_start_date');
+        const lssRadio = document.querySelector('input[name="lss_classification"]:checked');
+
+        // Parse required_skills
+        let requiredSkills = [];
+        if (skillsInput && skillsInput.value) {
+            try { requiredSkills = JSON.parse(skillsInput.value); } catch (e) { /* ignore */ }
+        }
+
+        // Compute risk score
+        let riskScore = null;
+        if (riskLikelihoodInput && riskImpactInput) {
+            const likelihood = parseInt(riskLikelihoodInput.value) || 0;
+            const impact = parseInt(riskImpactInput.value) || 0;
+            if (likelihood > 0 && impact > 0) riskScore = likelihood * impact;
+        }
+
+        const taskData = {
+            title: titleInput.value.trim(),
+            description: descriptionInput ? descriptionInput.value : '',
+            complexity_score: complexityInput ? (parseInt(complexityInput.value) || null) : null,
+            workload_impact: workloadInput ? workloadInput.value : 'medium',
+            required_skills: requiredSkills,
+            board_id: boardId,
+            task_id: null,
+            priority: priorityInput ? priorityInput.value : null,
+            due_date: dueDateInput ? dueDateInput.value : null,
+            estimated_hours: estimatedHoursInput ? (parseFloat(estimatedHoursInput.value) || null) : null,
+            // AI-decomposed effort total (days) so the engine can judge deadline feasibility
+            subtask_effort_days: window.currentTaskBreakdown ? (window.currentTaskBreakdown.subtask_effort_days || null) : null,
+            collaboration_required: collaborationInput ? collaborationInput.checked : false,
+            dependencies_count: dependenciesInput ? dependenciesInput.selectedOptions.length : 0,
+            risk_level: riskLevelInput ? riskLevelInput.value : null,
+            risk_score: riskScore,
+            skill_match_score: skillMatchInput ? (parseInt(skillMatchInput.value) || null) : null,
+            estimated_cost: estimatedCostInput ? (parseFloat(estimatedCostInput.value) || null) : null,
+            hourly_rate: hourlyRateInput ? (parseFloat(hourlyRateInput.value) || null) : null,
+            start_date: startDateInput ? startDateInput.value : null,
+            lss_classification: lssRadio ? lssRadio.value : null
+        };
+
+        const spinner = document.getElementById('smart-assignee-ai-spinner');
+        const resultDiv = document.getElementById('smart-assignee-suggestion-result');
+
+        if (spinner) spinner.classList.remove('d-none');
+        if (resultDiv) resultDiv.classList.add('d-none');
+        smartBtn.disabled = true;
+
+        fetch('/api/suggest-assignee/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify(taskData)
+        })
+        .then(response => response.json().then(data => {
+            if (!response.ok) {
+                const err = new Error(data.error || 'Failed to get smart assignee suggestion');
+                err.details = data;
+                throw err;
+            }
+            return data;
+        }))
+        .then(data => {
+            if (spinner) spinner.classList.add('d-none');
+            smartBtn.disabled = false;
+            displaySmartAssigneeSuggestion(data);
+        })
+        .catch(error => {
+            console.error('Smart assignee suggestion error:', error);
+            if (spinner) spinner.classList.add('d-none');
+            smartBtn.disabled = false;
+            if (resultDiv) {
+                let errorMsg = error.message || 'Failed to get smart assignee suggestion.';
+                if (error.details && error.details.no_members) {
+                    errorMsg = 'No board members available. Please add members to the board first.';
+                } else if (error.details && error.details.quota_exceeded) {
+                    errorMsg = 'AI usage quota exceeded. Please try again later.';
+                }
+                resultDiv.innerHTML = `
+                    <div class="alert alert-warning alert-dismissible fade show py-2">
+                        <i class="fas fa-exclamation-triangle me-1"></i> ${errorMsg}
+                        <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
+                    </div>`;
+                resultDiv.classList.remove('d-none');
+            }
+        });
+    });
+}
+
+
+/**
+ * Display AI Smart Assignee suggestion results in the AI Analysis section.
+ * Shows comparison with manual selection if one was already made.
+ */
+function displaySmartAssigneeSuggestion(data) {
+    const resultDiv = document.getElementById('smart-assignee-suggestion-result');
+    if (!resultDiv) return;
+
+    const rec = data.recommendation || {};
+    const candidates = data.all_candidates || [];
+    const stripMarkdown = window.AIExplainability?.stripMarkdown || ((text) => text);
+
+    const confidence = rec.confidence || 0;
+    const confidencePct = Math.round(confidence * 100);
+    const displayName = rec.recommended_display_name || rec.recommended_username || 'Unknown';
+    const userId = rec.recommended_user_id;
+    const reasoning = rec.reasoning || 'Based on comprehensive multi-factor analysis.';
+    const factors = rec.factors || [];
+    const alternatives = rec.alternatives || [];
+    const warnings = rec.warnings || [];
+    const explainability = rec.explainability || {};
+
+    let confColor = 'success', confText = 'High';
+    if (confidence < 0.5) { confColor = 'danger'; confText = 'Low'; }
+    else if (confidence < 0.75) { confColor = 'warning'; confText = 'Medium'; }
+
+    // Check what user has currently selected
+    const assigneeSelect = document.getElementById('id_assigned_to');
+    const currentAssigneeId = assigneeSelect ? assigneeSelect.value : '';
+    const currentAssigneeName = (assigneeSelect && assigneeSelect.selectedOptions.length > 0 && assigneeSelect.value)
+        ? assigneeSelect.selectedOptions[0].text : '';
+
+    let html = `<div class="card border-info shadow-sm">
+            <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h6 class="mb-0">
+                        <i class="fas fa-brain text-info me-1"></i> Smart Assignee Recommendation
+                    </h6>
+                    <span class="badge bg-${confColor}" title="AI Confidence: ${confidencePct}%">
+                        <i class="fas fa-chart-line me-1"></i>${confidencePct}% ${confText}
+                    </span>
+                </div>`;
+
+    // If user already picked someone, show comparison
+    if (currentAssigneeId && String(currentAssigneeId) !== String(userId)) {
+        html += `
+                <div class="alert alert-warning py-2 px-3 mb-2" style="font-size:0.85rem;">
+                    <i class="fas fa-exchange-alt me-1"></i>
+                    You selected <strong>${escapeHtmlAttr(currentAssigneeName)}</strong>, but AI recommends
+                    <strong>${escapeHtmlAttr(displayName)}</strong> based on full task context analysis.
+                </div>`;
+    } else if (currentAssigneeId && String(currentAssigneeId) === String(userId)) {
+        html += `
+                <div class="alert alert-success py-2 px-3 mb-2" style="font-size:0.85rem;">
+                    <i class="fas fa-check-circle me-1"></i>
+                    Great choice! AI also recommends <strong>${escapeHtmlAttr(displayName)}</strong> &mdash; your selection matches the AI recommendation.
+                </div>`;
+    }
+
+    // Recommended person
+    html += `
+                <div class="d-flex align-items-center mb-2 p-2 bg-light rounded">
+                    <div class="me-2">
+                        <i class="fas fa-user-circle fa-2x text-info"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <strong>${escapeHtmlAttr(displayName)}</strong>
+                        <div class="small text-muted">${stripMarkdown(reasoning)}</div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-info ms-2"
+                            onclick="applySmartAssigneeSuggestion(${userId})">
+                        <i class="fas fa-check me-1"></i> Assign
+                    </button>
+                </div>`;
+
+    // Confidence meter
+    if (window.AIExplainability && window.AIExplainability.renderConfidenceMeter) {
+        html += window.AIExplainability.renderConfidenceMeter(
+            confidence, 'Match Confidence', explainability.reasoning || ''
+        );
+    }
+
+    // Factor breakdown
+    if (factors.length > 0) {
+        html += `
+                <div class="mt-2">
+                    <a class="small text-decoration-none" data-bs-toggle="collapse" href="#smart-assignee-factors-collapse" role="button">
+                        <i class="fas fa-wand-magic-sparkles text-primary me-1"></i>
+                        <strong class="text-primary">Why AI chose this person</strong>
+                        <i class="fas fa-chevron-down ms-1 small"></i>
+                    </a>
+                    <div class="collapse show mt-2" id="smart-assignee-factors-collapse">
+                        <div class="p-2 bg-light rounded border">`;
+
+        const sortedFactors = [...factors].sort((a, b) => (b.contribution || 0) - (a.contribution || 0));
+        sortedFactors.forEach((factor, index) => {
+            const contribution = factor.contribution || 0;
+            const desc = factor.description || '';
+            let barColor = '#6c757d';
+            if (contribution >= 30) barColor = '#0d6efd';
+            else if (contribution >= 15) barColor = '#0dcaf0';
+
+            html += `
+                            <div class="mb-2">
+                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                    <span class="small fw-semibold">
+                                        <span class="badge bg-secondary me-1" style="font-size:0.65rem;">${index + 1}</span>
+                                        ${escapeHtmlAttr(factor.name || 'Factor')}
+                                    </span>
+                                    <span class="small fw-bold" style="color:${barColor};">${contribution}%</span>
+                                </div>
+                                <div class="small text-muted mb-1">${escapeHtmlAttr(desc)}</div>
+                                <div class="progress" style="height:4px;">
+                                    <div class="progress-bar" style="width:${Math.max(5, contribution)}%;background-color:${barColor};" role="progressbar"></div>
+                                </div>
+                            </div>`;
+        });
+
+        html += `
+                        </div>
+                    </div>
+                </div>`;
+    }
+
+    // Warnings
+    if (warnings.length > 0) {
+        html += `<div class="mt-2">`;
+        warnings.forEach(w => {
+            html += `<div class="small text-warning"><i class="fas fa-exclamation-triangle me-1"></i>${escapeHtmlAttr(w)}</div>`;
+        });
+        html += `</div>`;
+    }
+
+    // Alternatives
+    if (alternatives.length > 0) {
+        html += `
+                <div class="mt-2">
+                    <a class="small text-decoration-none" data-bs-toggle="collapse" href="#smart-assignee-alternatives-collapse" role="button">
+                        <i class="fas fa-users text-secondary me-1"></i>
+                        <strong class="text-secondary">Alternative candidates (${alternatives.length})</strong>
+                        <i class="fas fa-chevron-down ms-1 small"></i>
+                    </a>
+                    <div class="collapse mt-2" id="smart-assignee-alternatives-collapse">`;
+
+        alternatives.forEach(alt => {
+            const altName = alt.display_name || alt.username || 'Unknown';
+            const altScore = Math.round(alt.score || 0);
+            const altReason = alt.brief_reason || '';
+            html += `
+                        <div class="d-flex align-items-center p-2 mb-1 bg-light rounded border-start border-secondary border-2">
+                            <div class="me-2"><i class="fas fa-user text-secondary"></i></div>
+                            <div class="flex-grow-1">
+                                <div class="small">
+                                    <strong>${escapeHtmlAttr(altName)}</strong>
+                                    <span class="badge bg-secondary ms-1" title="Overall multi-factor score (not skill match alone)">Overall ${altScore}/100</span>
+                                </div>
+                                <div class="small text-muted">${escapeHtmlAttr(altReason)}</div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary ms-2"
+                                    onclick="applySmartAssigneeSuggestion(${alt.user_id})" title="Assign ${escapeHtmlAttr(altName)}">
+                                <i class="fas fa-check"></i>
+                            </button>
+                        </div>`;
+        });
+
+        html += `
+                    </div>
+                </div>`;
+    }
+
+    // Explainability footer
+    if (explainability.data_quality) {
+        const dqBadge = explainability.data_quality === 'high' ? 'success' :
+                         explainability.data_quality === 'medium' ? 'warning' : 'secondary';
+        html += `
+                <div class="mt-2 pt-2 border-top">
+                    <span class="small text-muted">
+                        <i class="fas fa-database me-1"></i>Data Quality:
+                        <span class="badge bg-${dqBadge}" style="font-size:0.65rem;">${explainability.data_quality}</span>
+                    </span>`;
+        if (explainability.assumptions && explainability.assumptions.length > 0) {
+            html += `
+                    <div class="mt-1">
+                        <span class="small text-muted"><i class="fas fa-lightbulb me-1"></i>Assumptions:</span>
+                        <ul class="mb-0" style="font-size:0.75rem;padding-left:1.2rem;">`;
+            explainability.assumptions.forEach(a => {
+                html += `<li class="text-muted">${escapeHtmlAttr(a)}</li>`;
+            });
+            html += `</ul></div>`;
+        }
+        html += `</div>`;
+    }
+
+    html += `
+            </div>
+        </div>`;
+
+    resultDiv.innerHTML = html;
+    resultDiv.classList.remove('d-none');
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// Cascade invalidation: when an upstream input (assignee, complexity) changes
+// after a downstream AI result was produced, mark that result stale with a
+// one-click re-run — instead of silently re-firing AI calls (quota-conscious).
+// ─────────────────────────────────────────────────────────────────────────
+function cascadeAssigneeText() {
+    const sel = document.getElementById('id_assigned_to');
+    return sel && sel.selectedIndex >= 0 ? (sel.options[sel.selectedIndex].text || '').trim() : '';
+}
+function cascadeComplexity() {
+    const input = document.querySelector('input[name="complexity_score"]');
+    const aiC = window.currentTaskBreakdown ? window.currentTaskBreakdown.complexity_score : null;
+    return aiC || (input ? (parseInt(input.value, 10) || null) : null);
+}
+
+function markDeadlineStaleIfNeeded() {
+    const resultDiv = document.getElementById('deadline-prediction-result');
+    if (!resultDiv || resultDiv.classList.contains('d-none') || !window._deadlineBaseline) return;
+    if (document.getElementById('deadline-stale-banner')) return; // already flagged
+
+    const curAssignee = cascadeAssigneeText();
+    const curComplexity = cascadeComplexity();
+    const assigneeChanged = curAssignee && curAssignee !== window._deadlineBaseline.assignee;
+    const complexityChanged = curComplexity && curComplexity !== window._deadlineBaseline.complexity;
+    if (!assigneeChanged && !complexityChanged) return;
+
+    const reason = assigneeChanged
+        ? `assignee changed to ${curAssignee}`
+        : `complexity changed to ${curComplexity}/10`;
+    const banner = document.createElement('div');
+    banner.id = 'deadline-stale-banner';
+    banner.className = 'alert alert-warning d-flex align-items-center gap-2 mb-2';
+    banner.innerHTML = `
+        <i class="fas fa-rotate"></i>
+        <span class="small flex-grow-1">This deadline was based on
+            <strong>${escapeHtmlAttr(window._deadlineBaseline.assignee || 'the previous inputs')}</strong>
+            — ${escapeHtmlAttr(reason)}. Re-predict for an accurate deadline.</span>
+        <button type="button" class="btn btn-sm btn-warning" id="deadline-rerun-btn">
+            <i class="fas fa-wand-magic-sparkles me-1"></i>Re-predict</button>`;
+    resultDiv.insertBefore(banner, resultDiv.firstChild);
+    const rerun = document.getElementById('deadline-rerun-btn');
+    if (rerun) rerun.addEventListener('click', () => {
+        const btn = document.getElementById('predict-deadline-btn');
+        if (btn) btn.click();
+    });
+}
+
+function initCascadeInvalidation() {
+    const assigneeSel = document.getElementById('id_assigned_to');
+    if (assigneeSel) assigneeSel.addEventListener('change', markDeadlineStaleIfNeeded);
+    const complexityInput = document.querySelector('input[name="complexity_score"]');
+    if (complexityInput) {
+        complexityInput.addEventListener('change', markDeadlineStaleIfNeeded);
+        complexityInput.addEventListener('input', markDeadlineStaleIfNeeded);
+    }
+    // Schedule-conflict re-check when the calendar window changes.
+    const dueInput = document.getElementById('id_due_date');
+    if (dueInput) dueInput.addEventListener('change', checkScheduleConflict);
+    const startInput = document.getElementById('id_start_date');
+    if (startInput) startInput.addEventListener('change', checkScheduleConflict);
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCascadeInvalidation);
+} else {
+    initCascadeInvalidation();
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Schedule-conflict detection: if the AI's decomposed effort (in working days)
+// exceeds the calendar window between start/today and the due date, the schedule
+// is mathematically impossible — surface a hard banner instead of silently
+// accepting it. Uses date-only math + weekend stripping (no date-fns in stack).
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Parse a YYYY-MM-DD (optionally with T-time) into a local Date at midnight, or null. */
+function parseYMD(value) {
+    if (!value) return null;
+    const m = String(value).match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+}
+
+/**
+ * Count business (Mon–Fri) days in the inclusive window [start, end].
+ * Fri→Mon returns 1 (Fri and Mon are the working days if start=Fri,end=Mon?
+ * — here it counts weekdays between them inclusive). Returns 0 if end < start.
+ */
+function businessDaysBetween(start, end) {
+    if (!start || !end || end < start) return 0;
+    let count = 0;
+    const cur = new Date(start.getTime());
+    let guard = 0;
+    while (cur <= end && guard < 3650) {
+        const dow = cur.getDay();
+        if (dow !== 0 && dow !== 6) count += 1;
+        cur.setDate(cur.getDate() + 1);
+        guard += 1;
+    }
+    return count;
+}
+
+function clearScheduleConflict() {
+    const existing = document.getElementById('schedule-conflict-banner');
+    if (existing) existing.remove();
+}
+
+/**
+ * Compare the AI's summed subtask effort (days) against the available working-day
+ * window and render/clear a hard conflict banner near the Due Date.
+ */
+function checkScheduleConflict() {
+    clearScheduleConflict();
+    const breakdown = window.currentTaskBreakdown;
+    const effortDays = breakdown && breakdown.subtask_effort_days;
+    const dueInput = document.getElementById('id_due_date');
+    if (!effortDays || effortDays <= 0 || !dueInput || !dueInput.value) return;
+
+    const due = parseYMD(dueInput.value);
+    if (!due) return;
+
+    // Window starts at the later of the start date and today.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startInput = document.getElementById('id_start_date');
+    const startVal = startInput && startInput.value ? parseYMD(startInput.value) : null;
+    const windowStart = (startVal && startVal > today) ? startVal : today;
+
+    const availableDays = businessDaysBetween(windowStart, due);
+    // Small tolerance so a 1.0-day task in a 1-day window isn't flagged.
+    if (effortDays <= availableDays + 0.01) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'schedule-conflict-banner';
+    banner.className = 'alert alert-danger d-flex align-items-start gap-2 mt-2 mb-0';
+    banner.setAttribute('role', 'alert');
+    banner.innerHTML = `
+        <i class="fas fa-triangle-exclamation mt-1"></i>
+        <div>
+            <strong>Schedule Conflict</strong><br>
+            <span class="small">The AI's breakdown needs about <strong>${effortDays} working day${effortDays === 1 ? '' : 's'}</strong>
+            of effort, but the deadline leaves only <strong>${availableDays} working day${availableDays === 1 ? '' : 's'}</strong>.
+            Extend the due date or reduce scope.</span>
+        </div>`;
+
+    const anchor = dueInput.closest('.row') || dueInput.closest('.mb-3') || dueInput.parentElement;
+    if (anchor && anchor.parentElement) {
+        anchor.parentElement.insertBefore(banner, anchor.nextSibling);
+    }
+}
+
+/**
+ * Apply the smart-suggested assignee to the form's assigned_to select
+ */
+function applySmartAssigneeSuggestion(userId) {
+    const assigneeSelect = document.getElementById('id_assigned_to');
+    if (assigneeSelect) {
+        const option = assigneeSelect.querySelector(`option[value="${userId}"]`);
+        if (option) {
+            assigneeSelect.value = userId;
+            const event = new Event('change', { bubbles: true });
+            assigneeSelect.dispatchEvent(event);
+        } else {
+            console.warn('User ID', userId, 'not found in assignee select options');
+            alert('Could not apply suggestion: user not found in the assignee list.');
+            return;
+        }
+    }
+
+    // Scroll to top briefly to show the change, then back
+    const assigneeField = document.getElementById('id_assigned_to');
+    if (assigneeField) {
+        assigneeField.focus();
+        assigneeField.classList.add('border-success');
+        setTimeout(() => assigneeField.classList.remove('border-success'), 3000);
+    }
 }
 
 

@@ -6,16 +6,22 @@ app_name = 'messaging'
 
 urlpatterns = [
     # Messaging Hub
-    path('', views.messaging_hub, name='hub'),
+    path('', views.messaging_hub, name='messaging_hub'),
     
+    # Chat Room Invitations
+    path('invitation/<int:invitation_id>/respond/', views.respond_chat_room_invitation, name='respond_chat_room_invitation'),
+
     # Chat Rooms
     path('board/<int:board_id>/rooms/', views.chat_room_list, name='chat_room_list'),
     path('board/<int:board_id>/rooms/create/', views.create_chat_room, name='create_chat_room'),
     path('room/<int:room_id>/', views.chat_room_detail, name='chat_room_detail'),
+    path('room/<int:room_id>/edit/', views.edit_chat_room, name='edit_chat_room'),
+    path('room/<int:room_id>/delete/', views.delete_chat_room, name='delete_chat_room'),
     
     # Messages
     path('room/<int:room_id>/send/', views.send_chat_message, name='send_chat_message'),
     path('room/<int:room_id>/history/', views.message_history, name='message_history'),
+    path('room/<int:room_id>/search/', views.search_room_messages, name='search_room_messages'),
     
     # Task Thread Comments
     path('task/<int:task_id>/comments/', views.task_thread_comments, name='task_thread_comments'),
@@ -27,6 +33,9 @@ urlpatterns = [
     # Notifications
     path('notifications/', views.notifications, name='notifications'),
     path('notifications/<int:notification_id>/read/', views.mark_notification_read, name='mark_notification_read'),
+    path('notifications/<int:notification_id>/delete/', views.delete_notification, name='delete_notification'),
+    path('notifications/delete-all/', views.delete_all_notifications, name='delete_all_notifications'),
+    path('notifications/ai-digest/', views.ai_digest_notifications, name='ai_digest_notifications'),
     path('notifications/count/', views.get_unread_notification_count, name='get_unread_notification_count'),
     
     # Unread Messages

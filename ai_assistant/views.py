@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods, require_POST
 from django.contrib.auth.decorators import login_required
+from kanban.decorators import demo_write_guard
 from django.contrib import messages
 from django.utils import timezone
 from django.db.models import Count, Sum, Q, Avg
@@ -30,17 +31,21 @@ from .utils.chatbot_service import TaskFlowChatbotService
 @ensure_csrf_cookie
 def assistant_welcome(request):
     """Welcome page for AI Project Assistant"""
-    # Get user's own sessions
-    user_sessions = AIAssistantSession.objects.filter(user=request.user)
-    
-    # Also include demo sessions for examples
-    demo_sessions = AIAssistantSession.objects.filter(is_demo=True)
-    
-    # Combine and get recent sessions, limit to 5
-    all_sessions = (user_sessions | demo_sessions).distinct().order_by('-updated_at')[:5]
-    
-    # Total count includes both user sessions and demo sessions
-    total_sessions_count = (user_sessions | demo_sessions).distinct().count()
+    # Scope sessions to the active workspace — see migration 0016 and get_sessions().
+    ws = getattr(request, 'workspace', None)
+    if ws is None:
+        all_sessions = AIAssistantSession.objects.none()
+        total_sessions_count = 0
+    elif ws.is_demo:
+        scoped = AIAssistantSession.objects.filter(workspace=ws).filter(
+            Q(user=request.user) | Q(is_demo=True)
+        )
+        all_sessions = scoped.distinct().order_by('-updated_at')[:5]
+        total_sessions_count = scoped.distinct().count()
+    else:
+        scoped = AIAssistantSession.objects.filter(workspace=ws, user=request.user)
+        all_sessions = scoped.order_by('-updated_at')[:5]
+        total_sessions_count = scoped.count()
     
     # Get or create user preferences
     user_pref, created = UserPreference.objects.get_or_create(user=request.user)
@@ -70,22 +75,37 @@ def chat_interface(request, session_id=None):
             session_id = None
     
     # Get session if specified, otherwise let user create one via "New Chat" button
+    ws = getattr(request, 'workspace', None)
     if session_id:
-        # Allow access to user's own sessions OR demo sessions
-        session = AIAssistantSession.objects.filter(
-            Q(user=request.user) | Q(is_demo=True),
-            id=session_id
-        ).first()
-        
+        # Scope by workspace: a session is only viewable in the workspace it was created in.
+        if ws is None:
+            session = None
+        elif ws.is_demo:
+            session = AIAssistantSession.objects.filter(
+                Q(user=request.user) | Q(is_demo=True),
+                workspace=ws,
+                id=session_id,
+            ).first()
+        else:
+            session = AIAssistantSession.objects.filter(
+                user=request.user,
+                workspace=ws,
+                id=session_id,
+            ).first()
+
         if not session:
             return render(request, 'error.html', {
                 'error_message': 'Session not found or access denied.'
             }, status=404)
     else:
-        # Don't auto-create sessions - let user create one via "New Chat" button
-        # Try to get the most recent user session to display, but don't create one
-        session = AIAssistantSession.objects.filter(user=request.user, is_active=True).order_by('-updated_at').first()
-        # session can be None - template will handle showing empty state
+        # Don't auto-create sessions - let user create one via "New Chat" button.
+        # Show the most recent session in THIS workspace only.
+        if ws is None:
+            session = None
+        else:
+            session = AIAssistantSession.objects.filter(
+                user=request.user, workspace=ws, is_active=True
+            ).order_by('-updated_at').first()
     
     # Get user's organization
     user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None
@@ -95,26 +115,13 @@ def chat_interface(request, session_id=None):
     if hasattr(request.user, 'profile'):
         is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False)
 
-    # Get user's boards for context selection — workspace-aware.
-    if is_demo_mode:
-        # Demo workspace: official demo boards + boards created via Spectra
-        # while exploring demo mode.
-        user_boards = Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{request.user.id}')
-        ).distinct()
-    else:
-        # Personal workspace: user's own boards, excluding demo artifacts.
-        if user_org:
-            user_boards = Board.objects.filter(
-                organization=user_org,
-            ).filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            ).exclude(
-                created_by_session__startswith='spectra_demo_'
-            ).distinct()
-        else:
-            user_boards = Board.objects.none()
+    # Get user's boards for context selection — workspace-aware + RBAC-filtered.
+    from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+    user_boards = get_accessible_boards_for_spectra(
+        request.user,
+        is_demo_mode=is_demo_mode,
+        organization=user_org,
+    )
 
     active_boards_count = user_boards.count()
     
@@ -129,20 +136,59 @@ def chat_interface(request, session_id=None):
         'active_boards_count': active_boards_count,
         'is_demo_mode': is_demo_mode,
     }
+    try:
+        from ai_assistant.utils.ai_router import AIRouter
+        _provider, _, _, _ = AIRouter()._resolve_provider(request.user)  # display-only, not for routing
+        context['spectra_provider_name'] = AIRouter.get_provider_display_name(_provider)
+        context['spectra_model_name'] = AIRouter.get_model_name(_provider, complexity='simple')
+    except Exception:
+        context['spectra_provider_name'] = 'Google Gemini'
+        context['spectra_model_name'] = 'gemini-2.5-flash-lite'
     return render(request, 'ai_assistant/chat.html', context)
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def create_session(request):
-    """Create a new AI Assistant session"""
+    """Create a new AI Assistant session.
+
+    The session is bound to ``request.workspace`` so it can never appear in another
+    workspace's sidebar (see migration 0016 and get_sessions()).
+    """
     try:
         data = json.loads(request.body)
-        
+
+        ws = getattr(request, 'workspace', None)
+        if ws is None:
+            return JsonResponse({
+                'status': 'error',
+                'error': 'No active workspace. Select a workspace before starting a chat.',
+            }, status=400)
+
+        # Check for duplicate title within this workspace only (warn, don't block).
+        title = data.get('title', '').strip()
+        force = data.get('force', False)
+        if title and not force:
+            existing = AIAssistantSession.objects.filter(
+                user=request.user, workspace=ws, title__iexact=title
+            ).first()
+            if existing:
+                return JsonResponse({
+                    'status': 'duplicate_warning',
+                    'message': (
+                        f'A chat session titled "{existing.title}" already exists '
+                        f'(created {existing.created_at.strftime("%b %d, %Y")}). '
+                        'Create another with the same name?'
+                    ),
+                    'existing_session_id': existing.id,
+                })
+
         form = AISessionForm(data)
         if form.is_valid():
             session = form.save(commit=False)
             session.user = request.user
+            session.workspace = ws
             session.save()
 
             # Reset any stale conversation-flow state so a new session
@@ -174,6 +220,7 @@ def create_session(request):
 
 
 @login_required
+@demo_write_guard
 @require_POST
 def send_message(request):
     """Send message to AI Assistant and get response"""
@@ -257,21 +304,36 @@ def send_message(request):
         board = None
         if board_id:
             board = get_object_or_404(Board, id=board_id)
-            # Verify user has access to this board
-            if not (
-                board.is_official_demo_board
-                or board.created_by_id == request.user.id
-                or board.members.filter(id=request.user.id).exists()
-            ):
-                return JsonResponse(
-                    {'error': 'You do not have access to this board.'},
-                    status=403,
+            # Verify user has access to this board — Spectra intercepts denial
+            from ai_assistant.utils.rbac_utils import can_spectra_read_board
+            if not (board.is_official_demo_board or can_spectra_read_board(request.user, board)):
+                from kanban.simple_access import get_spectra_denial_context
+                ctx = get_spectra_denial_context(
+                    request.user, board, trigger='spectra_chat',
                 )
+                return JsonResponse({
+                    'error': 'access_denied',
+                    'spectra': True,
+                    **ctx,
+                }, status=403)
             session.board = board
             session.save()
         elif session.board_id:
-            # Restore board from session when not explicitly provided
-            board = session.board
+            # Restore board from session when not explicitly provided.
+            # Re-validate access: the user's role may have changed since
+            # the board was first saved on this session (stale-session fix).
+            from ai_assistant.utils.rbac_utils import can_spectra_read_board
+            if can_spectra_read_board(request.user, session.board):
+                board = session.board
+            else:
+                # Access revoked — clear the stale board reference
+                logger.warning(
+                    "RBAC: clearing stale session board %s for user %s",
+                    session.board_id, request.user.id,
+                )
+                session.board = None
+                session.save()
+                board = None
         
         # Save user message
         user_message = AIAssistantMessage.objects.create(
@@ -285,6 +347,36 @@ def send_message(request):
         is_demo_mode = False
         if hasattr(request.user, 'profile'):
             is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False)
+
+        # ── Auto-select board when none is set ───────────────────────
+        # In demo mode, the chat UI has no board selector.  If the session
+        # doesn't have a board yet, pick the user's first sandbox board so
+        # Spectra has context for questions like "How many tasks on this board?"
+        _auto_selected_board_note = None  # will be prepended to AI response
+        if not board and is_demo_mode:
+            from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+            user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None
+            demo_boards = get_accessible_boards_for_spectra(
+                request.user, is_demo_mode=True, organization=user_org,
+            )
+            if demo_boards.exists():
+                board = demo_boards.first()
+                session.board = board
+                session.save()
+                _auto_selected_board_note = f"📋 I'm analyzing **{board.name}**. You can switch boards from the board selector."
+                logger.info("Auto-selected demo board %s for user %s", board.id, request.user.id)
+        elif not board and not is_demo_mode:
+            # Personal workspace: auto-select the first accessible board
+            from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+            user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None
+            personal_boards = get_accessible_boards_for_spectra(
+                request.user, is_demo_mode=False, organization=user_org,
+            )
+            if personal_boards.exists():
+                board = personal_boards.first()
+                session.board = board
+                session.save()
+                _auto_selected_board_note = f"📋 I'm analyzing **{board.name}**. You can switch boards from the board selector."
 
         # ── Conversational Spectra: check conversation state ─────────
         from ai_assistant.utils.conversation_flow import (
@@ -344,6 +436,7 @@ def send_message(request):
 
             return JsonResponse({
                 'status': 'success',
+                'sync': True,
                 'message_id': assistant_message.id,
                 'response': flow_response,
                 'source': 'spectra_action',
@@ -360,7 +453,15 @@ def send_message(request):
             })
         # ── End Conversational Spectra ───────────────────────────────
         
-        # Get response from chatbot service
+        # ── Process chat messages synchronously ──────────────────────
+        # Spectra chat messages are fast (2-5s Gemini calls) and do not
+        # benefit from Celery task queuing.  Processing synchronously
+        # avoids timeouts caused by the worker being busy with scheduled
+        # tasks (pool=solo queues all tasks sequentially).
+        # The async Celery path is still used for heavy AI features
+        # (Pre-Mortem, Board Analytics, etc.) via their own endpoints.
+        # Return ``sync: true`` so triggerAITask renders the result
+        # immediately without opening a WebSocket.
         # Note: Using stateless mode - no history passed to prevent session persistence
         chatbot = TaskFlowChatbotService(
             user=request.user, board=board, session_id=session.id,
@@ -371,6 +472,10 @@ def send_message(request):
             use_cache=not refresh_data,
             file_context=file_context,
         )
+
+        # Prepend board auto-selection note so users know which board Spectra picked
+        if _auto_selected_board_note and response.get('response'):
+            response['response'] = _auto_selected_board_note + "\n\n" + response['response']
         
         # Save assistant message
         assistant_message = AIAssistantMessage.objects.create(
@@ -400,6 +505,7 @@ def send_message(request):
                 board=board,
                 date=today,
                 defaults={
+                    'workspace': getattr(request, 'workspace', None),
                     'sessions_created': 0,
                     'messages_sent': 0,
                     'gemini_requests': 0,
@@ -409,6 +515,9 @@ def send_message(request):
                     'avg_response_time_ms': 0,
                 }
             )
+            # Backfill workspace for legacy rows that pre-date migration 0016.
+            if analytics.workspace_id is None:
+                analytics.workspace = getattr(request, 'workspace', None)
 
             analytics.messages_sent += 1
             if response.get('source') == 'gemini':
@@ -457,6 +566,7 @@ def send_message(request):
         
         return JsonResponse({
             'status': 'success',
+            'sync': True,
             'message_id': assistant_message.id,
             'response': response['response'],
             'source': response.get('source', 'gemini'),
@@ -502,6 +612,7 @@ def send_message(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def upload_attachment(request):
     """
     POST /ai-assistant/api/upload-attachment/
@@ -541,6 +652,26 @@ def upload_attachment(request):
             'error': f'File exceeds the 10 MB limit ({uploaded_file.size // (1024*1024)} MB).'
         }, status=400)
 
+    # Validate file content by magic bytes (signature), not just extension.
+    # Guards against a renamed binary (e.g. malware.exe -> malware.pdf) slipping
+    # through the extension check above. Uses only the stdlib (no new deps).
+    header = uploaded_file.read(8)
+    uploaded_file.seek(0)  # rewind so the file saves intact below
+    FILE_SIGNATURES = {
+        'pdf': (b'%PDF',),                                # PDF documents
+        'docx': (b'PK\x03\x04',),                         # DOCX is a ZIP container
+        'doc': (b'\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1',),    # legacy OLE2 compound file
+    }
+    expected_sigs = FILE_SIGNATURES.get(ext)
+    # 'txt' has no reliable signature, so it passes on extension + size alone.
+    if expected_sigs and not any(header.startswith(sig) for sig in expected_sigs):
+        return JsonResponse({
+            'error': (
+                f'File content does not match its ".{ext}" extension. '
+                'The file may be corrupted or renamed.'
+            )
+        }, status=400)
+
     # Save the file record first (Django saves the file to disk on create)
     attachment = AIAssistantAttachment.objects.create(
         session=session,
@@ -576,6 +707,7 @@ def upload_attachment(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def remove_attachment(request, attachment_id):
     """
     POST /ai-assistant/api/attachment/<id>/remove/
@@ -590,11 +722,27 @@ def remove_attachment(request, attachment_id):
 
 @login_required
 def get_sessions(request):
-    """Get user's chat sessions including demo sessions"""
-    # Show user's own sessions AND demo sessions
-    sessions = AIAssistantSession.objects.filter(
-        Q(user=request.user) | Q(is_demo=True)
-    ).order_by('-updated_at')
+    """Get user's chat sessions — strictly scoped to the active workspace.
+
+    Each session is bound to a workspace at creation time (see ``_get_or_create_session``).
+    A session must NEVER appear in a workspace other than its own; otherwise demo
+    sandbox sessions bleed into real workspaces (see migration 0016 for the FK).
+    """
+    ws = getattr(request, 'workspace', None)
+    if ws is None:
+        sessions = AIAssistantSession.objects.none()
+    elif ws.is_demo:
+        # Demo workspace shows the user's own demo-bound sessions AND shared seeded demo sessions.
+        sessions = AIAssistantSession.objects.filter(
+            workspace=ws,
+        ).filter(
+            Q(user=request.user) | Q(is_demo=True)
+        ).order_by('-updated_at')
+    else:
+        # Real workspace shows only the current user's sessions in this workspace.
+        sessions = AIAssistantSession.objects.filter(
+            workspace=ws, user=request.user
+        ).order_by('-updated_at')
     
     data = {
         'sessions': [
@@ -621,12 +769,19 @@ def get_session_messages(request, session_id):
     from accounts.models import Organization
     
     try:
-        # Allow access to user's own sessions OR demo sessions
-        session = AIAssistantSession.objects.filter(
-            Q(user=request.user) | Q(is_demo=True),
-            id=session_id
-        ).first()
-        
+        # Scope by active workspace: a session is only visible in the workspace it was
+        # created in. Cross-workspace access (e.g. demo → real) must return 404.
+        ws = getattr(request, 'workspace', None)
+        session_qs = AIAssistantSession.objects.filter(id=session_id)
+        if ws is None:
+            session = None
+        elif ws.is_demo:
+            session = session_qs.filter(workspace=ws).filter(
+                Q(user=request.user) | Q(is_demo=True)
+            ).first()
+        else:
+            session = session_qs.filter(workspace=ws, user=request.user).first()
+
         if not session:
             return JsonResponse({'error': 'Session not found'}, status=404)
         
@@ -637,8 +792,8 @@ def get_session_messages(request, session_id):
         page = int(request.GET.get('page', 1))
         per_page = int(request.GET.get('per_page', user_pref.messages_per_page))
         
-        # Get messages ordered by creation time and ID for consistent ordering
-        messages_qs = AIAssistantMessage.objects.filter(session=session).order_by('created_at', 'id')
+        # Get messages ordered by ID for consistent insertion order
+        messages_qs = AIAssistantMessage.objects.filter(session=session).order_by('id')
         
         # Calculate pagination
         total = messages_qs.count()
@@ -672,6 +827,7 @@ def get_session_messages(request, session_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def rename_session(request, session_id):
     """Rename a chat session"""
     try:
@@ -685,6 +841,22 @@ def rename_session(request, session_id):
         if not new_title:
             return JsonResponse({'success': False, 'error': 'Title cannot be empty'}, status=400)
         
+        # Check for duplicate title within the same workspace (warn, don't block).
+        force = data.get('force', False)
+        if not force:
+            existing = AIAssistantSession.objects.filter(
+                user=request.user, workspace=session.workspace, title__iexact=new_title
+            ).exclude(id=session_id).first()
+            if existing:
+                return JsonResponse({
+                    'success': False,
+                    'duplicate_warning': True,
+                    'message': (
+                        f'A chat session titled "{existing.title}" already exists. '
+                        'Rename anyway?'
+                    ),
+                })
+
         session.title = new_title
         session.save()
         
@@ -702,6 +874,7 @@ def rename_session(request, session_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def delete_session(request, session_id):
     """Delete a chat session (only user's own sessions, not demo sessions)"""
     try:
@@ -722,6 +895,7 @@ def delete_session(request, session_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def clear_session(request, session_id):
     """Clear all messages in a chat session"""
     try:
@@ -846,6 +1020,7 @@ def export_session(request, session_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def toggle_star_message(request, message_id):
     """Toggle star on a message"""
     try:
@@ -861,6 +1036,7 @@ def toggle_star_message(request, message_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def submit_feedback(request, message_id):
     """Submit feedback on a message and update analytics for AI learning loop"""
     try:
@@ -886,6 +1062,7 @@ def submit_feedback(request, message_id):
                 board=board,
                 date=today,
                 defaults={
+                    'workspace': message.session.workspace or getattr(request, 'workspace', None),
                     'sessions_created': 0,
                     'messages_sent': 0,
                     'gemini_requests': 0,
@@ -895,6 +1072,8 @@ def submit_feedback(request, message_id):
                     'avg_response_time_ms': 0,
                 }
             )
+            if analytics.workspace_id is None:
+                analytics.workspace = message.session.workspace or getattr(request, 'workspace', None)
             
             # Undo previous vote if re-voting
             if previous_helpful is True:
@@ -934,24 +1113,32 @@ def analytics_dashboard(request):
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=30)
     
-    # Get sessions - include demo sessions and user's own sessions
-    sessions_qs = AIAssistantSession.objects.filter(
-        Q(user=request.user) | Q(is_demo=True),
-        updated_at__gte=timezone.now() - timedelta(days=30)
-    )
-    
+    # Scope analytics strictly to the active workspace. Previously this view
+    # unconditionally OR'd in every demo user's analytics, so every workspace
+    # showed the same numbers — see migration 0016.
+    ws = getattr(request, 'workspace', None)
+    if ws is None:
+        sessions_qs = AIAssistantSession.objects.none()
+        analytics_qs = AIAssistantAnalytics.objects.none()
+    else:
+        sessions_qs = AIAssistantSession.objects.filter(
+            workspace=ws,
+            updated_at__gte=timezone.now() - timedelta(days=30),
+        )
+        analytics_qs = AIAssistantAnalytics.objects.filter(
+            workspace=ws,
+            date__gte=start_date,
+            date__lte=end_date,
+        )
+        if ws.is_demo:
+            # Demo workspace: include seeded demo sessions plus the user's own.
+            sessions_qs = sessions_qs.filter(Q(user=request.user) | Q(is_demo=True))
+        else:
+            sessions_qs = sessions_qs.filter(user=request.user)
+            analytics_qs = analytics_qs.filter(user=request.user)
+
     if board_id:
         sessions_qs = sessions_qs.filter(board_id=board_id)
-    
-    # Get analytics from both demo users and current user
-    demo_user_ids = AIAssistantSession.objects.filter(is_demo=True).values_list('user_id', flat=True).distinct()
-    analytics_qs = AIAssistantAnalytics.objects.filter(
-        Q(user=request.user) | Q(user_id__in=demo_user_ids),
-        date__gte=start_date,
-        date__lte=end_date
-    )
-    
-    if board_id:
         analytics_qs = analytics_qs.filter(board_id=board_id)
     
     # Count total messages from actual sessions (not accumulated analytics)
@@ -1009,14 +1196,33 @@ def get_analytics_data(request):
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=30)
 
-    # --- Session-based daily message counts (demo + user) ---
-    sessions_qs = AIAssistantSession.objects.filter(
-        Q(user=request.user) | Q(is_demo=True),
-        updated_at__date__gte=start_date,
-        updated_at__date__lte=end_date,
-    )
+    # --- Session-based daily message counts — scoped to the active workspace ---
+    ws = getattr(request, 'workspace', None)
+    if ws is None:
+        sessions_qs = AIAssistantSession.objects.none()
+        analytics_qs = AIAssistantAnalytics.objects.none()
+    else:
+        sessions_qs = AIAssistantSession.objects.filter(
+            workspace=ws,
+            updated_at__date__gte=start_date,
+            updated_at__date__lte=end_date,
+        )
+        analytics_qs = AIAssistantAnalytics.objects.filter(
+            workspace=ws,
+            date__gte=start_date,
+            date__lte=end_date,
+        )
+        if ws.is_demo:
+            sessions_qs = sessions_qs.filter(Q(user=request.user) | Q(is_demo=True))
+        else:
+            sessions_qs = sessions_qs.filter(user=request.user)
+            analytics_qs = analytics_qs.filter(user=request.user)
+
     if board_id:
         sessions_qs = sessions_qs.filter(board_id=board_id)
+        analytics_qs = analytics_qs.filter(board_id=board_id)
+
+    analytics_qs = analytics_qs.order_by('date')
 
     daily_messages = (
         sessions_qs
@@ -1027,17 +1233,6 @@ def get_analytics_data(request):
     )
     # Build a dict: date -> message count
     messages_by_date = {row['day'].isoformat(): row['total'] for row in daily_messages}
-
-    # --- Analytics-based daily token / RAG / web-search counts (demo + user) ---
-    # Include demo user analytics so charts are consistent with the metric cards on the dashboard
-    demo_user_ids_chart = AIAssistantSession.objects.filter(is_demo=True).values_list('user_id', flat=True).distinct()
-    analytics_qs = AIAssistantAnalytics.objects.filter(
-        Q(user=request.user) | Q(user_id__in=demo_user_ids_chart),
-        date__gte=start_date,
-        date__lte=end_date,
-    ).order_by('date')
-    if board_id:
-        analytics_qs = analytics_qs.filter(board_id=board_id)
 
     tokens_by_date = {}
     web_searches_by_date = {}
@@ -1065,12 +1260,13 @@ def get_analytics_data(request):
 @login_required
 def view_recommendations(request):
     """View AI task recommendations"""
+    from kanban.utils.demo_protection import get_user_boards
     board_id = request.GET.get('board_id')
     status = request.GET.get('status', 'pending')
     
     # Get recommendations
     recs_qs = AITaskRecommendation.objects.filter(
-        board__in=Board.objects.filter(Q(created_by=request.user) | Q(members=request.user)).distinct()
+        board__in=get_user_boards(request.user)
     )
     
     if board_id:
@@ -1090,10 +1286,14 @@ def view_recommendations(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def accept_recommendation(request, recommendation_id):
     """Accept a task recommendation"""
     try:
         rec = get_object_or_404(AITaskRecommendation, id=recommendation_id)
+        # RBAC: verify user has write access to the recommendation's board
+        if rec.board and not request.user.has_perm('prizmai.edit_board', rec.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         rec.status = 'accepted'
         rec.save()
         
@@ -1106,10 +1306,14 @@ def accept_recommendation(request, recommendation_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def reject_recommendation(request, recommendation_id):
     """Reject a task recommendation"""
     try:
         rec = get_object_or_404(AITaskRecommendation, id=recommendation_id)
+        # RBAC: verify user has write access to the recommendation's board
+        if rec.board and not request.user.has_perm('prizmai.edit_board', rec.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         rec.status = 'rejected'
         rec.save()
         
@@ -1121,6 +1325,7 @@ def reject_recommendation(request, recommendation_id):
 
 
 @login_required
+@demo_write_guard
 def user_preferences(request):
     """Manage user preferences"""
     user_pref, created = UserPreference.objects.get_or_create(user=request.user)
@@ -1140,6 +1345,7 @@ def user_preferences(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def save_preferences(request):
     """Save user preferences via AJAX"""
     try:
@@ -1170,8 +1376,13 @@ def knowledge_base_view(request):
     """View and manage project knowledge base"""
     board_id = request.GET.get('board_id')
     
-    # Get knowledge base entries
-    kb_qs = ProjectKnowledgeBase.objects.filter(is_active=True)
+    # RBAC: scope KB entries to boards the user has access to
+    from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+    is_demo_mode = getattr(request.user, 'profile', None) and getattr(request.user.profile, 'is_viewing_demo', False)
+    org = getattr(request.user.profile, 'organization', None) if hasattr(request.user, 'profile') else None
+    accessible_boards = get_accessible_boards_for_spectra(request.user, is_demo_mode, org)
+    
+    kb_qs = ProjectKnowledgeBase.objects.filter(is_active=True, board__in=accessible_boards)
     
     if board_id:
         kb_qs = kb_qs.filter(board_id=board_id)
@@ -1190,7 +1401,13 @@ def knowledge_base_view(request):
 def refresh_knowledge_base(request):
     """Refresh knowledge base from project data"""
     try:
-        board_id = request.GET.get('board_id')
+        board_id = request.POST.get('board_id') or request.GET.get('board_id')
+        
+        # RBAC: verify user has access to the specified board
+        if board_id:
+            board = get_object_or_404(Board, id=board_id)
+            if not request.user.has_perm('prizmai.view_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # This would trigger KB indexing/refresh logic
         # For now, just return success
@@ -1199,7 +1416,75 @@ def refresh_knowledge_base(request):
             'status': 'success',
             'message': 'Knowledge base refreshed successfully'
         })
-    
+
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# ── Admin-only Spectra debug view ───────────────────────────────────────
+
+
+@login_required
+def spectra_debug_view(request, message_id):
+    """
+    Show what Spectra actually sent to Gemini for a given AIAssistantMessage,
+    plus which providers fired, the resolved temperature, cache_hit, KB hits.
+
+    Staff-only — surfaces system prompts which can contain sensitive board
+    data across boards if the requester is a Spectra admin.
+    """
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'staff only'}, status=403)
+
+    message = get_object_or_404(
+        AIAssistantMessage.objects.select_related('session', 'session__user', 'session__board'),
+        id=message_id,
+    )
+
+    # The system prompt itself is logged by hash; look it up.
+    context_data = message.context_data or {}
+    prompt_hash = context_data.get('system_prompt_hash', '')
+    system_prompt = ''
+    if prompt_hash:
+        try:
+            from django.conf import settings as dj_settings
+            import os
+            log_path = os.path.join(dj_settings.BASE_DIR, 'logs', 'spectra_prompts.log')
+            if os.path.exists(log_path):
+                with open(log_path, 'r', encoding='utf-8', errors='replace') as fh:
+                    blob = fh.read()
+                marker = f'PROMPT_HASH={prompt_hash}'
+                idx = blob.rfind(marker)
+                if idx >= 0:
+                    begin = blob.find('---BEGIN---', idx)
+                    end = blob.find('---END---', begin) if begin >= 0 else -1
+                    if begin >= 0 and end > begin:
+                        system_prompt = blob[begin + len('---BEGIN---'):end].strip()
+        except Exception as e:
+            logger.warning(f'spectra_debug_view: prompt lookup failed: {e}')
+
+    # Pair the assistant message with the user message that triggered it.
+    user_message = (
+        AIAssistantMessage.objects
+        .filter(session=message.session, created_at__lt=message.created_at, role='user')
+        .order_by('-created_at')
+        .first()
+    )
+
+    ctx = {
+        'message': message,
+        'user_message': user_message,
+        'session': message.session,
+        'context_data': context_data,
+        'providers_fired': context_data.get('providers_fired', []),
+        'providers_unavailable': context_data.get('providers_unavailable', []),
+        'providers_detailed': context_data.get('providers_detailed', []),
+        'temperature': context_data.get('temperature'),
+        'query_type': context_data.get('query_type'),
+        'cache_hit': context_data.get('cache_hit', False),
+        'system_prompt': system_prompt,
+        'system_prompt_hash': prompt_hash,
+        'system_prompt_len': context_data.get('system_prompt_len', 0),
+    }
+    return render(request, 'ai_assistant/admin/debug.html', ctx)
 

@@ -10,20 +10,25 @@ class GeminiClient:
     """
     Google Gemini AI client with smart model routing
     
-    Routes requests to appropriate model based on task complexity:
-    - Gemini 2.5 Flash: Complex reasoning, analysis
-    - Gemini 2.5 Flash-Lite: Simple tasks, chat responses (default)
-    
+    Routes requests to the appropriate model based on task complexity, resolving the
+    actual model name from Django settings (GEMINI_MODEL_SIMPLE / _COMPLEX / _PREMIUM /
+    _FUNCTION_CALLING) so tier repoints apply here as well as in AIRouter:
+    - 'simple'/'complex': economical default tier (GEMINI_MODEL_SIMPLE / _COMPLEX)
+    - 'premium': escape-hatch model (GEMINI_MODEL_PREMIUM) for large-document requests
+
     Each request is stateless to prevent token accumulation.
     """
     
-    def __init__(self, default_model='gemini-2.5-flash-lite'):
+    def __init__(self, default_model=None):
         """
         Initialize Gemini client with configurable default model.
-        
+
         Args:
-            default_model: Default model to use ('gemini-2.5-flash' or 'gemini-2.5-flash-lite')
+            default_model: Default model to use.  Defaults to settings.GEMINI_MODEL_SIMPLE
+                (the economical tier) when not supplied.
         """
+        if default_model is None:
+            default_model = getattr(settings, 'GEMINI_MODEL_SIMPLE', 'gemini-2.5-flash-lite')
         try:
             import google.generativeai as genai
             self.genai = genai
@@ -86,24 +91,40 @@ class GeminiClient:
             logger.error(f"Error initializing Gemini client: {e}")
             self.models = None
     
+    @staticmethod
+    def _model_for_complexity(task_complexity):
+        """
+        Resolve a Gemini model name from a complexity tier via Django settings.
+
+        'complex' → GEMINI_MODEL_COMPLEX, 'premium' → GEMINI_MODEL_PREMIUM (the
+        escape-hatch model), anything else → GEMINI_MODEL_SIMPLE.  Reading from
+        settings (instead of hardcoding) is what lets the tier repoint reach the
+        live Spectra chat path, which goes through this client rather than AIRouter.
+        """
+        if task_complexity == 'complex':
+            return getattr(settings, 'GEMINI_MODEL_COMPLEX', 'gemini-3.1-flash-lite')
+        if task_complexity == 'premium':
+            return getattr(settings, 'GEMINI_MODEL_PREMIUM', 'gemini-2.5-flash')
+        return getattr(settings, 'GEMINI_MODEL_SIMPLE', 'gemini-2.5-flash-lite')
+
     def get_model(self, model_name=None, task_complexity='simple'):
         """
         Get or create a model instance with smart routing.
-        
+
         Args:
             model_name: Specific model name or None to use routing
-            task_complexity: 'simple' or 'complex' for automatic routing
-            
+            task_complexity: 'simple', 'complex', or 'premium' for automatic routing
+
         Returns:
             GenerativeModel instance
         """
         if self.models is None:
             return None
-            
+
         # Determine which model to use
         if model_name is None:
-            # Smart routing based on task complexity
-            model_name = 'gemini-2.5-flash' if task_complexity == 'complex' else 'gemini-2.5-flash-lite'
+            # Smart routing based on task complexity (resolved from settings)
+            model_name = self._model_for_complexity(task_complexity)
         
         # Reuse existing model instance (singleton per model type)
         if model_name not in self.models:
@@ -182,8 +203,8 @@ class GeminiClient:
             if history:
                 logger.warning("History parameter provided but ignored - using stateless mode to prevent token accumulation")
             
-            # Determine which model we're using for logging
-            model_name = 'gemini-2.5-flash' if task_complexity == 'complex' else 'gemini-2.5-flash-lite'
+            # Determine which model we're using for logging (mirrors get_model routing)
+            model_name = self._model_for_complexity(task_complexity)
             
             # Get token limit based on task complexity and operation type
             token_limit = self.task_token_limits.get(
@@ -373,8 +394,10 @@ class GeminiClient:
             from google.generativeai.types import content_types
             import google.generativeai as genai
 
-            # Always use Flash for function calling (needs capable model)
-            model_name = 'gemini-2.5-flash'
+            # Function calling needs a capable model. Uses its own settings knob so it
+            # can be reverted to gemini-2.5-flash independently if any action flow
+            # regresses on the economical default (set GEMINI_MODEL_FUNCTION_CALLING).
+            model_name = getattr(settings, 'GEMINI_MODEL_FUNCTION_CALLING', 'gemini-3.1-flash-lite')
 
             # Create a model instance with tools (separate from cached plain models)
             fc_model = genai.GenerativeModel(
@@ -451,3 +474,116 @@ class GeminiClient:
                 'tokens': 0,
                 'model_used': 'none',
             }
+
+
+# Embedding model identifier — exported so other modules can record which
+# model produced a stored vector.
+#
+# text-embedding-004 was retired from the Gemini v1beta API (embedContent now
+# returns 404 for it), so we use gemini-embedding-001.  That model defaults to
+# 3072-dim output; we pin it to 768 via output_dimensionality (see embed_text)
+# so newly-generated vectors keep the same width as the existing stored
+# column and don't require a schema change.  NOTE: 001 vectors live in a
+# different embedding space than the old 004 vectors, so semantic search that
+# mixes the two is degraded until a re-backfill — run
+# `python manage.py backfill_kb_embeddings` to regenerate all rows.
+GEMINI_EMBEDDING_MODEL = 'models/gemini-embedding-001'
+
+# Output width pinned to match the legacy 768-dim stored vectors.
+GEMINI_EMBEDDING_DIM = 768
+
+
+def embed_text(text, task_type='RETRIEVAL_DOCUMENT'):
+    """
+    Embed `text` via Gemini's gemini-embedding-001 model (768-dim output).
+
+    Args:
+        text: String to embed. Empty/None returns None.
+        task_type: 'RETRIEVAL_DOCUMENT' (default — for stored KB rows) or
+                   'RETRIEVAL_QUERY' (use this for user queries at search
+                   time — Gemini optimizes the vector for the role).
+
+    Returns:
+        list[float] of length 768 on success, None on failure.
+
+    Caches successful results via ai_cache_manager keyed on a SHA256 of the
+    input text + task_type. Long TTL (24h) since the vector is deterministic.
+    """
+    if not text:
+        return None
+    text = text.strip()
+    if not text:
+        return None
+
+    try:
+        import hashlib
+        from kanban_board.ai_cache import ai_cache_manager
+        key_payload = f'{task_type}:{text}'
+        context_id = hashlib.sha256(key_payload.encode('utf-8')).hexdigest()[:16]
+        cached = ai_cache_manager.get(
+            prompt=key_payload, operation='embedding', context_hash=context_id,
+        )
+        if cached and isinstance(cached, list):
+            return cached
+    except Exception:
+        # Cache layer optional — fall through to live call.
+        cached = None
+        ai_cache_manager = None
+        context_id = None
+        key_payload = None
+
+    try:
+        import google.generativeai as genai
+        api_key = getattr(settings, 'GEMINI_API_KEY', None)
+        if not api_key:
+            logger.warning('embed_text: GEMINI_API_KEY not configured')
+            return None
+        genai.configure(api_key=api_key)
+        # Gemini's embed_content tops out around 2048 tokens of input;
+        # truncate aggressively rather than failing.
+        if len(text) > 8000:
+            text = text[:8000]
+        result = genai.embed_content(
+            model=GEMINI_EMBEDDING_MODEL, content=text, task_type=task_type,
+            output_dimensionality=GEMINI_EMBEDDING_DIM,
+        )
+        vec = result.get('embedding') if isinstance(result, dict) else getattr(result, 'embedding', None)
+        if not vec:
+            logger.warning('embed_text: empty embedding returned')
+            return None
+        vec_list = list(vec)
+        # Cache for 24h
+        try:
+            if ai_cache_manager and key_payload and context_id:
+                ai_cache_manager.set(
+                    prompt=key_payload, result=vec_list,
+                    operation='embedding', context_hash=context_id, ttl=86400,
+                )
+        except Exception:
+            pass
+        return vec_list
+    except Exception as e:
+        logger.error(f'embed_text failed: {e}', exc_info=True)
+        return None
+
+
+def cosine_similarity(a, b):
+    """Cosine similarity for two equal-length float lists. Returns 0.0 on bad input."""
+    if not a or not b:
+        return 0.0
+    if len(a) != len(b):
+        return 0.0
+    try:
+        dot = 0.0
+        norm_a = 0.0
+        norm_b = 0.0
+        for x, y in zip(a, b):
+            dot += x * y
+            norm_a += x * x
+            norm_b += y * y
+        if norm_a <= 0.0 or norm_b <= 0.0:
+            return 0.0
+        import math
+        return dot / (math.sqrt(norm_a) * math.sqrt(norm_b))
+    except Exception:
+        return 0.0

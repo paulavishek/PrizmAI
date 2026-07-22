@@ -27,10 +27,17 @@ from .stakeholder_forms import (
 from .stakeholder_utils import recalculate_stakeholder_metrics
 
 
-def check_board_access(user, board_id):
-    """Helper function to check if user has access to board"""
+def check_board_access(user, board_id, require_edit=False):
+    """Helper to check board access. Returns the board, or None if denied.
+
+    When ``require_edit`` is True the user must also have edit rights, so
+    read-only viewers cannot create/update/delete stakeholder data.
+    """
     board = get_object_or_404(Board, id=board_id)
-    # Access restriction removed - all authenticated users can access all boards
+    if not user.has_perm('prizmai.view_board', board):
+        return None
+    if require_edit and not user.has_perm('prizmai.edit_board', board):
+        return None
     return board
 
 
@@ -92,7 +99,7 @@ def stakeholder_list(request, board_id):
 @login_required
 def stakeholder_create(request, board_id):
     """Create a new stakeholder for a board"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -159,7 +166,7 @@ def stakeholder_detail(request, board_id, pk):
 @login_required
 def stakeholder_update(request, board_id, pk):
     """Update stakeholder information"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -169,7 +176,14 @@ def stakeholder_update(request, board_id, pk):
     if request.method == 'POST':
         form = ProjectStakeholderForm(request.POST, instance=stakeholder)
         if form.is_valid():
-            form.save()
+            stakeholder = form.save()
+            # If a metrics snapshot already exists, refresh it so the stored
+            # engagement gap / health score don't go stale after the
+            # stakeholder's engagement levels are edited. Skipped when no
+            # snapshot exists, to avoid creating an empty (0) one for a
+            # stakeholder that has never had an engagement recorded.
+            if getattr(stakeholder, 'metrics', None):
+                recalculate_stakeholder_metrics(stakeholder)
             messages.success(request, 'Stakeholder updated successfully!')
             return redirect('stakeholder:stakeholder_detail', board_id=board_id, pk=stakeholder.pk)
     else:
@@ -187,7 +201,7 @@ def stakeholder_update(request, board_id, pk):
 @login_required
 def stakeholder_delete(request, board_id, pk):
     """Delete a stakeholder"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -210,7 +224,7 @@ def stakeholder_delete(request, board_id, pk):
 @login_required
 def engagement_record_create(request, board_id, stakeholder_id):
     """Record a stakeholder engagement event"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -248,7 +262,7 @@ def engagement_record_create(request, board_id, stakeholder_id):
 @login_required
 def engagement_record_update(request, board_id, stakeholder_id, record_id):
     """Edit an existing engagement record"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -282,7 +296,7 @@ def engagement_record_update(request, board_id, stakeholder_id, record_id):
 @login_required
 def engagement_record_delete(request, board_id, stakeholder_id, record_id):
     """Delete an engagement record"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -339,9 +353,77 @@ def task_stakeholder_involvement(request, board_id, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+def suggest_task_stakeholders(request, board_id, task_id):
+    """AI-driven stakeholder relevance suggestions for a task."""
+    import time
+    from api.ai_usage_utils import check_ai_quota, track_ai_request
+    from .stakeholder_ai import suggest_stakeholders_for_task
+
+    board = check_board_access(request.user, board_id)
+    if not board:
+        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
+
+    task = get_object_or_404(Task, pk=task_id, column__board=board)
+    stakeholders = ProjectStakeholder.objects.filter(board=board, is_active=True)
+
+    if not stakeholders.exists():
+        return JsonResponse({'success': True, 'suggestions': [], 'no_stakeholders': True})
+
+    has_quota, quota, remaining = check_ai_quota(request.user)
+    if not has_quota:
+        return JsonResponse({
+            'success': False,
+            'error': 'AI usage quota exceeded',
+            'quota_exceeded': True,
+            'message': f'You have reached your monthly AI usage limit of {quota.monthly_quota} requests.'
+        }, status=429)
+
+    start_time = time.time()
+    try:
+        result = suggest_stakeholders_for_task(task, stakeholders)
+        response_time_ms = int((time.time() - start_time) * 1000)
+
+        # Only a genuine, uncached AI call should count against quota. Cache
+        # hits cost nothing; a degraded (AI-failed) result is logged as a
+        # failed attempt, which track_ai_request never charges to quota.
+        if not result['from_cache']:
+            track_ai_request(
+                user=request.user,
+                feature='stakeholder_suggestion',
+                request_type='suggest',
+                board_id=board_id,
+                success=not result['degraded'],
+                error_message='' if not result['degraded'] else 'AI call failed; used deterministic fallback',
+                response_time_ms=response_time_ms,
+            )
+
+        _, quota, remaining = check_ai_quota(request.user)
+        return JsonResponse({
+            'success': True,
+            'suggestions': result['suggestions'],
+            'degraded': result['degraded'],
+            'no_stakeholders': False,
+            'ai_usage': {'remaining': remaining, 'used': quota.requests_used},
+        })
+    except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='stakeholder_suggestion',
+            request_type='suggest',
+            board_id=board_id,
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms,
+        )
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
 def add_task_stakeholder(request, board_id, task_id):
     """Add a stakeholder to a task"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         return JsonResponse({'error': 'Access denied'}, status=403)
     
@@ -403,7 +485,13 @@ def engagement_metrics_dashboard(request, board_id):
     # Engagement summary
     total_stakeholders = stakeholders.count()
     total_engagements = sum(s['total_engagements'] for s in stakeholder_metrics)
-    avg_satisfaction_all = sum(s['avg_satisfaction'] for s in stakeholder_metrics) / len(stakeholder_metrics) if stakeholder_metrics else 0
+    # All-time board average over RATED records only (matches detail/analytics
+    # methodology). Averaging per-stakeholder means counted unrated
+    # stakeholders as 0, badly skewing the figure downward.
+    board_avg = StakeholderEngagementRecord.objects.filter(
+        stakeholder__board=board, satisfaction_rating__isnull=False
+    ).aggregate(Avg('satisfaction_rating'))['satisfaction_rating__avg']
+    avg_satisfaction_all = round(board_avg, 2) if board_avg else 0
     
     # Quadrant distribution
     quadrant_dist = {}
@@ -482,8 +570,12 @@ def stakeholder_api_data(request, board_id):
             'role': stakeholder.role,
             'influence': stakeholder.get_influence_value(),
             'interest': stakeholder.get_interest_value(),
+            'influence_display': stakeholder.get_influence_level_display(),
+            'interest_display': stakeholder.get_interest_level_display(),
             'current_engagement': stakeholder.get_engagement_level_value(),
             'desired_engagement': stakeholder.get_desired_engagement_level_value(),
+            'current_engagement_display': stakeholder.get_current_engagement_display(),
+            'desired_engagement_display': stakeholder.get_desired_engagement_display(),
             'quadrant': stakeholder.get_quadrant(),
             'engagement_gap': stakeholder.get_engagement_gap(),
         })
@@ -502,7 +594,7 @@ def stakeholder_api_data(request, board_id):
 @login_required
 def edit_task_stakeholder(request, board_id, task_id, involvement_id):
     """Edit stakeholder involvement in a task"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -536,7 +628,7 @@ def edit_task_stakeholder(request, board_id, task_id, involvement_id):
 @require_http_methods(["POST"])
 def remove_task_stakeholder(request, board_id, task_id, involvement_id):
     """Remove a stakeholder from a task"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         return JsonResponse({'error': 'Access denied'}, status=403)
     

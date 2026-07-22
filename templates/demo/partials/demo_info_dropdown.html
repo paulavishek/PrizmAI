@@ -1,0 +1,449 @@
+{% load static %}
+{% comment %}
+Demo Workspace Info dropdown panel — onboarding/system info relocated from the
+dashboard welcome banner. Rendered inside the navbar's #demoInfoDropdown wrapper
+(base.html), shown via the "Demo Info" button. Gated upstream by is_viewing_demo.
+{% endcomment %}
+<style>
+    /* ---- Dropdown shell ---- */
+    .demo-info-dropdown {
+        position: relative;
+        display: inline-block;
+    }
+
+    .demo-info-panel {
+        /* Fixed + horizontally centered in the viewport so the full-width panel
+           is never clipped, regardless of where the trigger button sits. */
+        position: fixed;
+        top: calc(var(--topbar-height, 56px) + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1031; /* above the navbar */
+        display: none;
+        width: 900px;
+        max-width: 95vw;
+        max-height: calc(100vh - var(--topbar-height, 56px) - 24px);
+        overflow-y: auto;
+        padding: 1.25rem;
+        text-align: left;
+        white-space: normal;
+        border-radius: 0.75rem;
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        background: var(--card-bg-surface, #fff);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+        animation: demoInfoFadeIn 0.18s ease-out;
+    }
+
+    .demo-info-panel.show {
+        display: block;
+    }
+
+    @keyframes demoInfoFadeIn {
+        from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+        to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    @media (max-width: 992px) {
+        .demo-info-panel {
+            width: 92vw;
+        }
+    }
+
+    /* ---- Section labels ---- */
+    .demo-info-panel .demo-section-label {
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--bs-secondary-color, #6c757d);
+        margin-bottom: 0.6rem;
+    }
+
+    .demo-info-panel .demo-section-label.mt-3 {
+        margin-top: 1.15rem !important;
+    }
+
+    .demo-info-panel hr.my-3 {
+        margin-top: 1.15rem !important;
+        margin-bottom: 1.15rem !important;
+    }
+
+    /* ---- Credential cards — 3-col grid ---- */
+    .demo-info-panel .demo-cred-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.85rem;
+    }
+
+    @media (max-width: 992px) {
+        .demo-info-panel .demo-cred-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .demo-info-panel .demo-cred-card {
+        border-radius: var(--card-radius-sm, 0.6rem);
+        padding: 1rem;
+        border: var(--card-border, 1px solid #dee2e6);
+        background: var(--card-bg-surface, #fff);
+        transition: box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .demo-info-panel .demo-cred-card:hover {
+        box-shadow: var(--card-shadow-hover, 0 4px 12px rgba(0, 0, 0, 0.08));
+        transform: translateY(-3px);
+    }
+
+    .demo-info-panel .demo-cred-card .cred-header {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .demo-info-panel .demo-cred-card .cred-avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: #fff;
+        flex-shrink: 0;
+    }
+
+    /* Persona colors: Priya=purple, Marcus=green, Elena=amber */
+    .demo-info-panel .cred-avatar.avatar-ps { background: var(--persona-purple, linear-gradient(135deg, #6c5ce7 0%, #8e7bf0 100%)); }
+    .demo-info-panel .cred-avatar.avatar-mc { background: var(--persona-green,  linear-gradient(135deg, #10b981 0%, #34d399 100%)); }
+    .demo-info-panel .cred-avatar.avatar-ev { background: var(--persona-amber,  linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)); }
+
+    .demo-info-panel .demo-cred-card .cred-name {
+        font-weight: 700;
+        font-size: 0.92rem;
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    .demo-info-panel .demo-cred-card .cred-role {
+        font-size: 0.78rem;
+        opacity: 0.65;
+        margin: 0;
+    }
+
+    .demo-info-panel .demo-cred-card .cred-field {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.4rem 0.6rem;
+        border-radius: 0.35rem;
+        margin-bottom: 0.35rem;
+        font-size: 0.85rem;
+        background: var(--bs-tertiary-bg, #f8f9fa);
+    }
+
+    .demo-info-panel .demo-cred-card .cred-field-label {
+        font-weight: 600;
+        opacity: 0.7;
+        font-size: 0.8rem;
+    }
+
+    .demo-info-panel .demo-cred-card .cred-field-value {
+        font-family: var(--bs-font-monospace, 'SFMono-Regular', 'Menlo', 'Courier New', monospace);
+        font-weight: 600;
+        font-size: 0.82rem;
+        padding: 0.15rem 0.5rem;
+        border-radius: 0.25rem;
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        background: var(--bs-body-bg, #fff);
+    }
+
+    .demo-info-panel .demo-cred-card .cred-skills {
+        margin-top: 0.65rem;
+        padding-top: 0.55rem;
+        border-top: 1px solid var(--bs-border-color, #dee2e6);
+    }
+
+    .demo-info-panel .demo-cred-card .cred-skills-label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        opacity: 0.6;
+        margin-bottom: 0.35rem;
+    }
+
+    .demo-info-panel .demo-cred-card .cred-skill-tag {
+        display: inline-block;
+        background: rgba(102, 126, 234, 0.1);
+        color: #667eea;
+        padding: 0.15rem 0.55rem;
+        border-radius: 50px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        margin: 0.15rem 0.1rem;
+    }
+
+    [data-bs-theme="dark"] .demo-info-panel .demo-cred-card .cred-skill-tag {
+        background: rgba(102, 126, 234, 0.2);
+        color: #a5b4fc;
+    }
+
+    .demo-info-panel .demo-cred-card .cred-login-btn {
+        display: block;
+        width: 100%;
+        margin-top: 0.65rem;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        border-radius: 0.4rem;
+        text-align: center;
+        text-decoration: none;
+        color: #fff;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        cursor: pointer;
+        transition: opacity 0.2s, transform 0.15s;
+    }
+
+    .demo-info-panel .demo-cred-card .cred-login-btn:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+        color: #fff;
+    }
+
+    /* ---- Demo board row ---- */
+    .demo-info-panel .demo-board-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .demo-info-panel .demo-board-row .board-info {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        min-width: 0;
+    }
+
+    .demo-info-panel .demo-board-row .board-icon-circle {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 0.9rem;
+        flex-shrink: 0;
+    }
+
+    .demo-info-panel .demo-board-row .board-label {
+        font-weight: 700;
+        font-size: 0.9rem;
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    .demo-info-panel .demo-board-row .board-meta {
+        font-size: 0.78rem;
+        opacity: 0.65;
+        margin: 0;
+    }
+
+    /* ---- "What you can try" grid ---- */
+    .demo-info-panel .demo-tips-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.35rem 1.5rem;
+    }
+
+    @media (max-width: 768px) {
+        .demo-info-panel .demo-tips-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .demo-info-panel .demo-tips-grid .tip-item {
+        display: flex;
+        align-items: baseline;
+        gap: 0.45rem;
+        font-size: 0.85rem;
+        padding: 0.25rem 0;
+    }
+
+    .demo-info-panel .demo-tips-grid .tip-bullet {
+        flex-shrink: 0;
+        font-size: 0.7rem;
+    }
+
+    /* ---- Sandbox / RBAC info boxes ---- */
+    .demo-info-panel .demo-sandbox-info {
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+        font-size: 0.84rem;
+        line-height: 1.55;
+        background: rgba(118, 75, 162, 0.08);
+        border-left: 3px solid #764ba2;
+    }
+
+    /* ---- Rate limit footnote ---- */
+    .demo-info-panel .demo-rate-note {
+        font-size: 0.78rem;
+        opacity: 0.55;
+        text-align: center;
+        margin-top: 0.75rem;
+        margin-bottom: 0;
+    }
+</style>
+
+<div class="demo-info-panel" id="demoInfoPanel">
+
+    <!-- Section 1: Demo user credentials -->
+    <p class="demo-section-label">SIGN IN AS ANY OF THESE DEMO USERS</p>
+    <div class="demo-cred-grid">
+        <!-- Priya Sharma -->
+        <div class="demo-cred-card">
+            <div class="cred-header">
+                <div class="cred-avatar avatar-ps">PS</div>
+                <div>
+                    <p class="cred-name">Priya Sharma</p>
+                    <p class="cred-role">Backend Lead</p>
+                </div>
+            </div>
+            <div class="cred-field">
+                <span class="cred-field-label">Username</span>
+                <span class="cred-field-value">priya.sharma</span>
+            </div>
+            <div class="cred-field">
+                <span class="cred-field-label">Password</span>
+                <span class="cred-field-value">DemoUser@2026</span>
+            </div>
+            <div class="cred-skills">
+                <p class="cred-skills-label">Skills</p>
+                <span class="cred-skill-tag">Python</span>
+                <span class="cred-skill-tag">Django</span>
+                <span class="cred-skill-tag">REST APIs</span>
+                <span class="cred-skill-tag">PostgreSQL</span>
+            </div>
+            <a href="{% url 'quick_demo_login' 'priya.sharma' %}" class="cred-login-btn">
+                <i class="fas fa-sign-in-alt me-1"></i>Login as Priya
+            </a>
+        </div>
+        <!-- Marcus Chen -->
+        <div class="demo-cred-card">
+            <div class="cred-header">
+                <div class="cred-avatar avatar-mc">MC</div>
+                <div>
+                    <p class="cred-name">Marcus Chen</p>
+                    <p class="cred-role">Frontend / UX</p>
+                </div>
+            </div>
+            <div class="cred-field">
+                <span class="cred-field-label">Username</span>
+                <span class="cred-field-value">marcus.chen</span>
+            </div>
+            <div class="cred-field">
+                <span class="cred-field-label">Password</span>
+                <span class="cred-field-value">DemoUser@2026</span>
+            </div>
+            <div class="cred-skills">
+                <p class="cred-skills-label">Skills</p>
+                <span class="cred-skill-tag">JavaScript</span>
+                <span class="cred-skill-tag">React</span>
+                <span class="cred-skill-tag">CSS / Tailwind</span>
+                <span class="cred-skill-tag">UX Design</span>
+            </div>
+            <a href="{% url 'quick_demo_login' 'marcus.chen' %}" class="cred-login-btn">
+                <i class="fas fa-sign-in-alt me-1"></i>Login as Marcus
+            </a>
+        </div>
+        <!-- Elena Vasquez -->
+        <div class="demo-cred-card">
+            <div class="cred-header">
+                <div class="cred-avatar avatar-ev">EV</div>
+                <div>
+                    <p class="cred-name">Elena Vasquez</p>
+                    <p class="cred-role">DevOps / QA</p>
+                </div>
+            </div>
+            <div class="cred-field">
+                <span class="cred-field-label">Username</span>
+                <span class="cred-field-value">elena.vasquez</span>
+            </div>
+            <div class="cred-field">
+                <span class="cred-field-label">Password</span>
+                <span class="cred-field-value">DemoUser@2026</span>
+            </div>
+            <div class="cred-skills">
+                <p class="cred-skills-label">Skills</p>
+                <span class="cred-skill-tag">Docker</span>
+                <span class="cred-skill-tag">CI/CD</span>
+                <span class="cred-skill-tag">Google Cloud</span>
+                <span class="cred-skill-tag">Test Automation</span>
+            </div>
+            <a href="{% url 'quick_demo_login' 'elena.vasquez' %}" class="cred-login-btn">
+                <i class="fas fa-sign-in-alt me-1"></i>Login as Elena
+            </a>
+        </div>
+    </div>
+
+    <!-- Section 2: Demo board included -->
+    <p class="demo-section-label mt-3">DEMO BOARD INCLUDED</p>
+    <div class="demo-board-row">
+        <div class="board-info">
+            <div class="board-icon-circle"><i class="fas fa-laptop-code"></i></div>
+            <div>
+                <p class="board-label mb-0">Software Development</p>
+                <p class="board-meta mb-0">30 tasks &middot; Kanban + Gantt + Calendar &middot; AI features enabled</p>
+            </div>
+        </div>
+        {% if demo_board %}
+        <a href="{% url 'board_detail' demo_board.id %}" class="btn btn-sm btn-outline-primary fw-semibold">
+            Open board <i class="fas fa-arrow-right ms-1"></i>
+        </a>
+        {% endif %}
+    </div>
+
+    <!-- Section 3: What you can try -->
+    <p class="demo-section-label mt-3">WHAT YOU CAN TRY</p>
+    <div class="demo-tips-grid">
+        <div class="tip-item"><span class="tip-bullet text-success">&bull;</span> Drag and drop tasks between columns</div>
+        <div class="tip-item"><span class="tip-bullet text-success">&bull;</span> Run AI features: Stress Test, Shadow Board, What-If</div>
+        <div class="tip-item"><span class="tip-bullet text-success">&bull;</span> Create new tasks, boards, and projects</div>
+        <div class="tip-item"><span class="tip-bullet text-success">&bull;</span> Ask Spectra questions about your project</div>
+        <div class="tip-item"><span class="tip-bullet text-success">&bull;</span> Switch between Kanban, Gantt, and Calendar views</div>
+        <div class="tip-item"><span class="tip-bullet text-success">&bull;</span> Explore Goals &rarr; Missions &rarr; Strategies hierarchy</div>
+    </div>
+
+    <!-- Sandbox info box -->
+    <hr class="my-3">
+    <div class="demo-sandbox-info">
+        <i class="fas fa-shield-alt me-1" style="color: #764ba2;"></i>
+        <strong>This is your personal demo workspace.</strong>
+        Make any changes you like &mdash; nothing here affects anyone else.
+        Log out and back in and you&rsquo;ll find everything exactly as you left it.
+        Use the Reset button any time for a fresh start.
+    </div>
+
+    <!-- RBAC info box -->
+    <div class="demo-sandbox-info mt-2" style="border-left:3px solid #f59e0b;background:#fffbeb;">
+        <i class="fas fa-users-cog me-1" style="color: #d97706;"></i>
+        <strong>Team &amp; RBAC features are available in your own workspace.</strong>
+        Member invitations, role-based access control (Owner / Member / Viewer), and team management
+        are enabled when you <a href="{% url 'onboarding_welcome' %}" class="fw-semibold">set up your own workspace</a>.
+    </div>
+
+    <!-- Rate limit note -->
+    <p class="demo-rate-note">
+        All demo accounts have AI features rate-limited to 5 calls per 10 min.
+        Create your own account for unrestricted access.
+    </p>
+</div>

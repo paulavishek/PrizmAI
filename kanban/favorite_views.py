@@ -36,6 +36,7 @@ ALLOWED_FAVORITE_TYPES = {
     'board': ('kanban', 'board'),
     'goal': ('kanban', 'organizationgoal'),
     'mission': ('kanban', 'mission'),
+    'strategy': ('kanban', 'strategy'),
     'wiki_page': ('wiki', 'wikipage'),
     'task': ('kanban', 'task'),
     'retrospective': ('kanban', 'projectretrospective'),
@@ -50,6 +51,7 @@ DISPLAY_NAME_FIELDS = {
     'board': 'name',
     'goal': 'title',
     'mission': 'title',
+    'strategy': 'name',
     'wiki_page': 'title',
     'task': 'title',
     'retrospective': 'title',
@@ -61,30 +63,35 @@ DISPLAY_NAME_FIELDS = {
 
 
 def _user_can_access(user, favorite_type, obj):
-    """Check that user has legitimate access to the object."""
+    """Check that user has legitimate access to the object in their current workspace."""
+    is_demo_mode = getattr(getattr(user, 'profile', None), 'is_viewing_demo', False)
+
+    def _board_accessible(board):
+        if is_demo_mode:
+            return board.is_official_demo_board or board.is_sandbox_copy
+        # Real mode: must be member/owner, NOT a demo board
+        if board.is_official_demo_board or board.is_sandbox_copy:
+            return False
+        return board.created_by == user or board.memberships.filter(user=user).exists()
+
     if favorite_type == 'board':
-        return obj.created_by == user or obj.members.filter(pk=user.pk).exists() or obj.is_official_demo_board
-    elif favorite_type in ('goal', 'mission'):
-        return True  # Goals/Missions are visible to all authenticated users
+        return _board_accessible(obj)
+    elif favorite_type in ('goal', 'mission', 'strategy'):
+        return True  # Goals/Missions/Strategies are visible to all authenticated users
     elif favorite_type == 'wiki_page':
         return True  # Wiki pages are shared within workspace
     elif favorite_type == 'task':
-        board = obj.column.board
-        return board.created_by == user or board.members.filter(pk=user.pk).exists() or board.is_official_demo_board
+        return _board_accessible(obj.column.board)
     elif favorite_type == 'retrospective':
-        board = obj.board
-        return board.created_by == user or board.members.filter(pk=user.pk).exists() or board.is_official_demo_board
+        return _board_accessible(obj.board)
     elif favorite_type == 'chat_room':
         return obj.members.filter(pk=user.pk).exists()
     elif favorite_type == 'conflict':
-        board = obj.board
-        return board.created_by == user or board.members.filter(pk=user.pk).exists() or board.is_official_demo_board
+        return _board_accessible(obj.board)
     elif favorite_type == 'shadow_branch':
-        board = obj.board
-        return board.created_by == user or board.members.filter(pk=user.pk).exists() or board.is_official_demo_board
+        return _board_accessible(obj.board)
     elif favorite_type == 'automation':
-        board = obj.board
-        return board.created_by == user or board.members.filter(pk=user.pk).exists() or board.is_official_demo_board
+        return _board_accessible(obj.board)
     return False
 
 
@@ -195,15 +202,34 @@ def reorder_favorites(request):
 
 @login_required
 def favorites_list_api(request):
-    """Return current user's favorites as JSON for sidebar refresh."""
+    """Return current user's favorites as JSON for sidebar refresh.
+    Filters out favorites that belong to the wrong workspace mode."""
+    from kanban.utils.demo_protection import get_user_boards
+    from kanban.models import Board
+
+    profile = getattr(request.user, 'profile', None)
+    is_demo_mode = getattr(profile, 'is_viewing_demo', False)
+
+    workspace_boards = set(get_user_boards(request.user).values_list('id', flat=True))
+
+    # In demo mode also allow official demo boards (consistent with _user_can_access)
+    if is_demo_mode:
+        demo_board_ids = set(
+            Board.objects.filter(is_official_demo_board=True).values_list('id', flat=True)
+        )
+        workspace_boards = workspace_boards | demo_board_ids
+
     favorites = (
         UserFavorite.objects
         .filter(user=request.user)
         .select_related('content_type')
-        .order_by('position', '-created_at')[:20]
+        .order_by('position', '-created_at')[:40]  # fetch extra, we may filter some out
     )
     items = []
     for fav in favorites:
+        # Filter board-scoped favorites to current workspace
+        if fav.favorite_type == 'board' and fav.object_id not in workspace_boards:
+            continue
         items.append({
             'id': fav.pk,
             'favorite_type': fav.favorite_type,
@@ -211,4 +237,6 @@ def favorites_list_api(request):
             'icon_class': fav.get_icon_class(),
             'url': fav.get_absolute_url(),
         })
+        if len(items) >= 20:
+            break
     return JsonResponse({'favorites': items})

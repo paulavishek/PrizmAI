@@ -13,6 +13,9 @@ class Webhook(models.Model):
     Webhook subscription for board events
     Allows external services to receive real-time notifications
     """
+    # Only events with a matching signal handler in webhooks/signals.py are
+    # listed. board.member_added / board.member_removed have no handler and
+    # would never fire, so they are intentionally omitted.
     EVENT_CHOICES = [
         ('task.created', 'Task Created'),
         ('task.updated', 'Task Updated'),
@@ -22,8 +25,6 @@ class Webhook(models.Model):
         ('task.moved', 'Task Moved to Different Column'),
         ('comment.added', 'Comment Added'),
         ('board.updated', 'Board Updated'),
-        ('board.member_added', 'Board Member Added'),
-        ('board.member_removed', 'Board Member Removed'),
     ]
     
     STATUS_CHOICES = [
@@ -126,7 +127,22 @@ class Webhook(models.Model):
         blank=True,
         help_text="Custom HTTP headers to include in webhook requests"
     )
-    
+
+    # Provider / preset
+    provider = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        help_text="Integration preset this webhook targets (slack, discord, teams, github, "
+                  "pagerduty, ...). Blank = auto-detect from the URL host."
+    )
+    provider_config = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Provider-specific config the payload body needs but the URL/headers can't carry "
+                  "(e.g. PagerDuty routing_key, GitHub event_type)."
+    )
+
     class Meta:
         ordering = ['-created_at']
         indexes = [
@@ -137,12 +153,21 @@ class Webhook(models.Model):
     def __str__(self):
         return f"{self.name} ({self.board.name})"
     
-    def increment_delivery_stats(self, success=True):
-        """Update delivery statistics"""
-        self.total_deliveries += 1
+    def increment_delivery_stats(self, success=True, is_retry=False):
+        """Update delivery statistics.
+
+        is_retry=True: the original attempt already counted; a success here converts
+        the earlier failed_deliveries tick rather than adding a new total_deliveries tick.
+        """
+        if not is_retry:
+            self.total_deliveries += 1
+
         if success:
             self.successful_deliveries += 1
             self.consecutive_failures = 0
+            if is_retry:
+                # Convert the failure that was recorded on the first attempt.
+                self.failed_deliveries = max(0, self.failed_deliveries - 1)
             if self.status == 'failed':
                 self.status = 'active'
         else:
@@ -152,7 +177,7 @@ class Webhook(models.Model):
             if self.consecutive_failures >= 10:
                 self.status = 'failed'
                 self.is_active = False
-        
+
         self.last_triggered = timezone.now()
         self.save(update_fields=[
             'total_deliveries', 'successful_deliveries', 'failed_deliveries',

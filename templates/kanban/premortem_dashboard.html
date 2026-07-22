@@ -1,20 +1,158 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static feature_guide_tags %}
 
 {% block title %}Pre-Mortem Analysis - {{ board.name }}{% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">Pre-Mortem Analysis</li>
+        </ol>
+    </nav>
+
     <!-- Header -->
     <div class="row mb-4">
         <div class="col-md-8">
-            <h2><i class="fas fa-shield-alt text-danger"></i> Pre-Mortem Analysis — {{ board.name }}</h2>
-            <p class="text-muted">Simulate failure before it happens. Identify your project's biggest risks before work begins.</p>
+            <h2><i class="fas fa-shield-alt text-danger"></i> Pre-Mortem Analysis</h2>
+            <p class="text-muted">{{ board.name }} — Simulate failure before it happens. Identify your project's biggest risks before work begins.</p>
+            <button class="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold"
+                    style="color: #0d6efd;"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#preMortemGuide"
+                    aria-expanded="false"
+                    aria-controls="preMortemGuide">
+                <i class="fas fa-question-circle me-1"></i>
+                <span id="premortem-guide-label">How does this work?</span>
+                <i class="fas fa-chevron-down ms-1 premortem-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+            </button>
         </div>
         <div class="col-md-4 text-end">
-            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
+            <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back">
                 <i class="fas fa-arrow-left me-1"></i> Back to Board
             </a>
+        </div>
+    </div>
+
+    <!-- ── How It Works — Collapsible Guide ── -->
+    <div class="collapse mb-4" id="preMortemGuide">
+        <div class="card border shadow-sm">
+            <div class="card-body p-4">
+                <div class="row g-4">
+
+                    <!-- What is this? -->
+                    <div class="col-12">
+                        <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-shield-alt text-danger me-2"></i>What is Pre-Mortem Analysis?</h6>
+                        <p class="mb-0 small text-secondary">Before a single line of code is written or a task is started, the AI imagines your project has already failed — then works backwards to explain exactly how it happened. You get five distinct failure scenarios specific to your project, each with a risk level, root-cause explanation, and a concrete mitigation strategy. Think of it as buying insurance before you need it.</p>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Two columns: Scenarios vs Acknowledgment -->
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-skull fa-2x text-danger"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Failure Scenarios <span class="badge bg-danger ms-1" style="font-size:0.65rem;">AI-generated</span></h6>
+                                <p class="small mb-2 text-secondary">Five plausible ways your specific project could collapse — invented by the AI by analysing your tasks, deadlines, dependencies, and team allocation. None of these have happened yet.</p>
+                                <div class="d-flex flex-column gap-1 mt-2">
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#c0392b; min-width:70px;">HIGH</span>
+                                        <span class="text-dark">Severe, likely to derail the project</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#d97706; min-width:70px;">MEDIUM</span>
+                                        <span class="text-dark">Significant, needs active monitoring</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#16a34a; min-width:70px;">LOW</span>
+                                        <span class="text-dark">Minor, manageable with awareness</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-users fa-2x text-info"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Team Acknowledgment <span class="badge bg-info ms-1" style="font-size:0.65rem;">Sign-off tracking</span></h6>
+                                <p class="small mb-2 text-secondary">Each team member signs off on scenarios they've read and understood. The dashboard tracks who has acknowledged which risks — so no critical warning goes unseen.</p>
+                                <div class="p-2 rounded mb-1 bg-danger-subtle border-start border-danger border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-eye-slash text-danger me-1"></i><strong>Unacknowledged</strong> — this risk is invisible to your team. Nobody is watching for it.</p>
+                                </div>
+                                <div class="p-2 rounded bg-info-subtle border-start border-info border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-eye text-info me-1"></i><strong>Acknowledged</strong> — team is actively watching for this risk. Early warning system is armed.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Comparison table + Workflow -->
+                    <div class="col-md-7">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-table me-1 text-info"></i>Side-by-side comparison</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-muted"></th>
+                                        <th class="text-danger"><i class="fas fa-eye-slash me-1"></i>Unacknowledged</th>
+                                        <th class="text-info"><i class="fas fa-eye me-1"></i>Acknowledged</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Team visibility</td>
+                                        <td class="text-dark">Nobody watching</td>
+                                        <td class="text-dark">Team is watching</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Score impact</td>
+                                        <td class="text-dark">No impact</td>
+                                        <td class="fw-semibold text-info">Counts towards coverage</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">AI next run</td>
+                                        <td class="text-dark">Still flags as gap</td>
+                                        <td class="text-dark">Tracks mitigation progress</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Analogy</td>
+                                        <td class="text-dark">Unlit road at night</td>
+                                        <td class="text-dark">Headlights on, driving carefully</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="col-md-5">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-list-ol me-1 text-info"></i>Recommended workflow</h6>
+                        <ol class="small ps-3 mb-3 text-secondary">
+                            <li class="mb-1">Run the Pre-Mortem analysis — AI reads your live board data</li>
+                            <li class="mb-1">Read all 5 failure scenarios carefully, including the mitigation strategy</li>
+                            <li class="mb-1"><strong class="text-info">Team members acknowledge</strong> each scenario they've understood</li>
+                            <li class="mb-1">Implement the mitigation strategies for HIGH-risk scenarios</li>
+                            <li>Feed results into the <strong>Stress Test</strong> for deeper resilience analysis</li>
+                        </ol>
+                        <div class="p-2 rounded bg-warning-subtle border-start border-warning border-3">
+                            <p class="small mb-0 text-dark"><i class="fas fa-lightbulb text-warning me-1"></i><strong>Tip:</strong> Run Pre-Mortem before scope locks in. A 15-minute review now can prevent weeks of damage later.</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
         </div>
     </div>
 
@@ -83,12 +221,14 @@
         </div>
     </div>
 
-    <!-- Loading spinner (hidden by default) -->
-    <div id="premortem-loading" class="text-center py-5" style="display:none;">
-        <div class="spinner-border text-danger" role="status" style="width:3rem;height:3rem;">
-            <span class="visually-hidden">Analyzing…</span>
+    <!-- Loading card for initial run (hidden by default) -->
+    <div id="premortem-loading" class="card border-0 shadow-sm my-4" style="display:none;">
+        <div class="card-body py-5 text-center">
+            <div class="pm-analysis-spinner mb-4"></div>
+            <h5 class="fw-semibold mb-1" style="color:var(--text-primary);">Running Pre-Mortem Analysis</h5>
+            <p class="text-muted small mb-2">The AI is simulating failure scenarios for your project.</p>
+            <p id="premortem-status" class="fw-medium small mb-0" style="color:#dc3545; min-height:1.5em; transition:opacity 0.3s ease;">Reading your project tasks and deadlines…</p>
         </div>
-        <p class="mt-3 text-muted">AI is simulating failure scenarios… this takes 10-15 seconds.</p>
     </div>
 
     <!-- Results container (populated by JS after run) -->
@@ -113,6 +253,7 @@
                 </span>
                 <span class="text-muted me-3">
                     Analyzed on: {{ latest.created_at|date:"M d, Y H:i" }}
+                    {% if latest.is_stale %}<span class="badge bg-warning text-dark ms-2" data-bs-toggle="tooltip" title="Analysis is over 7 days old — consider re-running with latest board data"><i class="fas fa-clock me-1"></i>Stale</span>{% endif %}
                 </span>
                 <span class="text-muted">
                     Run by: {% if latest.created_by %}{{ latest.created_by.get_full_name|default:latest.created_by.username }}{% else %}Unknown{% endif %}
@@ -154,18 +295,22 @@
     </div>
 
     {% if latest.analysis_json.confidence_note %}
-    <div class="alert alert-info mb-4">
-        <i class="fas fa-info-circle me-2"></i>
+    <div class="alert alert-warning mb-4">
+        <i class="fas fa-exclamation-triangle me-2"></i>
         {{ latest.analysis_json.confidence_note }}
     </div>
     {% endif %}
 
-    <!-- Loading spinner for re-runs (hidden by default) -->
-    <div id="premortem-loading" class="text-center py-5" style="display:none;">
-        <div class="spinner-border text-danger" role="status" style="width:3rem;height:3rem;">
-            <span class="visually-hidden">Analyzing…</span>
+    <div class="mb-3">{% include 'partials/ai_disclaimer.html' %}</div>
+
+    <!-- Loading card for re-runs (hidden by default) -->
+    <div id="premortem-loading" class="card border-0 shadow-sm my-4" style="display:none;">
+        <div class="card-body py-5 text-center">
+            <div class="pm-analysis-spinner mb-4"></div>
+            <h5 class="fw-semibold mb-1" style="color:var(--text-primary);">Re-running Pre-Mortem Analysis</h5>
+            <p class="text-muted small mb-2">Scanning your updated board data for new failure scenarios.</p>
+            <p id="premortem-status" class="fw-medium small mb-0" style="color:#dc3545; min-height:1.5em; transition:opacity 0.3s ease;">Reading your project tasks and deadlines…</p>
         </div>
-        <p class="mt-3 text-muted">AI is simulating failure scenarios… this takes 10-15 seconds.</p>
     </div>
 
     <!-- Scenario Cards -->
@@ -174,19 +319,30 @@
     <div class="card mb-3 border-start border-4
         {% if scenario.probability == 'High' %}border-danger
         {% elif scenario.probability == 'Medium' %}border-warning
-        {% else %}border-success{% endif %}">
+        {% else %}border-success{% endif %}
+        {% if scenario.acknowledged %}opacity-75{% endif %}"
+        id="scenario-card-{{ scenario.index }}">
         <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-                <h5 class="card-title mb-0">Scenario {{ scenario.number }}: {{ scenario.title }}</h5>
-                {% if scenario.probability == 'High' %}
-                    <span class="badge bg-danger">HIGH RISK</span>
-                {% elif scenario.probability == 'Medium' %}
-                    <span class="badge bg-warning text-dark">MEDIUM RISK</span>
-                {% else %}
-                    <span class="badge bg-success">LOW RISK</span>
-                {% endif %}
+            <div class="d-flex justify-content-between align-items-start mb-0" role="button" data-bs-toggle="collapse" data-bs-target="#scenario-body-{{ scenario.index }}" aria-expanded="true">
+                <h5 class="card-title mb-0">
+                    {% if scenario.acknowledged %}<i class="fas fa-check-circle text-success me-1"></i>{% endif %}
+                    Scenario {{ scenario.number }}: {{ scenario.title }}
+                </h5>
+                <div class="d-flex align-items-center gap-2">
+                    {% if scenario.acknowledged %}
+                        <span class="badge bg-success">ADDRESSED</span>
+                    {% elif scenario.probability == 'High' %}
+                        <span class="badge bg-danger">HIGH RISK</span>
+                    {% elif scenario.probability == 'Medium' %}
+                        <span class="badge bg-warning text-dark">MEDIUM RISK</span>
+                    {% else %}
+                        <span class="badge bg-success">LOW RISK</span>
+                    {% endif %}
+                    <i class="fas fa-chevron-down text-muted" style="font-size:0.75rem; transition: transform 0.2s;"></i>
+                </div>
             </div>
-            <p class="card-text">{{ scenario.description }}</p>
+            <div class="collapse show" id="scenario-body-{{ scenario.index }}">
+            <p class="card-text mt-2">{{ scenario.description }}</p>
 
             <div class="mt-3 p-3 bg-light rounded">
                 <p class="mb-2">
@@ -212,6 +368,7 @@
                 </button>
                 {% endif %}
             </div>
+            </div>
         </div>
     </div>
     {% endfor %}
@@ -230,6 +387,18 @@
     </div>
 </div>
 
+<style>
+.pm-analysis-spinner {
+    display: inline-block;
+    width: 3.5rem;
+    height: 3.5rem;
+    border: 4px solid rgba(220, 53, 69, 0.15);
+    border-top-color: #dc3545;
+    border-radius: 50%;
+    animation: prizm-spin 0.8s linear infinite;
+}
+</style>
+
 <script>
 const CSRF_TOKEN = '{{ csrf_token }}';
 const BOARD_ID = {{ board.id }};
@@ -244,6 +413,47 @@ function runPreMortem() {
     if (resultsEl) resultsEl.style.display = 'none';
     if (runBtn) runBtn.disabled = true;
 
+    // Start rotating contextual messages timed to the ~15 s analysis window
+    const PM_MESSAGES = [
+        'Reading your project tasks and deadlines…',
+        'Imagining your project has already failed…',
+        'Tracing the root causes of each failure…',
+        'Assessing risk levels and early warning signs…',
+        'Drafting prevention actions for your team…',
+        'Finalizing the 5 failure scenarios…',
+    ];
+    const statusEl = document.getElementById('premortem-status');
+    var _pmRotator = null;
+    if (statusEl && typeof PrizmLoading !== 'undefined') {
+        _pmRotator = PrizmLoading.rotateMessages(statusEl, PM_MESSAGES, 27000);
+    }
+
+    // Use progressive disclosure if the library is loaded
+    if (typeof triggerAITask === 'function') {
+        triggerAITask(`{% url 'run_premortem' board.id %}`, {
+            method: 'POST',
+            timeoutMs: 150000,
+            onResult: function(data) {
+                if (_pmRotator) _pmRotator.stop();
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert(data.error || 'Analysis failed. Please try again.');
+                    if (runBtn) runBtn.disabled = false;
+                }
+            },
+            onError: function(msg) {
+                if (_pmRotator) _pmRotator.stop();
+                if (loadingEl) loadingEl.style.display = 'none';
+                alert(msg || 'Analysis failed. Please try again.');
+                if (runBtn) runBtn.disabled = false;
+            },
+        });
+        return;
+    }
+
+    // Fallback: plain fetch (no WebSocket)
     fetch(`{% url 'run_premortem' board.id %}`, {
         method: 'POST',
         headers: {
@@ -253,16 +463,17 @@ function runPreMortem() {
     })
     .then(resp => resp.json())
     .then(data => {
+        if (_pmRotator) _pmRotator.stop();
         if (loadingEl) loadingEl.style.display = 'none';
         if (data.success) {
-            // Re-render the page to show new results cleanly
             window.location.reload();
         } else {
             alert(data.error || 'Analysis failed. Please try again.');
             if (runBtn) runBtn.disabled = false;
         }
     })
-    .catch(err => {
+    .catch(() => {
+        if (_pmRotator) _pmRotator.stop();
         if (loadingEl) loadingEl.style.display = 'none';
         alert('Network error. Please try again.');
         if (runBtn) runBtn.disabled = false;
@@ -289,6 +500,21 @@ function acknowledgeScenario(premortemId, scenarioIndex, btnEl) {
                 Addressed by ${data.acknowledged_by} on ${new Date(data.acknowledged_at).toLocaleDateString()}
             </span>`;
 
+            // Visual state change on the card
+            const card = document.getElementById(`scenario-card-${scenarioIndex}`);
+            if (card) {
+                card.classList.add('opacity-75');
+                const badge = card.querySelector('.badge');
+                if (badge) {
+                    badge.className = 'badge bg-success';
+                    badge.textContent = 'ADDRESSED';
+                }
+                const title = card.querySelector('.card-title');
+                if (title && !title.querySelector('.fa-check-circle')) {
+                    title.insertAdjacentHTML('afterbegin', '<i class="fas fa-check-circle text-success me-1"></i>');
+                }
+            }
+
             // Update the progress tracker
             const counterEl = document.getElementById('ack-counter');
             const progressBar = document.getElementById('ack-progress-bar');
@@ -312,6 +538,23 @@ function acknowledgeScenario(premortemId, scenarioIndex, btnEl) {
     .catch(() => {
         alert('Network error.');
         btnEl.disabled = false;
+    });
+}
+
+// Guide toggle label
+var pmGuide = document.getElementById('preMortemGuide');
+if (pmGuide) {
+    pmGuide.addEventListener('shown.bs.collapse', function() {
+        var label = document.getElementById('premortem-guide-label');
+        if (label) label.textContent = 'Hide guide';
+        var chevron = document.querySelector('.premortem-guide-chevron');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+    });
+    pmGuide.addEventListener('hidden.bs.collapse', function() {
+        var label = document.getElementById('premortem-guide-label');
+        if (label) label.textContent = 'How does this work?';
+        var chevron = document.querySelector('.premortem-guide-chevron');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
     });
 }
 </script>

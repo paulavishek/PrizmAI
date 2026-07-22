@@ -5,20 +5,25 @@
 {% block extra_css %}
 <style>
     .notifications-container {
-        max-width: 600px;
+        max-width: 680px;
     }
 
     .notification-item {
         padding: 1rem;
         margin-bottom: 0.75rem;
-        background: white;
+        background: var(--card-bg);
         border-left: 4px solid #667eea;
         border-radius: 4px;
         transition: all 0.3s ease;
+        position: relative;
     }
 
     .notification-item:hover {
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .notification-item.has-link {
+        cursor: pointer;
     }
 
     .notification-item.unread {
@@ -45,22 +50,49 @@
 
     .notification-time {
         font-size: 0.85rem;
-        color: #999;
+        color: var(--text-muted);
+    }
+
+    .notification-title {
+        font-weight: 600;
+        color: #1a1a2e;
+        margin-bottom: 0.25rem;
+        font-size: 0.95rem;
     }
 
     .notification-text {
-        color: #333;
+        color: #555;
         margin-bottom: 0.5rem;
+        font-size: 0.875rem;
     }
 
     .notification-actions {
         display: flex;
         gap: 0.5rem;
         margin-top: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
     }
 
     .notification-actions a {
         font-size: 0.85rem;
+    }
+
+    .btn-delete-notif {
+        background: none;
+        border: 1px solid #fee2e2;
+        color: #dc3545;
+        border-radius: 4px;
+        padding: 0.2rem 0.5rem;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-left: auto;
+    }
+
+    .btn-delete-notif:hover {
+        background: #fef2f2;
+        border-color: #dc3545;
     }
 
     .empty-state {
@@ -73,6 +105,54 @@
         color: #ddd;
         margin-bottom: 1rem;
     }
+
+    /* AI Digest Panel */
+    #ai-digest-panel {
+        background: linear-gradient(135deg, #f0f4ff 0%, #faf0ff 100%);
+        border: 1px solid #c7d2fe;
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1.25rem;
+        display: none;
+    }
+
+    #ai-digest-panel.show {
+        display: block;
+    }
+
+    .ai-digest-content {
+        white-space: pre-line;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        line-height: 1.6;
+    }
+
+    .ai-digest-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+    }
+
+    .ai-digest-title {
+        font-weight: 700;
+        color: #4c1d95;
+        font-size: 0.95rem;
+    }
+
+    .btn-ai-digest {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 0.4rem 1rem;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: opacity 0.2s;
+    }
+
+    .btn-ai-digest:hover { opacity: 0.9; }
+    .btn-ai-digest:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
 {% endblock %}
 
@@ -104,7 +184,7 @@
     // Mark as read when clicking on notification
     document.querySelectorAll('.notification-item').forEach(item => {
         item.addEventListener('click', function(e) {
-            if (!e.target.closest('a')) {
+            if (!e.target.closest('a') && !e.target.closest('button')) {
                 const link = this.querySelector('a');
                 if (link) link.click();
             }
@@ -115,15 +195,41 @@
 
 {% block content %}
 <div class="notifications-container">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="mb-3">
+        <a href="{% url 'dashboard' %}" class="btn-prizm-back">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+    <div class="d-flex justify-content-between align-items-center mb-3">
         <h1><i class="fas fa-bell me-2"></i>Notifications 
             {% with unread_count=notifications|length %}<span class="badge bg-secondary">{{ unread_count }}</span>{% endwith %}
         </h1>
-        {% if notifications %}
-            <a href="?mark_read=1" class="btn btn-sm btn-outline-primary">
-                <i class="fas fa-check-double me-1"></i> Mark All as Read
-            </a>
-        {% endif %}
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            {% if notifications %}
+                <button class="btn-ai-digest" id="btn-ai-digest" onclick="generateAiDigest()">
+                    <i class="fas fa-magic me-1"></i> AI Digest
+                </button>
+                <a href="?mark_read=1" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-check-double me-1"></i> Mark All as Read
+                </a>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteAllNotifications()">
+                    <i class="fas fa-trash me-1"></i> Delete All
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- AI Digest Panel -->
+    <div id="ai-digest-panel">
+        <div class="ai-digest-header">
+            <span class="ai-digest-title"><i class="fas fa-magic me-1"></i> AI Notification Digest</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="closeDigest()" style="font-size:0.75rem;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="ai-digest-content" id="ai-digest-content">
+            <span class="text-muted"><span class="prizm-spinner prizm-spinner--sm me-1 align-middle"></span> Generating digest…</span>
+        </div>
     </div>
     
     <div class="alert alert-info mb-4">
@@ -135,13 +241,25 @@
     {% if notifications %}
         <div class="notifications-list">
             {% for notification in notifications %}
-                <div class="notification-item {% if not notification.is_read %}unread{% endif %}">
+                <div class="notification-item {% if not notification.is_read %}unread{% endif %}{% if notification.task_thread_comment or notification.chat_message or notification.action_url %} has-link{% endif %}" id="notif-{{ notification.id }}">  
                     <div class="notification-header">
                         <span class="notification-type">
-                            {% if notification.notification_type == 'mention' %}
+                            {% if notification.notification_type == 'MENTION' %}
                                 <i class="fas fa-at me-1"></i> Mention
-                            {% elif notification.notification_type == 'message' %}
+                            {% elif notification.notification_type == 'CHAT_MESSAGE' %}
                                 <i class="fas fa-comment me-1"></i> Message
+                            {% elif notification.notification_type == 'ACCESS_REQUEST' %}
+                                <i class="fas fa-user-lock me-1"></i> Access Request
+                            {% elif notification.notification_type == 'ACCESS_RESPONSE' %}
+                                <i class="fas fa-key me-1"></i> Access Response
+                            {% elif notification.notification_type == 'ACTIVITY' %}
+                                <i class="fas fa-bolt me-1"></i> Activity
+                            {% elif notification.notification_type == 'COMMENT' %}
+                                <i class="fas fa-reply me-1"></i> Comment
+                            {% elif notification.notification_type == 'EVENT_INVITED' %}
+                                <i class="fas fa-calendar me-1"></i> Event
+                            {% elif notification.notification_type == 'TASK_ASSIGNED_CAL' %}
+                                <i class="fas fa-tasks me-1"></i> Task Assigned
                             {% else %}
                                 <i class="fas fa-info-circle me-1"></i> Notification
                             {% endif %}
@@ -151,12 +269,18 @@
                         </span>
                     </div>
 
+                    <!-- Title row -->
+                    {% if notification.title %}
+                        <div class="notification-title">{{ notification.title }}</div>
+                    {% elif notification.ai_summary %}
+                        <div class="notification-title">
+                            <i class="fas fa-magic text-primary me-1" title="AI Summary" style="font-size:0.75rem;"></i>{{ notification.ai_summary }}
+                        </div>
+                    {% endif %}
+
+                    <!-- Content -->
                     <div class="notification-text">
-                        {% if notification.ai_summary %}
-                            <div class="ai-summary mb-1">
-                                <i class="fas fa-magic text-primary me-1" title="AI Summary"></i>
-                                <strong>{{ notification.ai_summary }}</strong>
-                            </div>
+                        {% if notification.title or notification.ai_summary %}
                             <small class="text-muted">{{ notification.text }}</small>
                         {% else %}
                             {{ notification.text }}
@@ -178,6 +302,21 @@
                                onclick="markAsRead(event, this)">
                                 <i class="fas fa-arrow-right me-1"></i> View Message
                             </a>
+                        {% elif notification.action_url %}
+                            <a href="{{ notification.action_url }}"
+                               class="btn btn-sm btn-primary"
+                               data-notification-id="{{ notification.id }}"
+                               onclick="markAsRead(event, this)">
+                                <i class="fas fa-arrow-right me-1"></i>
+                                {% if notification.notification_type == 'MENTION' %}View Conversation
+                                {% elif notification.notification_type == 'COMMENT' %}View Thread
+                                {% elif notification.notification_type == 'ACTIVITY' %}View Task
+                                {% elif notification.notification_type == 'TASK_ASSIGNED_CAL' %}View Task
+                                {% elif notification.notification_type == 'EVENT_INVITED' %}View Calendar
+                                {% elif notification.notification_type == 'ACCESS_REQUEST' %}Review Request
+                                {% elif notification.notification_type == 'ACCESS_RESPONSE' %}Open Board
+                                {% else %}View Details{% endif %}
+                            </a>
                         {% endif %}
                         {% if not notification.is_read %}
                             <button type="button" class="btn btn-sm btn-outline-secondary" 
@@ -186,6 +325,11 @@
                                 <i class="fas fa-times me-1"></i> Dismiss
                             </button>
                         {% endif %}
+                        <button type="button" class="btn-delete-notif"
+                                title="Delete notification"
+                                onclick="deleteNotification(event, {{ notification.id }})">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
                     </div>
                 </div>
             {% endfor %}
@@ -199,29 +343,104 @@
     {% endif %}
 </div>
 
+{% csrf_token %}
+
 <script>
+const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+                  document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+
 function markAsRead(event, button) {
     event.preventDefault();
-    
-    // Get notification ID from the clicked element's data attribute
     const notificationId = button.getAttribute('data-notification-id');
-    
     fetch(`/messaging/notifications/${notificationId}/read/`, {
         method: 'POST',
         headers: {
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
-                          document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1],
+            'X-CSRFToken': csrfToken,
             'X-Requested-With': 'XMLHttpRequest'
         }
     }).then(() => {
-        // If it was a link click, redirect
         if (button.tagName === 'A') {
             window.location = button.href;
         } else {
-            // Otherwise just reload to update UI
             location.reload();
         }
     });
+}
+
+function deleteNotification(event, notificationId) {
+    event.stopPropagation();
+    if (!confirm('Delete this notification?')) return;
+
+    fetch(`/messaging/notifications/${notificationId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            const el = document.getElementById('notif-' + notificationId);
+            if (el) {
+                el.style.transition = 'opacity 0.3s, height 0.3s';
+                el.style.opacity = '0';
+                setTimeout(() => el.remove(), 300);
+            }
+            refreshNotifications();
+        }
+    });
+}
+
+function deleteAllNotifications() {
+    if (!confirm('Delete all notifications? This cannot be undone.')) return;
+
+    fetch('/messaging/notifications/delete-all/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    }).then(r => r.json()).then(data => {
+        if (data.success) location.reload();
+    });
+}
+
+function generateAiDigest() {
+    const panel = document.getElementById('ai-digest-panel');
+    const content = document.getElementById('ai-digest-content');
+    const btn = document.getElementById('btn-ai-digest');
+
+    panel.classList.add('show');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    content.innerHTML = '<span class="text-muted"><span class="prizm-spinner prizm-spinner--sm me-1 align-middle"></span> Generating digest…</span>';
+    btn.disabled = true;
+
+    fetch('/messaging/notifications/ai-digest/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.skip) {
+            panel.classList.remove('show');
+            btn.disabled = false;
+            btn.title = 'Not enough notifications to summarise (need at least 3)';
+            btn.style.opacity = '0.5';
+            return;
+        }
+        content.textContent = data.digest || 'No digest available.';
+        btn.disabled = false;
+    })
+    .catch(() => {
+        content.textContent = 'Failed to generate digest. Please try again.';
+        btn.disabled = false;
+    });
+}
+
+function closeDigest() {
+    document.getElementById('ai-digest-panel').classList.remove('show');
 }
 </script>
 {% endblock %}

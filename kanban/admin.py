@@ -4,10 +4,11 @@ from .models import (
     Board, Column, Task, TaskLabel, Comment, TaskActivity,
     TeamSkillProfile, SkillGap, SkillDevelopmentPlan,
     ScopeChangeSnapshot, ScopeCreepAlert, BoardInvitation,
-    CalendarEvent,
+    CalendarEvent, CalendarEventParticipant,
     GoalVersion, MissionVersion, StrategyVersion,
-    StrategicUpdate, Milestone, StrategicFollower,
-    UserFavorite,
+    StrategicUpdate, StrategicFollower,
+    UserFavorite, ChecklistItem,
+    WorkspaceMembership, WorkspaceInvitation,
 )
 from .automation_models import (
     BoardAutomation, ScheduledAutomation,
@@ -29,6 +30,8 @@ from .premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
 from .stress_test_models import StressTestSession, ImmunityScore, StressTestScenario, Vaccine
 from .scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
 from .whatif_models import WhatIfScenario
+from .access_request_models import AccessRequest
+from .discovery_models import DiscoveryIdea, IdeaComment, IdeaPromotion
 
 # Import resource leveling admin
 from .resource_leveling_admin import (
@@ -146,13 +149,6 @@ class StrategicUpdateAdmin(admin.ModelAdmin):
     readonly_fields = ('content_type', 'object_id', 'author', 'status', 'message', 'created_at')
 
 
-@admin.register(Milestone)
-class MilestoneAdmin(admin.ModelAdmin):
-    list_display = ('name', 'strategy', 'due_date', 'status')
-    list_filter = ('status', 'due_date')
-    search_fields = ('name', 'strategy__name')
-
-
 @admin.register(StrategicFollower)
 class StrategicFollowerAdmin(admin.ModelAdmin):
     list_display = ('user', 'content_type', 'object_id', 'followed_at')
@@ -181,12 +177,34 @@ class BoardInvitationAdmin(admin.ModelAdmin):
     readonly_fields = ('token', 'created_at', 'accepted_at', 'accepted_by')
 
 
+@admin.register(WorkspaceMembership)
+class WorkspaceMembershipAdmin(admin.ModelAdmin):
+    list_display = ('user', 'workspace', 'role', 'added_at', 'added_by')
+    list_filter = ('role', 'added_at')
+    search_fields = ('user__username', 'user__email', 'workspace__name')
+    readonly_fields = ('added_at',)
+
+
+@admin.register(WorkspaceInvitation)
+class WorkspaceInvitationAdmin(admin.ModelAdmin):
+    list_display = ('email', 'workspace', 'role', 'invited_by', 'status', 'created_at', 'expires_at', 'accepted_by')
+    list_filter = ('status', 'role', 'created_at')
+    search_fields = ('email', 'workspace__name', 'invited_by__username')
+    readonly_fields = ('token', 'created_at', 'accepted_at', 'accepted_by')
+
+
+class CalendarEventParticipantInline(admin.TabularInline):
+    model = CalendarEventParticipant
+    extra = 0
+    readonly_fields = ('created_at',)
+
+
 @admin.register(CalendarEvent)
 class CalendarEventAdmin(admin.ModelAdmin):
     list_display = ('title', 'event_type', 'start_datetime', 'end_datetime', 'is_all_day', 'board', 'created_by', 'created_at')
     list_filter = ('event_type', 'is_all_day', 'start_datetime')
     search_fields = ('title', 'description', 'created_by__username', 'board__name')
-    filter_horizontal = ('participants',)
+    inlines = [CalendarEventParticipantInline]
     readonly_fields = ('created_at', 'updated_at')
 
 @admin.register(Column)
@@ -201,12 +219,20 @@ class TaskLabelAdmin(admin.ModelAdmin):
     list_filter = ('board',)
     search_fields = ('name', 'board__name')
 
+class ChecklistItemInline(admin.TabularInline):
+    model = ChecklistItem
+    extra = 0
+    fields = ('position', 'title', 'is_completed', 'priority', 'estimated_effort', 'source')
+    readonly_fields = ('source',)
+
+
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = ('title', 'column', 'priority', 'due_date', 'assigned_to', 'created_by', 'parent_task')
-    list_filter = ('column', 'priority', 'due_date', 'created_at')
+    list_display = ('title', 'column', 'priority', 'item_type', 'due_date', 'assigned_to', 'created_by', 'parent_task')
+    list_filter = ('column', 'priority', 'item_type', 'due_date', 'created_at')
     search_fields = ('title', 'description')
     filter_horizontal = ('labels', 'related_tasks')
+    inlines = [ChecklistItemInline]
     
     fieldsets = (
         ('Basic Information', {
@@ -1075,6 +1101,18 @@ class PreMortemAnalysisAdmin(admin.ModelAdmin):
     inlines = [PreMortemScenarioAcknowledgmentInline]
 
 
+# -----------------------------------------------------------------------
+# Spectra Access Requests
+# -----------------------------------------------------------------------
+@admin.register(AccessRequest)
+class AccessRequestAdmin(admin.ModelAdmin):
+    list_display = ('requester', 'board', 'owner', 'status', 'trigger', 'requested_role', 'created_at', 'resolved_at')
+    list_filter = ('status', 'trigger', 'requested_role', 'created_at')
+    search_fields = ('requester__username', 'board__name', 'owner__username', 'message')
+    readonly_fields = ('created_at', 'resolved_at')
+    raw_id_fields = ('requester', 'board', 'owner', 'resolved_by')
+
+
 @admin.register(PreMortemScenarioAcknowledgment)
 class PreMortemScenarioAcknowledgmentAdmin(admin.ModelAdmin):
     list_display = ('pre_mortem', 'scenario_index', 'acknowledged_by', 'acknowledged_at')
@@ -1217,3 +1255,125 @@ class UserCredibilityScoreAdmin(admin.ModelAdmin):
     search_fields = ('user__username',)
     readonly_fields = ('tokens_reset_date',)
 
+
+# ── Project Signals & Confidence Score ─────────────────────────────────────
+from kanban.project_signals_models import ProjectSignal, ProjectConfidenceScore
+
+
+@admin.register(ProjectSignal)
+class ProjectSignalAdmin(admin.ModelAdmin):
+    list_display = ('board', 'signal_type', 'impact', 'strength', 'description', 'ai_generated', 'timestamp')
+    list_filter = ('signal_type', 'impact', 'ai_generated', 'timestamp')
+    search_fields = ('board__name', 'description')
+    readonly_fields = ('timestamp',)
+
+
+@admin.register(ProjectConfidenceScore)
+class ProjectConfidenceScoreAdmin(admin.ModelAdmin):
+    list_display = ('board', 'composite_score', 'scope_score', 'budget_score', 'schedule_score', 'trend', 'computed_at')
+    list_filter = ('trend', 'computed_at')
+    search_fields = ('board__name',)
+    readonly_fields = ('computed_at',)
+
+
+# ── Feature Guide ─────────────────────────────────────────────────────────
+
+from .feature_guide_models import FeatureGuide
+
+
+@admin.register(FeatureGuide)
+class FeatureGuideAdmin(admin.ModelAdmin):
+    list_display = ('feature_name', 'feature_key', 'is_active', 'order', 'updated_at')
+    list_filter = ('is_active',)
+    list_editable = ('is_active', 'order')
+    search_fields = ('feature_name', 'feature_key', 'brief_description')
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        (None, {
+            'fields': ('feature_key', 'feature_name', 'is_active', 'order'),
+        }),
+        ('Content', {
+            'fields': ('brief_description', 'detailed_description'),
+            'description': 'Brief description appears in the popover. Detailed description appears in the modal (supports HTML).',
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+
+
+# ── PrizmDiscovery ────────────────────────────────────────────────────────────
+
+class IdeaCommentInline(admin.TabularInline):
+    model = IdeaComment
+    extra = 0
+    readonly_fields = ('created_at',)
+    fields = ('author', 'content', 'created_at')
+
+
+@admin.register(DiscoveryIdea)
+class DiscoveryIdeaAdmin(admin.ModelAdmin):
+    list_display = ('title', 'organization', 'stage', 'source', 'submitted_by', 'is_scored', 'is_demo', 'created_at')
+    list_filter = ('stage', 'source', 'is_demo', 'created_at')
+    search_fields = ('title', 'description', 'organization__name', 'submitted_by__username')
+    readonly_fields = ('created_at', 'updated_at', 'ai_scored_at', 'promoted_at')
+    inlines = [IdeaCommentInline]
+
+    def is_scored(self, obj):
+        return obj.is_scored
+    is_scored.boolean = True
+    is_scored.short_description = 'AI Scored?'
+
+
+@admin.register(IdeaComment)
+class IdeaCommentAdmin(admin.ModelAdmin):
+    list_display = ('idea', 'author', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('idea__title', 'author__username', 'content')
+    readonly_fields = ('created_at',)
+
+
+@admin.register(IdeaPromotion)
+class IdeaPromotionAdmin(admin.ModelAdmin):
+    list_display = ('idea', 'board', 'promoted_by', 'promoted_at')
+    list_filter = ('promoted_at',)
+    search_fields = ('idea__title', 'board__name', 'promoted_by__username')
+    readonly_fields = ('promoted_at',)
+    filter_horizontal = ('tasks',)
+
+
+# ── Custom Fields ─────────────────────────────────────────────────────────
+
+from .custom_field_models import (
+    CustomFieldDefinition,
+    CustomFieldOption,
+    TaskCustomFieldValue,
+)
+
+
+class CustomFieldOptionInline(admin.TabularInline):
+    model = CustomFieldOption
+    extra = 0
+    fields = ('value', 'is_default', 'position')
+
+
+@admin.register(CustomFieldDefinition)
+class CustomFieldDefinitionAdmin(admin.ModelAdmin):
+    list_display = (
+        'name', 'field_type', 'workspace', 'is_required',
+        'exclude_from_ai', 'applies_to_epics', 'is_active', 'position',
+    )
+    list_filter = ('field_type', 'is_active', 'exclude_from_ai', 'applies_to_epics', 'workspace')
+    search_fields = ('name', 'workspace__name')
+    readonly_fields = ('created_at', 'updated_at')
+    inlines = [CustomFieldOptionInline]
+
+
+@admin.register(TaskCustomFieldValue)
+class TaskCustomFieldValueAdmin(admin.ModelAdmin):
+    list_display = ('task', 'field', 'display_value', 'updated_by', 'updated_at')
+    list_filter = ('field__field_type', 'field')
+    search_fields = ('task__title', 'field__name', 'value_text')
+    readonly_fields = ('updated_at',)
+    filter_horizontal = ('selected_options',)

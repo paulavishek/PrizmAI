@@ -1,20 +1,166 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static feature_guide_tags %}
 
 {% block title %}Scope Autopsy — {{ board.name }}{% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">Scope Autopsy</li>
+        </ol>
+    </nav>
+
     <!-- Header -->
     <div class="row mb-4">
         <div class="col-md-8">
-            <h2><i class="fas fa-microscope text-warning"></i> Scope Autopsy — {{ board.name }}</h2>
-            <p class="text-muted">Forensic reconstruction of how your project's scope grew — every expansion traced to its cause, person, date, and cost.</p>
-        </div>
+            <h2><i class="fas fa-microscope text-warning"></i> Scope Autopsy</h2>
+            <p class="text-muted">{{ board.name }} — Forensic reconstruction of how your project's scope grew — every expansion traced to its cause, person, date, and cost.</p>            <button class="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold"
+                    style="color: #0d6efd;"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#scopeAutopsyGuide"
+                    aria-expanded="false"
+                    aria-controls="scopeAutopsyGuide">
+                <i class="fas fa-question-circle me-1"></i>
+                <span id="scope-autopsy-guide-label">How does this work?</span>
+                <i class="fas fa-chevron-down ms-1 scope-autopsy-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+            </button>        </div>
         <div class="col-md-4 text-end">
-            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
+            <a href="{% url 'scope_dashboard' board.id %}" class="btn btn-outline-primary me-2">
+                <i class="fas fa-chart-area me-1"></i> Scope Dashboard
+            </a>
+            <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back">
                 <i class="fas fa-arrow-left me-1"></i> Back to Board
             </a>
+        </div>
+    </div>
+
+    <!-- ── How It Works — Collapsible Guide ── -->
+    <div class="collapse mb-4" id="scopeAutopsyGuide">
+        <div class="card border shadow-sm">
+            <div class="card-body p-4">
+                <div class="row g-4">
+
+                    <!-- What is this? -->
+                    <div class="col-12">
+                        <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-microscope text-warning me-2"></i>What is Scope Autopsy?</h6>
+                        <p class="mb-0 small text-secondary">A forensic post-mortem that traces every scope expansion in your project to its exact cause, contributor, date, and cost. Like a detective reconstructing a crime scene, the Scope Autopsy builds a timeline of how your project grew beyond its original boundaries — then generates exportable PDF reports that turn scope history into actionable lessons for future projects.</p>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Four forensic dimensions -->
+                    <div class="col-12">
+                        <h6 class="mb-3 fw-semibold text-dark"><i class="fas fa-search me-1 text-warning"></i>Four forensic dimensions analysed for every scope change</h6>
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #0891b2 !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-calendar-alt" style="color:#0891b2;"></i>
+                                        <strong class="small">When</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-0">The exact date each scope change was introduced, building a chronological timeline of drift.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #7c3aed !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-user" style="color:#7c3aed;"></i>
+                                        <strong class="small">Who</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-0">Which team member introduced or approved the change, enabling honest accountability.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #d97706 !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-question-circle text-warning"></i>
+                                        <strong class="small">Why</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-0">The root cause category: requirement change, stakeholder request, discovered complexity, or gold plating.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #c0392b !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-dollar-sign text-danger"></i>
+                                        <strong class="small">Cost</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-0">The quantified impact: days delayed or budget overrun attributable to this specific change.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Change categories vs What you get -->
+                    <div class="col-md-7">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-table me-1 text-info"></i>Scope change categories</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-muted">Category</th>
+                                        <th class="text-muted">Typical frequency</th>
+                                        <th class="text-muted">Preventable?</th>
+                                        <th class="text-muted">Best action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><span class="badge bg-danger" style="font-size:0.65rem;">Requirement Change</span></td>
+                                        <td class="text-dark">High</td>
+                                        <td class="text-dark">Partially</td>
+                                        <td class="text-dark">Better upfront specs</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge bg-warning text-dark" style="font-size:0.65rem;">Stakeholder Request</span></td>
+                                        <td class="text-dark">Medium</td>
+                                        <td class="text-dark">Yes — via change control</td>
+                                        <td class="text-dark">Formal change request process</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge bg-info text-dark" style="font-size:0.65rem;">Discovered Complexity</span></td>
+                                        <td class="text-dark">Low–Medium</td>
+                                        <td class="text-dark">Partially</td>
+                                        <td class="text-dark">Better Pre-Mortem analysis</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge bg-secondary" style="font-size:0.65rem;">Gold Plating</span></td>
+                                        <td class="text-dark">Low</td>
+                                        <td class="text-dark">Yes</td>
+                                        <td class="text-dark">Strict scope discipline</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="col-md-5">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-file-export me-1 text-primary"></i>What you get from an autopsy</h6>
+                        <ul class="small text-secondary ps-3 mb-3">
+                            <li class="mb-1"><strong>Forensic timeline</strong> — every scope change plotted chronologically</li>
+                            <li class="mb-1"><strong>AI root cause analysis</strong> — the dominant pattern driving your drift</li>
+                            <li class="mb-1"><strong>Cost attribution</strong> — total delay and budget impact quantified</li>
+                            <li><strong>Exportable PDF report</strong> — share findings with stakeholders</li>
+                        </ul>
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-list-ol me-1 text-info"></i>Recommended workflow</h6>
+                        <ol class="small ps-3 mb-0 text-secondary">
+                            <li class="mb-1">Run the Autopsy — AI reconstructs your scope history</li>
+                            <li class="mb-1">Read the forensic timeline — spot the inflection points</li>
+                            <li class="mb-1">Identify the dominant change category driving drift</li>
+                            <li class="mb-1">Act on the root cause pattern for future projects</li>
+                            <li>Export the PDF report for stakeholder review</li>
+                        </ol>
+                    </div>
+
+                </div>
+            </div>
         </div>
     </div>
 
@@ -61,7 +207,7 @@
             </p>
 
             {% if has_quota %}
-            <button id="btn-run-autopsy" class="btn btn-warning btn-lg text-white" onclick="runAutopsy()">
+            <button id="btn-run-autopsy" class="btn btn-primary btn-lg text-white" onclick="runAutopsy()">
                 <i class="fas fa-microscope me-2"></i> Run Scope Autopsy
             </button>
             <p class="text-muted mt-2"><small>Estimated analysis time: 15–20 seconds</small></p>
@@ -75,15 +221,13 @@
     </div>
 
     {# Loading spinner (shown after click) #}
-    <div id="autopsy-loading" class="text-center py-5" style="display:none;">
-        <div class="spinner-border text-warning" role="status" style="width:3rem;height:3rem;">
-            <span class="visually-hidden">Analyzing…</span>
-        </div>
+    <div id="autopsy-loading" class="text-center py-5" style="display:none;" data-prizm-container>
+        <div class="prizm-spinner prizm-spinner--lg"></div>
         <div class="mt-3">
             <div class="progress mx-auto" style="max-width:400px;height:8px;">
                 <div id="autopsy-progress" class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width:10%"></div>
             </div>
-            <p class="mt-2 text-muted" id="autopsy-status-text">Collecting scope events…</p>
+            <p class="mt-2 prizm-loading-message-inline" id="autopsy-status-text" data-prizm-messages="scopeAutopsy">Collecting scope events…</p>
         </div>
     </div>
 
@@ -92,14 +236,12 @@
     {# STATE C — Generating (poll until complete)                    #}
     {# ============================================================ #}
     <div class="text-center py-5">
-        <div class="spinner-border text-warning" role="status" style="width:3rem;height:3rem;">
-            <span class="visually-hidden">Analyzing…</span>
-        </div>
+        <div class="prizm-spinner prizm-spinner--lg"></div>
         <div class="mt-3">
             <div class="progress mx-auto" style="max-width:400px;height:8px;">
                 <div id="autopsy-progress" class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width:40%"></div>
             </div>
-            <p class="mt-2 text-muted" id="autopsy-status-text">Analyzing scope history…</p>
+            <p class="mt-2 prizm-loading-message-inline" id="autopsy-status-text" data-prizm-messages="scopeAutopsy">Analyzing scope history…</p>
         </div>
     </div>
 
@@ -115,22 +257,20 @@
                 {{ latest_report.ai_summary|default:"The analysis could not be completed. Please try again." }}
             </p>
             {% if has_quota %}
-            <button id="btn-run-autopsy" class="btn btn-warning btn-lg text-white" onclick="runAutopsy()">
+            <button id="btn-run-autopsy" class="btn btn-primary btn-lg text-white" onclick="runAutopsy()">
                 <i class="fas fa-redo me-2"></i> Retry Scope Autopsy
             </button>
             {% endif %}
         </div>
     </div>
     {# Loading spinner (shown after click) #}
-    <div id="autopsy-loading" class="text-center py-5" style="display:none;">
-        <div class="spinner-border text-warning" role="status" style="width:3rem;height:3rem;">
-            <span class="visually-hidden">Analyzing…</span>
-        </div>
+    <div id="autopsy-loading" class="text-center py-5" style="display:none;" data-prizm-container>
+        <div class="prizm-spinner prizm-spinner--lg"></div>
         <div class="mt-3">
             <div class="progress mx-auto" style="max-width:400px;height:8px;">
                 <div id="autopsy-progress" class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width:10%"></div>
             </div>
-            <p class="mt-2 text-muted" id="autopsy-status-text">Collecting scope events…</p>
+            <p class="mt-2 prizm-loading-message-inline" id="autopsy-status-text" data-prizm-messages="scopeAutopsy">Collecting scope events…</p>
         </div>
     </div>
 
@@ -139,6 +279,18 @@
     {# STATE D — Results                                             #}
     {# ============================================================ #}
 
+    {# Loading spinner shown when Re-run is clicked #}
+    <div id="autopsy-loading" class="text-center py-5" style="display:none;" data-prizm-container>
+        <div class="prizm-spinner prizm-spinner--lg"></div>
+        <div class="mt-3">
+            <div class="progress mx-auto" style="max-width:400px;height:8px;">
+                <div id="autopsy-progress" class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width:10%"></div>
+            </div>
+            <p class="mt-2 prizm-loading-message-inline" id="autopsy-status-text" data-prizm-messages="scopeAutopsy">Collecting scope events…</p>
+        </div>
+    </div>
+
+    <div id="results-content">
     {# ── Summary bar ─────────────────────────────────────────────── #}
     <div class="card mb-4">
         <div class="card-body d-flex flex-wrap align-items-center justify-content-between">
@@ -152,7 +304,7 @@
             </div>
             <div>
                 {% if has_quota %}
-                <button class="btn btn-sm btn-outline-warning me-2" onclick="runAutopsy()">
+                <button id="btn-run-autopsy" class="btn btn-sm btn-outline-warning me-2" onclick="runAutopsy()">
                     <i class="fas fa-redo me-1"></i> Re-run
                 </button>
                 {% endif %}
@@ -205,10 +357,26 @@
         </div>
     </div>
 
+    {# ── Fix 1: Baseline mismatch notice ────────────────────────── #}
+    {% if baseline_mismatch %}
+    <div class="alert alert-info d-flex align-items-start gap-2 mb-4 py-3" role="alert">
+        <i class="fas fa-info-circle text-info mt-1 flex-shrink-0"></i>
+        <div class="small">
+            <strong>Note:</strong>
+            This Autopsy uses the earliest detectable task count as its historical baseline — the project's original scope.
+            The Scope Dashboard baseline is a separate monitoring checkpoint set manually.
+            These two numbers serve different purposes and it is normal for them to differ.
+        </div>
+    </div>
+    {% endif %}
+
     {# ── AI Summary ──────────────────────────────────────────────── #}
     {% if latest_report.ai_summary %}
     <div class="card mb-4">
-        <div class="card-header"><i class="fas fa-wand-magic-sparkles me-2"></i> AI Summary</div>
+        <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-wand-magic-sparkles me-2"></i> AI Summary</span>
+        <small class="text-muted">Generated {{ latest_report.created_at|timesince }} ago</small>
+    </div>
         <div class="card-body">
             <p>{{ latest_report.ai_summary }}</p>
         </div>
@@ -241,7 +409,8 @@
 
                     {% for event in enriched_events %}
                     <div class="timeline-node text-center me-2" style="min-width:160px;cursor:pointer;"
-                         onclick="toggleEventDetail({{ forloop.counter0 }})">
+                         onclick="toggleEventDetail({{ forloop.counter0 }})"
+                         id="timeline-node-{{ forloop.counter0 }}">
                         {# Dot #}
                         <div class="mx-auto rounded-circle d-flex align-items-center justify-content-center"
                              style="width:42px;height:42px;
@@ -249,7 +418,13 @@
                                     color:#fff;font-size:13px;">
                             +{{ event.net_task_change }}
                         </div>
-                        <div class="mt-2 small"><strong>{{ event.title|truncatewords:5 }}</strong></div>
+                        <div class="mt-2 small" data-bs-toggle="tooltip" data-bs-placement="top"
+                             title="{% if event.scope_reason_label %}{{ event.scope_reason_label }} — {{ event.title }}{% else %}{{ event.title }}{% endif %}">
+                            <strong>{% if event.scope_reason_label %}{{ event.scope_reason_label }}{% else %}{{ event.title|truncatewords:5 }}{% endif %}</strong>
+                        </div>
+                        {% if event.scope_reason_note %}
+                        <div class="small text-muted" style="font-size:0.7rem;max-width:150px;word-wrap:break-word;margin-top:2px;">{{ event.scope_reason_note|truncatechars:50 }}</div>
+                        {% endif %}
                         <div class="small text-muted">{{ event.date|date:"M d, Y" }}</div>
                         <div class="small">
                             {% if event.is_major_event %}
@@ -266,6 +441,23 @@
                     {% endif %}
                     {% endfor %}
 
+                    {# Fix 3: Undocumented growth gap node #}
+                    {% if undocumented_gap > 0 %}
+                    <div class="align-self-center" style="flex:0 0 30px;height:2px;background:#dee2e6;margin-top:-30px;"></div>
+                    <div class="timeline-node text-center me-2" style="min-width:160px;"
+                         data-bs-toggle="tooltip" data-bs-placement="top"
+                         title="These tasks were added without a recorded reason. Use the Scope Change prompt when adding tasks to track future changes.">
+                        <div class="mx-auto d-flex align-items-center justify-content-center"
+                             style="width:42px;height:42px;border-radius:50%;background:transparent;
+                                    border:2px dashed #6c757d;color:var(--text-muted);font-size:12px;cursor:default;">
+                            +{{ undocumented_gap }}
+                        </div>
+                        <div class="mt-2 small text-muted"><strong>Undocumented growth (+{{ undocumented_gap }} tasks)</strong></div>
+                        <div class="small text-muted" style="font-size:0.7rem;">No recorded reason</div>
+                        <span class="badge bg-light text-secondary border" style="font-size:0.65rem;">Untracked</span>
+                    </div>
+                    {% endif %}
+
                     {# Now dot #}
                     <div class="align-self-center" style="flex:0 0 40px;height:2px;background:#dee2e6;margin-top:-30px;"></div>
                     <div class="timeline-node text-center" style="min-width:140px;">
@@ -281,7 +473,7 @@
 
             {# Expandable detail cards for each event #}
             {% for event in enriched_events %}
-            <div id="event-detail-{{ forloop.counter0 }}" class="border-top p-3" style="display:none;background:#f8f9fa;">
+            <div id="event-detail-{{ forloop.counter0 }}" class="border-top p-3" style="display:none;background:var(--bg-tertiary);">
                 <div class="row">
                     <div class="col-md-6">
                         <h6>{{ event.title }}</h6>
@@ -289,6 +481,14 @@
                         <span class="badge bg-secondary">{{ event.get_source_type_display }}</span>
                         {% if event.added_by_name %}
                         <span class="badge bg-info text-dark">By: {{ event.added_by_name }}</span>
+                        {% endif %}
+                        {% if event.scope_reason_label %}
+                        <div class="mt-2">
+                            <span class="badge bg-success"><i class="fas fa-tag me-1"></i>{{ event.scope_reason_label }}</span>
+                            {% if event.scope_reason_note %}
+                            <p class="text-muted small mt-1 mb-0"><em>{{ event.scope_reason_note }}</em></p>
+                            {% endif %}
+                        </div>
                         {% endif %}
                     </div>
                     <div class="col-md-6 text-md-end">
@@ -310,8 +510,8 @@
 
     {# ── Pattern Analysis ────────────────────────────────────────── #}
     {% if latest_report.pattern_analysis %}
-    <div class="card mb-4">
-        <div class="card-header"><i class="fas fa-sync-alt me-2"></i> Pattern Analysis</div>
+    <div class="card mb-4 border-start border-info border-3">
+        <div class="card-header bg-info bg-opacity-10"><i class="fas fa-sync-alt me-2 text-info"></i> Pattern Analysis</div>
         <div class="card-body">
             {{ latest_report.pattern_analysis|linebreaksbr }}
         </div>
@@ -337,7 +537,7 @@
                                 {% elif rec.applies_to == 'stakeholder_management' %}bg-info
                                 {% elif rec.applies_to == 'technical' %}bg-secondary
                                 {% else %}bg-light text-dark{% endif %}">
-                                {{ rec.applies_to|default:"general" }}
+                                {{ rec.applies_to|default:"General"|title }}
                             </span>
                             {% else %}
                             <p class="card-text">{{ rec }}</p>
@@ -362,6 +562,8 @@
     </div>
     {% endif %}
 
+    </div>{# end results-content #}
+
     {% endif %}{# end state checks #}
 </div>
 
@@ -374,23 +576,49 @@ const BOARD_ID = {{ board.id }};
 const CSRF_TOKEN = '{{ csrf_token }}';
 let REPORT_ID = {% if latest_report %}{{ latest_report.id }}{% else %}null{% endif %};
 
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el, { boundary: 'window' });
+    });
+});
+
 // ── Toggle event detail card ────────────────────────────────────────
 function toggleEventDetail(idx) {
     const el = document.getElementById('event-detail-' + idx);
     if (!el) return;
-    // Close all others
+    // Close all others and remove highlight
     document.querySelectorAll('[id^="event-detail-"]').forEach(function(d) {
         if (d.id !== 'event-detail-' + idx) d.style.display = 'none';
     });
-    el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+    document.querySelectorAll('.timeline-node').forEach(function(n) {
+        n.style.outline = 'none';
+        n.style.borderRadius = '';
+        n.style.background = '';
+    });
+    var isShowing = el.style.display === 'none';
+    el.style.display = isShowing ? 'block' : 'none';
+    // Highlight active node
+    if (isShowing) {
+        var node = document.getElementById('timeline-node-' + idx);
+        if (node) {
+            node.style.outline = '2px solid #0d6efd';
+            node.style.borderRadius = '8px';
+            node.style.background = 'rgba(13,110,253,0.05)';
+        }
+    }
 }
 
 // ── Run Scope Autopsy ───────────────────────────────────────────────
 function runAutopsy() {
     const btn = document.getElementById('btn-run-autopsy');
     const loader = document.getElementById('autopsy-loading');
-    if (btn) btn.style.display = 'none';
-    if (btn && btn.closest('.card')) btn.closest('.card').style.display = 'none';
+    const resultsContent = document.getElementById('results-content');
+    if (btn) btn.disabled = true;
+    if (resultsContent) {
+        resultsContent.style.display = 'none';
+    } else if (btn && btn.closest('.card')) {
+        btn.closest('.card').style.display = 'none';
+    }
     if (loader) loader.style.display = 'block';
 
     updateProgress(15, 'Collecting scope events…');
@@ -481,5 +709,22 @@ document.addEventListener('DOMContentLoaded', function() {
     pollStatus();
 });
 {% endif %}
+
+// Guide toggle label
+var saGuide = document.getElementById('scopeAutopsyGuide');
+if (saGuide) {
+    saGuide.addEventListener('shown.bs.collapse', function() {
+        var label = document.getElementById('scope-autopsy-guide-label');
+        if (label) label.textContent = 'Hide guide';
+        var chevron = document.querySelector('.scope-autopsy-guide-chevron');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+    });
+    saGuide.addEventListener('hidden.bs.collapse', function() {
+        var label = document.getElementById('scope-autopsy-guide-label');
+        if (label) label.textContent = 'How does this work?';
+        var chevron = document.querySelector('.scope-autopsy-guide-chevron');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    });
+}
 </script>
 {% endblock %}

@@ -30,6 +30,28 @@ class WikiCategory(models.Model):
         blank=True,
         help_text="Organization (optional - MVP mode uses demo org for all wiki data)"
     )
+    # Workspace tenant boundary (org is retired from access scoping).
+    workspace = models.ForeignKey(
+        'kanban.Workspace',
+        on_delete=models.SET_NULL,
+        related_name='wiki_categories',
+        null=True,
+        blank=True,
+        help_text='Workspace this category belongs to (scopes visibility).'
+    )
+    # Sandbox isolation — wiki content is workspace-scoped, but the demo sandbox
+    # is a single shared workspace, so per-user isolation comes from cloning the
+    # demo content per user (mirrors Discovery / the per-user board copies).
+    # None = canonical demo template or a real-org row; set = a specific demo
+    # user's private sandbox copy. See project_demo_sandbox_isolation_model.
+    sandbox_owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        db_index=True,
+        related_name='sandbox_wiki_categories',
+        help_text="Owning demo user for sandbox-isolated copies; None for template/real rows.",
+    )
     icon = models.CharField(max_length=50, default='folder', help_text='Font Awesome icon name')
     color = models.CharField(max_length=7, default='#3498db', help_text='Hex color code')
     position = models.IntegerField(default=0)
@@ -83,7 +105,27 @@ class WikiPage(models.Model):
         blank=True,
         help_text="Organization (optional - MVP mode uses demo org for all wiki data)"
     )
-    
+    # Workspace tenant boundary (org is retired from access scoping).
+    workspace = models.ForeignKey(
+        'kanban.Workspace',
+        on_delete=models.SET_NULL,
+        related_name='wiki_pages',
+        null=True,
+        blank=True,
+        help_text='Workspace this page belongs to (scopes visibility).'
+    )
+    # Sandbox isolation — see WikiCategory.sandbox_owner. Demo wiki pages are
+    # cloned per user so one demo user's edits never bleed to another.
+    # None = canonical demo template or a real-org page; set = a demo user's copy.
+    sandbox_owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        db_index=True,
+        related_name='sandbox_wiki_pages',
+        help_text="Owning demo user for sandbox-isolated copies; None for template/real rows.",
+    )
+
     # Page metadata
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_wiki_pages')
     updated_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='updated_wiki_pages')
@@ -156,6 +198,7 @@ class WikiPage(models.Model):
         """Convert markdown content to HTML and sanitize to prevent XSS"""
         import bleach
         import re
+        from kanban.utils.sanitize import sanitize_html
         
         # Convert markdown to HTML with TOC extension
         md = markdown.Markdown(
@@ -175,44 +218,10 @@ class WikiPage(models.Model):
         
         html = md.convert(self.content)
         
-        # Define allowed HTML tags and attributes (security whitelist)
-        allowed_tags = [
-            'p', 'br', 'strong', 'em', 'u', 's', 'del', 'ins',
-            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'ul', 'ol', 'li',
-            'a', 'code', 'pre', 'blockquote',
-            'table', 'thead', 'tbody', 'tr', 'th', 'td',
-            'hr', 'img', 'div', 'span'
-        ]
+        # Sanitize using shared utility (prevents XSS, allows standard tags)
+        clean_html = sanitize_html(html)
         
-        allowed_attributes = {
-            'a': ['href', 'title', 'rel'],
-            'img': ['src', 'alt', 'title', 'width', 'height'],
-            'code': ['class'],  # For syntax highlighting
-            'pre': ['class'],
-            'div': ['class'],
-            'span': ['class'],
-            'h1': ['id'],  # Allow id for anchor links
-            'h2': ['id'],
-            'h3': ['id'],
-            'h4': ['id'],
-            'h5': ['id'],
-            'h6': ['id'],
-        }
-        
-        # Allowed protocols for links (prevent javascript: and data: URLs)
-        allowed_protocols = ['http', 'https', 'mailto']
-        
-        # Sanitize HTML to prevent XSS attacks
-        clean_html = bleach.clean(
-            html,
-            tags=allowed_tags,
-            attributes=allowed_attributes,
-            protocols=allowed_protocols,
-            strip=True
-        )
-        
-        # Linkify URLs (optional - converts plain URLs to clickable links)
+        # Linkify URLs (converts plain URLs to clickable links)
         clean_html = bleach.linkify(
             clean_html,
             parse_email=True,
@@ -328,6 +337,15 @@ class MeetingNotes(models.Model):
         blank=True,
         help_text="Organization (optional - MVP mode uses demo org)"
     )
+    # Workspace tenant boundary (org is retired from access scoping).
+    workspace = models.ForeignKey(
+        'kanban.Workspace',
+        on_delete=models.SET_NULL,
+        related_name='meeting_notes',
+        null=True,
+        blank=True,
+        help_text='Workspace these notes belong to (scopes visibility).'
+    )
     attendees = models.ManyToManyField(User, related_name='meeting_notes_attended')
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_meeting_notes')
     
@@ -377,6 +395,7 @@ class MeetingNotes(models.Model):
     def get_html_content(self):
         """Convert markdown content to HTML and sanitize to prevent XSS"""
         import bleach
+        from kanban.utils.sanitize import sanitize_html
         
         # Convert markdown to HTML with TOC extension
         md = markdown.Markdown(
@@ -396,42 +415,8 @@ class MeetingNotes(models.Model):
         
         html = md.convert(self.content)
         
-        # Define allowed HTML tags and attributes (security whitelist)
-        allowed_tags = [
-            'p', 'br', 'strong', 'em', 'u', 's', 'del', 'ins',
-            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'ul', 'ol', 'li',
-            'a', 'code', 'pre', 'blockquote',
-            'table', 'thead', 'tbody', 'tr', 'th', 'td',
-            'hr', 'img', 'div', 'span'
-        ]
-        
-        allowed_attributes = {
-            'a': ['href', 'title', 'rel'],
-            'img': ['src', 'alt', 'title', 'width', 'height'],
-            'code': ['class'],
-            'pre': ['class'],
-            'div': ['class'],
-            'span': ['class'],
-            'h1': ['id'],  # Allow id for anchor links
-            'h2': ['id'],
-            'h3': ['id'],
-            'h4': ['id'],
-            'h5': ['id'],
-            'h6': ['id'],
-        }
-        
-        # Allowed protocols for links (prevent javascript: and data: URLs)
-        allowed_protocols = ['http', 'https', 'mailto']
-        
-        # Sanitize HTML to prevent XSS attacks
-        clean_html = bleach.clean(
-            html,
-            tags=allowed_tags,
-            attributes=allowed_attributes,
-            protocols=allowed_protocols,
-            strip=True
-        )
+        # Sanitize using shared utility (prevents XSS, allows standard tags)
+        clean_html = sanitize_html(html)
         
         # Linkify URLs
         clean_html = bleach.linkify(
@@ -653,6 +638,115 @@ class WikiMeetingTask(models.Model):
     
     def __str__(self):
         return f"Task '{self.task.title}' from {self.meeting_analysis.wiki_page.title}"
+
+
+class WikiDocumentationAnalysis(models.Model):
+    """
+    AI-powered analysis of a general documentation wiki page.
+    Mirrors WikiMeetingAnalysis: stores extracted action items / TODOs and
+    supporting insights, content-hash cached so re-analyzing unchanged content
+    reuses the existing row. Persisting it lets action items be promoted to
+    Kanban tasks (see WikiDocumentationTask) with a traceability trail.
+    """
+    PROCESSING_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+
+    # Link to wiki page (already workspace/sandbox-scoped, so no tenant FK needed here)
+    wiki_page = models.ForeignKey(WikiPage, on_delete=models.CASCADE, related_name='documentation_analyses')
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        related_name='wiki_documentation_analyses',
+        null=True,
+        blank=True,
+        help_text="Organization (optional - MVP mode uses demo org)"
+    )
+
+    # Processing metadata
+    processed_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='processed_documentation_analyses')
+    processed_at = models.DateTimeField(auto_now_add=True)
+    processing_status = models.CharField(max_length=20, choices=PROCESSING_STATUS_CHOICES, default='pending')
+    processing_error = models.TextField(blank=True, null=True, help_text='Error message if processing failed')
+
+    # AI Analysis Results (full documentation analysis JSON — see analyze_wiki_documentation)
+    analysis_results = models.JSONField(default=dict, blank=True, help_text="""
+        Complete AI analysis including:
+        - summary, key_points
+        - action_items: [{title, description, priority, type, source_context, ...}]
+        - suggested_improvements, related_topics, questions_raised, metadata
+    """)
+
+    # Quick access counts (denormalized for performance)
+    action_items_count = models.IntegerField(default=0, help_text='Number of action items extracted')
+    tasks_created_count = models.IntegerField(default=0, help_text='Number of tasks created from this analysis')
+
+    # Analysis metadata
+    content_hash = models.CharField(max_length=64, help_text='Hash of content analyzed (to detect changes)')
+
+    # User actions
+    user_reviewed = models.BooleanField(default=False, help_text='Has user reviewed the analysis?')
+    user_notes = models.TextField(blank=True, null=True, help_text='User notes about the analysis')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-processed_at']
+        indexes = [
+            models.Index(fields=['wiki_page', '-processed_at']),
+            models.Index(fields=['processing_status']),
+        ]
+        verbose_name = 'Wiki Documentation Analysis'
+        verbose_name_plural = 'Wiki Documentation Analyses'
+
+    def __str__(self):
+        return f"Doc analysis of {self.wiki_page.title} - {self.processed_at.strftime('%Y-%m-%d %H:%M')}"
+
+    def get_action_items(self):
+        """Get list of action items from analysis results"""
+        return self.analysis_results.get('action_items', [])
+
+    def update_counts(self):
+        """Update denormalized counts from analysis results"""
+        self.action_items_count = len(self.get_action_items())
+
+
+class WikiDocumentationTask(models.Model):
+    """
+    Tracks tasks created from wiki documentation analysis.
+    Mirrors WikiMeetingTask: links an AI-extracted action item to its created
+    task, with unique_together preventing the same item being promoted twice.
+    """
+    documentation_analysis = models.ForeignKey(WikiDocumentationAnalysis, on_delete=models.CASCADE,
+                                                related_name='created_tasks')
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='wiki_documentation_source')
+
+    # Action item details from AI analysis
+    action_item_index = models.IntegerField(help_text='Index in the action_items array')
+    action_item_data = models.JSONField(default=dict, help_text='Original AI-extracted action item data')
+
+    # Creation metadata
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_documentation_tasks')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # User modifications
+    user_modified = models.BooleanField(default=False, help_text='Did user modify before creating?')
+    modifications_note = models.TextField(blank=True, null=True, help_text='What was changed from AI suggestion')
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['documentation_analysis', 'task']),
+            models.Index(fields=['task']),
+        ]
+        unique_together = ('documentation_analysis', 'action_item_index')
+
+    def __str__(self):
+        return f"Task '{self.task.title}' from {self.documentation_analysis.wiki_page.title}"
 
 
 class WikiTemplate(models.Model):

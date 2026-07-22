@@ -72,6 +72,7 @@ class ScopeTimelineEvent(models.Model):
         ('meeting', 'Meeting Transcript'),
         ('ai_suggestion', 'AI Suggestion Accepted'),
         ('bulk_import', 'Bulk Task Import'),
+        ('custom_field_change', 'Custom Field Change'),
         ('unknown', 'Unknown Source'),
     ]
 
@@ -110,3 +111,50 @@ class ScopeTimelineEvent(models.Model):
 
     def __str__(self):
         return f"{self.event_date:%Y-%m-%d}: {self.title} (+{self.net_task_change})"
+
+
+class TaskScopeReason(models.Model):
+    """
+    Records why a task was added to a project's scope.
+
+    Created after task creation via the scope reason modal that appears when
+    a Scope Dashboard baseline exists.  Used by Scope Autopsy to distinguish
+    documented scope additions from undocumented growth.
+    """
+
+    REASON_CHOICES = [
+        ('requirement_change', 'Requirement Change'),
+        ('stakeholder_request', 'Stakeholder Request'),
+        ('discovered_complexity', 'Discovered Complexity'),
+        ('gold_plating', 'Gold Plating'),
+        ('initial_planning', 'Initial Planning'),
+        ('other', 'Other'),
+        ('unrecorded', 'Unrecorded'),
+    ]
+
+    task = models.OneToOneField(
+        'kanban.Task',
+        on_delete=models.CASCADE,
+        related_name='scope_reason',
+    )
+    board = models.ForeignKey(
+        'kanban.Board',
+        on_delete=models.CASCADE,
+        related_name='task_scope_reasons',
+    )
+    reason = models.CharField(max_length=50, choices=REASON_CHOICES, default='unrecorded')
+    note = models.TextField(blank=True)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['board', 'reason']),
+        ]
+
+    def __str__(self):
+        return f"Scope reason for task {self.task_id}: {self.get_reason_display()}"

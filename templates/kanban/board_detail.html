@@ -1,4 +1,4 @@
-﻿{% extends 'base.html' %}
+{% extends 'base.html' %}
 {% load static %}
 {% load kanban_filters %}
 
@@ -40,18 +40,31 @@
     }
     /* Collapsed column: shrink to header width only */
     .kanban-column.column-collapsed {
-        flex: 0 0 auto;
+        flex: 0 0 48px !important;
         min-width: 48px;
-        width: auto;
+        max-width: 48px;
+        width: 48px;
+        overflow: hidden;
     }
     .kanban-column.column-collapsed .kanban-column-header {
         writing-mode: vertical-rl;
         transform: rotate(180deg);
         white-space: nowrap;
         height: auto;
-        min-height: 120px;
+        min-height: 200px;
+        display: flex;
+        align-items: center;
         justify-content: center;
         cursor: pointer;
+        padding: 10px 4px;
+    }
+    .kanban-column.column-collapsed .kanban-column-header .d-flex {
+        display: none !important;
+    }
+    .kanban-column.column-collapsed .kanban-column-header::before {
+        content: attr(data-column-name);
+        font-weight: bold;
+        font-size: 0.85rem;
     }
     .kanban-column-header {
         padding: 10px;
@@ -236,6 +249,10 @@
         0%, 100% { box-shadow: 0 4px 12px rgba(13, 110, 253, 0.4); }
         50% { box-shadow: 0 8px 24px rgba(13, 110, 253, 0.6); }
     }
+    @keyframes sparkle-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: .5; transform: scale(1.3); }
+    }
     
     /* Live filter - hide non-matching tasks */
     .kanban-task-v2.filtered-out,
@@ -243,7 +260,7 @@
         display: none !important;
     }
 
-    /* ════ Redesigned Card (v2 — 110px compact) ════ */
+    /* ---- Redesigned Card (v2 — 110px compact) ---- */
     .kanban-task-v2 {
         position: relative;
         background: var(--card-bg);
@@ -265,7 +282,7 @@
     .kanban-task-v2.done-card { opacity: .65; }
 
     .card-inner { display: flex; flex-direction: column; gap: 4px; }
-    .card-task-id { font-size: .7rem; font-weight: 600; color: #6b7280; letter-spacing: .02em; line-height: 1; }
+    .card-task-id { font-size: .7rem; font-weight: 600; color: #888780; letter-spacing: .02em; line-height: 1; }
 
     /* Title — 2-line clamp */
     .card-task-title {
@@ -293,6 +310,97 @@
     }
     .card-due.overdue { color: #dc3545; font-weight: 600; }
     .card-due.at-risk { color: #f59e0b; font-weight: 600; }
+
+    /* Task-aging badge (days in current column) */
+    .card-aging-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: .65rem;
+        font-weight: 600;
+        padding: 1px 6px;
+        border-radius: 8px;
+        white-space: nowrap;
+        line-height: 1.4;
+    }
+    .card-aging-badge.aging-neutral { background: #e5e7eb; color: #4b5563; }
+    .card-aging-badge.aging-warning { background: #fef3c7; color: #92400e; }
+    .card-aging-badge.aging-critical { background: #fee2e2; color: #991b1b; }
+
+    @keyframes aging-tip-in {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    /* Subtle ring cue on every aging card (tier-colored). The card's left border
+       is already spoken for by task priority, so this uses an outline + glow
+       instead of a second border, to avoid colliding with that channel. */
+    .kanban-task-v2.aging-ring-warning {
+        outline: 2px solid #f59e0b;
+        outline-offset: 2px;
+        box-shadow: 0 0 0 4px rgba(245, 158, 11, .18);
+    }
+    .kanban-task-v2.aging-ring-critical {
+        outline: 2px solid #dc3545;
+        outline-offset: 2px;
+        box-shadow: 0 0 0 4px rgba(220, 53, 69, .18);
+    }
+
+    /* Aging banner — a full-width strip sitting ABOVE the column header (not
+       crammed into its already-busy name/count/WIP-badge row), shown whenever a
+       column has any aging cards (see kanban_aging.js). .column-aging-banner-slot
+       is empty (no height) when there's nothing to show. */
+    .column-aging-banner {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: .72rem;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 6px 6px 0 0;
+        animation: aging-tip-in .18s ease-out;
+    }
+    .column-aging-banner.aging-banner-warning { background: #fef3c7; color: #92400e; }
+    .column-aging-banner.aging-banner-critical { background: #fee2e2; color: #991b1b; }
+    .column-aging-banner-count { flex: 1; }
+    .column-aging-banner-view {
+        border: none;
+        background: rgba(0,0,0,.08);
+        color: inherit;
+        font-size: .68rem;
+        font-weight: 700;
+        border-radius: 6px;
+        padding: 1px 8px;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+    .column-aging-banner-view:hover { background: rgba(0,0,0,.16); }
+
+    /* "View" filter notice — mirrors the click-to-filter notice on stakeholder_list.html */
+    .aging-filter-notice {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: .72rem;
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #f59e0b;
+        border-radius: 6px;
+        padding: 4px 8px;
+        margin: 0 0 8px;
+    }
+    .aging-filter-notice-clear {
+        border: none;
+        background: rgba(0,0,0,.08);
+        color: inherit;
+        font-size: .68rem;
+        font-weight: 600;
+        border-radius: 6px;
+        padding: 1px 8px;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+    .aging-filter-notice-clear:hover { background: rgba(0,0,0,.16); }
 
     /* Label pills */
     .card-label-primary {
@@ -366,7 +474,7 @@
         transition: width .3s;
     }
 
-    /* ══ Hover action bar ══ */
+    /* -- Hover action bar -- */
     .card-hover-actions {
         position: absolute;
         bottom: 4px; left: 4px; right: 4px;
@@ -421,7 +529,7 @@
     .inline-pick-option:hover { background: var(--bg-tertiary); }
     .inline-pick-option.active { font-weight: 700; color: #0d6efd; }
 
-    /* ════ Column header — WIP badges ════ */
+    /* ---- Column header — WIP badges ---- */
     .wip-badge {
         display: inline-flex;
         align-items: center;
@@ -440,7 +548,7 @@
         background-color: #fef3c7 !important;
     }
 
-    /* ════ Quick-View Drawer — styles now in base.html ════ */
+    /* ---- Quick-View Drawer — styles now in base.html ---- */
 
     /* Task Search Bar Styling */
     #taskSearchCard {
@@ -457,9 +565,10 @@
         border-color: #667eea;
     }
 
-    /* ── AI Tools Slide-Out Panel ── */
+    /* -- AI Tools Slide-Out Panel -- */
     #aiToolsPanel {
         width: 280px;
+        z-index: 1050;
         background-color: var(--bg-secondary);
         border-left: 1px solid var(--border-color);
         box-shadow: -4px 0 16px var(--shadow-color);
@@ -477,16 +586,48 @@
         padding: 12px 14px;
     }
     .ai-panel-section-header {
-        font-size: .65rem;
+        font-size: .7rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .06em;
-        color: var(--text-muted);
+        color: var(--text-primary);
         padding: 0 4px 6px;
         margin-top: 14px;
+        border-top: 1px solid var(--border-color);
+        padding-top: 12px;
+        cursor: pointer;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
     }
     .ai-panel-section:first-child .ai-panel-section-header {
         margin-top: 0;
+        border-top: none;
+        padding-top: 0;
+    }
+    .ai-panel-section-header .section-chevron {
+        font-size: .6rem;
+        transition: transform .2s ease;
+    }
+    .ai-panel-section-header[aria-expanded="true"] .section-chevron {
+        transform: rotate(90deg);
+    }
+    /* Locked / greyed-out preset tiles */
+    .ai-panel-tile.ai-tool-locked {
+        opacity: 0.38;
+        cursor: not-allowed;
+        position: relative;
+        filter: grayscale(40%);
+    }
+    .ai-panel-tile.ai-tool-locked:hover {
+        background: transparent;
+    }
+    .ai-panel-tile .lock-badge {
+        font-size: .6rem;
+        color: #9ca3af;
+        margin-left: 2px;
+        vertical-align: middle;
     }
     .ai-panel-grid {
         display: grid;
@@ -528,12 +669,25 @@
         border-color: var(--link-color);
         color: #fff;
     }
-    
+
+    /* ── Dark Mode — column headers, panels, search, badges (task cards already
+       use tokens). Surfaces→tokens, dark text→bright, semantic pills→dark tints. ── */
+    [data-bs-theme="dark"] .kanban-column-header { background-color: var(--bg-tertiary); border-bottom-color: var(--border-color); }
+    [data-bs-theme="dark"] .column-ordering-panel,
+    [data-bs-theme="dark"] .column-ordering-panel.collapsed,
+    [data-bs-theme="dark"] .search-panel { background: var(--bg-tertiary); border-color: var(--border-color); }
+    [data-bs-theme="dark"] .column-ordering-badge { background-color: var(--card-bg); border-color: var(--border-color); }
+    [data-bs-theme="dark"] .column-task-count { color: var(--text-muted); }
+    [data-bs-theme="dark"] .column-ordering-badge span { color: var(--text-secondary); }
+    /* Semantic card-aging pills → dark tints */
+    [data-bs-theme="dark"] .card-aging-badge.aging-neutral  { background: rgba(148,163,184,0.20); color: #cbd5e1; }
+    [data-bs-theme="dark"] .card-aging-badge.aging-warning  { background: rgba(245,158,11,0.20); color: #fdd663; }
+    [data-bs-theme="dark"] .card-aging-badge.aging-critical { background: rgba(239,68,68,0.20); color: #f28b82; }
 </style>
 {% endblock %}
 
 {% block content %}
-<!-- Hierarchy breadcrumb — shows Mission → Strategy → Board chain when available -->
+<!-- Hierarchy breadcrumb — shows Mission ? Strategy ? Board chain when available -->
 {% if board.strategy %}
 <nav aria-label="breadcrumb" class="mb-2">
     <ol class="breadcrumb small mb-0">
@@ -546,33 +700,25 @@
 </nav>
 {% endif %}
 
-<!-- Demo Mode Banner - only show in legacy (non-simplified) mode -->
-{% if is_demo_board and not simplified_mode %}
-<div class="alert alert-info border-0 shadow-sm mb-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-    <div class="d-flex justify-content-between align-items-center">
-        <div>
-            <strong><i class="fas fa-hands-helping me-2"></i>Interactive Demo</strong> —
-            <span class="small">Experiment freely!
-                <a href="{% url 'demo_dashboard' %}" class="text-white text-decoration-underline">Demo Dashboard</a> |
-                <a href="{% url 'dashboard' %}" class="text-white text-decoration-underline">Exit</a>
-            </span>
-        </div>
-        <span class="badge bg-light text-primary"><i class="fas fa-graduation-cap me-1"></i>DEMO</span>
-    </div>
+<div class="mb-2">
+    <a href="{% url 'dashboard' %}" class="btn-prizm-back btn-sm">
+        <i class="fas fa-arrow-left"></i> Back to Dashboard
+    </a>
 </div>
-{% endif %}
+
+<!-- Demo Mode Banner removed — single-tier personal sandbox uses the unified banner in base.html -->
 
 <!-- Déjà Vu Banner (Knowledge Graph) — compact -->
 <div id="dejaVuBanner" class="alert alert-warning alert-dismissible fade show mb-2 py-2" role="alert" style="display:none; font-size:.9rem;">
     <i class="fas fa-lightbulb me-1"></i><strong>Déjà Vu!</strong> Similar past projects: <span id="dejaVuSummary"></span>
-    <a href="{% url 'board_knowledge' board.id %}" class="alert-link ms-2">View &rarr;</a>
+    <a href="{% url 'organizational_memory' %}?project={{ board.id }}" class="alert-link ms-2">View &rarr;</a>
     <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert" aria-label="Close" style="padding:.5rem;"></button>
 </div>
 
 <!-- Exit Protocol: Hospice Banner -->
 {% include 'exit_protocol/partials/hospice_banner.html' %}
 
-<!-- ═══════ BOARD HEADER ═══════ -->
+<!-- ------- BOARD HEADER ------- -->
 <div class="d-flex justify-content-between align-items-center mb-2">
     <div class="d-flex align-items-center gap-2 flex-wrap">
         <h1 class="h4 mb-0">{{ board.name }}</h1>
@@ -595,21 +741,29 @@
             <i class="fas fa-exclamation-triangle me-1"></i>{{ active_scope_alerts|length }} alert{{ active_scope_alerts|length|pluralize }}
         </button>
         {% endif %}
+        {% if board.organization and not is_demo_board %}
+        <span class="badge border text-decoration-none preset-mode-badge"
+              id="presetBadge"
+              style="cursor:pointer; font-size:.7rem; font-weight:600; padding:4px 10px;
+                     {% if board_preset_effective == 'enterprise' %}background:#ede9fe; color:#6d28d9; border-color:#c4b5fd !important;
+                     {% elif board_preset_effective == 'professional' %}background:#dbeafe; color:#1d4ed8; border-color:#93c5fd !important;
+                     {% else %}background:#f0fdf4; color:#15803d; border-color:#86efac !important;{% endif %}"
+              data-bs-toggle="modal" data-bs-target="#boardModeModal"
+              title="Click to change workspace mode">
+            <i class="fas fa-layer-group me-1" style="font-size:.6rem;"></i>{{ board_preset_effective|default:"lean"|title }}
+        </span>
+        {% endif %}
     </div>
 
-    <!-- ── Right: compact toolbar ── -->
+    <!-- -- Right: compact toolbar -- -->
     <div class="d-flex align-items-center gap-1 flex-wrap justify-content-end">
-        <!-- Primary: Add Task (uses first To-Do column) -->
-        {% for col in columns %}{% if col.name|lower == 'to do' or col.name|lower == 'todo' or col.name|lower == 'backlog' or forloop.first %}
-        {% if forloop.first or col.name|lower == 'to do' or col.name|lower == 'todo' %}
-        <a href="{% url 'create_task_in_column' board.id col.id %}" class="btn btn-sm btn-primary">
-            <i class="fas fa-plus me-1"></i><span class="d-none d-md-inline">Add Task</span>
-        </a>
-        {% endif %}
-        {% endif %}{% endfor %}
+        <!-- Reorder Columns -->
+        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#columnReorderModal" title="Reorder Columns">
+            <i class="fas fa-sort"></i><span class="d-none d-lg-inline ms-1">Reorder</span>
+        </button>
 
         <!-- Filter toggle -->
-        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#boardToolsPanel" aria-expanded="false" title="Filter & Search">
+        <button class="btn btn-sm btn-outline-secondary{% if any_filter_active %} active{% endif %}" data-bs-toggle="collapse" data-bs-target="#boardToolsPanel" aria-expanded="{% if any_filter_active %}true{% else %}false{% endif %}" title="Filter & Search">
             <i class="fas fa-filter"></i><span class="d-none d-lg-inline ms-1">Filter</span>
         </button>
 
@@ -620,21 +774,49 @@
 
         <!-- Settings (3-dot) -->
         <div class="dropdown">
-            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Board Settings">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Board Menu">
                 <i class="fas fa-ellipsis-v"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
+                {% if can_edit_board %}
                 <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}"><i class="fas fa-edit me-2"></i>Edit Board</a></li>
                 <li><a class="dropdown-item" href="{% url 'create_column' board.id %}"><i class="fas fa-columns me-2"></i>Add Column</a></li>
                 <li><a class="dropdown-item" href="{% url 'create_label' board.id %}"><i class="fas fa-tags me-2"></i>Manage Labels</a></li>
-                <li><a class="dropdown-item" href="{% url 'stakeholder:stakeholder_list' board.id %}"><i class="fas fa-users me-2 text-primary"></i>Stakeholders</a></li>
-                {% if can_manage_invites and not board.is_official_demo_board %}
-                <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-user-plus me-2 text-success"></i>Invite Members</a></li>
                 {% endif %}
-                <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-users me-2 text-info"></i>Manage Members</a></li>
+                {% if can_edit_board %}
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="{% url 'stakeholder:stakeholder_list' board.id %}"><i class="fas fa-users me-2 text-primary"></i>Stakeholders</a></li>
+                {% endif %}
+                {% if can_manage_members and not board.is_sandbox_copy %}
+                <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-users-cog me-2 text-info"></i>Board Members</a></li>
+                {% endif %}
+                <li><hr class="dropdown-divider"></li>
+                {% if features.show_automations %}
+                <li><a class="dropdown-item" href="{% url 'automations_list' board.id %}"><i class="fas fa-bolt me-2 text-warning"></i>Automations</a></li>
+                {% endif %}
+                {% if can_edit_board %}
                 <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}"><i class="fas fa-plug me-2 text-info"></i>Webhooks</a></li>
+                {% endif %}
                 <li><a class="dropdown-item" href="{% url 'wiki:quick_link' content_type='board' object_id=board.id %}"><i class="fas fa-book me-2 text-primary"></i>Link Wiki Pages</a></li>
-                {% if board.created_by == request.user or request.user.profile.is_admin or request.user == board.organization.created_by %}
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=json"><i class="fas fa-file-export me-2 text-secondary"></i>Export JSON</a></li>
+                <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=csv"><i class="fas fa-file-csv me-2 text-secondary"></i>Export CSV</a></li>
+                {% if board.organization and not is_demo_board %}
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#boardModeModal">
+                        <i class="fas fa-layer-group me-2 text-secondary"></i>Workspace Mode
+                        <span class="badge ms-2"
+                              style="font-size:.65rem;
+                                     {% if board_preset_effective == 'enterprise' %}background:#ede9fe; color:#6d28d9;
+                                     {% elif board_preset_effective == 'professional' %}background:#dbeafe; color:#1d4ed8;
+                                     {% else %}background:#f0fdf4; color:#15803d;{% endif %}">
+                            {{ board_preset_effective|default:"lean"|title }}
+                        </span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if can_delete_board %}
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#deleteBoardModal"><i class="fas fa-trash-alt me-2"></i>Delete Board</a></li>
                 {% endif %}
@@ -643,19 +825,26 @@
     </div>
 </div>
 
-<!-- ═══════ VIEW MODE TABS ═══════ -->
+<!-- ------- VIEW MODE TABS ------- -->
 <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
     <li class="nav-item"><a class="nav-link active" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+    {% if features.show_gantt %}
     <li class="nav-item"><a class="nav-link" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
+    {% endif %}
     <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
-    <li class="nav-item"><a class="nav-link" href="{% url 'commitment_dashboard' board.id %}"><i class="fas fa-shield-halved me-1"></i>Commitments</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'board_list_view' board.id %}"><i class="fas fa-list me-1"></i>List</a></li>
+    {% if board.has_epics %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'board_epics' board.id %}"><i class="fas fa-layer-group me-1"></i>Epics</a></li>
+    {% endif %}
+    {% if features.show_automations %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'automations_list' board.id %}"><i class="fas fa-bolt me-1"></i>Automations</a></li>
+    {% endif %}
 </ul>
 
-<!-- ═══════ AI RESOURCE OPTIMIZATION (standalone, always in DOM) ═══════ -->
-{% include 'kanban/resource_leveling_widget.html' %}
+<!-- AI Resource Optimization moved to AI Tools panel -->
 
-<!-- ═══════ COLLAPSIBLE BOARD TOOLS (Filter/Search) ═══════ -->
-<div class="collapse mb-3" id="boardToolsPanel">
+<!-- ------- COLLAPSIBLE BOARD TOOLS (Filter/Search) ------- -->
+<div class="collapse{% if any_filter_active %} show{% endif %} mb-3" id="boardToolsPanel">
     <!-- Search Panel -->
     <div class="card card-body mb-2">
         <h6 class="mb-2"><i class="fas fa-search me-1"></i>Search & Filter Tasks</h6>
@@ -686,11 +875,8 @@
                 {{ search_form.assignee }}
             </div>
             <div class="col-12 mt-3">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-search me-1"></i> Search
-                </button>
                 {% if any_filter_active %}
-                <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary ms-2">
+                <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
                     <i class="fas fa-times me-1"></i> Clear Filters
                 </a>
                 {% endif %}
@@ -730,59 +916,153 @@
         </div><!-- /search-form-container -->
     </div><!-- /card search -->
 
+    <script>
+    // P3-01: Live filter — dropdowns auto-submit, search input submitted on Enter
+    (function() {
+        var form = document.querySelector('#search-form-container form');
+        if (!form) return;
+        // Auto-submit all selects on change
+        form.querySelectorAll('select').forEach(function(sel) {
+            sel.addEventListener('change', function() { form.submit(); });
+        });
+        // Search input: submit on Enter key only (no auto-submit while typing)
+        var searchInput = form.querySelector('input[type="text"], input[name="search_term"]');
+        if (searchInput) {
+            searchInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    form.submit();
+                }
+            });
+            // Prevent default form submission on Enter from reloading without panel state
+            // Focus the search input automatically if panel is open with active filters
+            {% if any_filter_active %}
+            searchInput.focus();
+            {% endif %}
+        }
+    })();
+    </script>
+
 </div><!-- /boardToolsPanel collapse -->
 
-<!-- Quick Column Reorder Panel (standalone) -->
-<div class="column-ordering-panel" id="column-ordering-panel">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <div>
-            <h5 class="mb-0">
-                <i class="fas fa-sort me-2 text-primary"></i>Quick Column Reorder
-                <small class="text-muted" style="font-size: 0.7em; font-weight: normal;">(for large boards)</small>
-            </h5>
-        </div>
-        <div>
-            <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="toggle-column-panel">
-                <i class="fas fa-chevron-up" id="toggle-column-icon"></i>
-            </button>
+<!-- Quick Column Reorder Modal (P3-05) -->
+<div class="modal fade" id="columnReorderModal" tabindex="-1" aria-labelledby="columnReorderModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="columnReorderModalLabel">
+                    <i class="fas fa-sort me-2 text-primary"></i>Quick Column Reorder
+                </h6>
+                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal" id="toggle-column-panel" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="column-ordering-content">
+                <p class="text-muted small mb-2">
+                    <i class="fas fa-keyboard me-1"></i> Enter position numbers and click Apply, or press <kbd>Alt</kbd>+<kbd>R</kbd>
+                </p>
+                <div id="column-ordering-badges" class="mb-3">
+                    {% for column in columns %}
+                    <div class="column-ordering-badge">
+                        <input type="number" min="1" max="{{ columns|length }}" value="{{ column.position|add:1 }}"
+                               class="form-control form-control-sm column-position-input"
+                               data-column-id="{{ column.id }}"
+                               title="Position for {{ column.name }}">
+                        <span>{{ column.name }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button id="reset-columns-btn" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-undo me-1"></i> Reset
+                </button>
+                <button id="refresh-columns-btn" class="btn btn-primary btn-sm">
+                    <i class="fas fa-sync-alt me-1"></i> Apply Reorder
+                </button>
+            </div>
         </div>
     </div>
+</div>
+<script>
+// P3-05: Ensure column-ordering-content is always visible when modal opens
+(function() {
+    var modal = document.getElementById('columnReorderModal');
+    if (modal) {
+        modal.addEventListener('show.bs.modal', function() {
+            var content = document.getElementById('column-ordering-content');
+            if (content) content.classList.remove('d-none');
+        });
+    }
+})();
+</script>
 
-    <div id="column-ordering-content">
-        <p class="text-muted small mb-2">
-            <i class="fas fa-keyboard me-1"></i> <strong>Keyboard shortcut:</strong> Press <kbd>Alt</kbd> + <kbd>R</kbd> to quickly access this panel
-        </p>
-
-        <div id="column-ordering-badges" class="mb-3">
-            {% for column in columns %}
-            <div class="column-ordering-badge">
-                <input type="number" min="1" max="{{ columns|length }}" value="{{ column.position|add:1 }}" 
-                       class="form-control form-control-sm column-position-input" 
-                       data-column-id="{{ column.id }}"
-                       title="Position for {{ column.name }}">
-                <span>{{ column.name }}</span>
+<!-- Task Search Bar - Always Visible -->
+<div class="card mb-4 shadow-sm" id="taskSearchCard" style="border-left: 4px solid #0d6efd;">
+    <div class="card-body py-3">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <div class="input-group">
+                    <span class="input-group-text bg-primary text-white">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text"
+                           id="liveSearchInput"
+                           class="form-control form-control-lg"
+                           placeholder="Search tasks…"
+                           autocomplete="off">
+                    <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn" style="display: none;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
             </div>
-            {% endfor %}
+            <div class="col-md-4">
+                <div class="d-flex align-items-center gap-2 mt-2 mt-md-0 flex-wrap">
+                    {# Scope toggle: This Board / All Boards #}
+                    <div class="btn-group" role="group" aria-label="Search scope">
+                        <input type="radio" class="btn-check" name="searchScope" id="scopeThisBoard" value="this_board" checked>
+                        <label class="btn btn-outline-secondary btn-sm" for="scopeThisBoard">
+                            <i class="fas fa-columns me-1"></i>This Board
+                        </label>
+                        <input type="radio" class="btn-check" name="searchScope" id="scopeAllBoards" value="all_boards">
+                        <label class="btn btn-outline-primary btn-sm" for="scopeAllBoards">
+                            <i class="fas fa-globe me-1"></i>All Boards
+                        </label>
+                    </div>
+                    {# Per-board mode toggle (Keyword / AI) — hidden when All Boards scope is active #}
+                    <div class="btn-group" role="group" id="searchModeGroup">
+                        <input type="radio" class="btn-check" name="searchMode" id="keywordMode" value="keyword" checked>
+                        <label class="btn btn-outline-secondary btn-sm" for="keywordMode">
+                            <i class="fas fa-keyboard me-1"></i>Keyword
+                        </label>
+                        <input type="radio" class="btn-check" name="searchMode" id="aiMode" value="ai">
+                        <label class="btn btn-outline-primary btn-sm" for="aiMode">
+                            <i class="fas fa-wand-magic-sparkles me-1"></i>AI
+                        </label>
+                    </div>
+                    <span id="searchResultCount" class="badge bg-secondary ms-1" style="display: none;"></span>
+                </div>
+            </div>
         </div>
-
-        <div class="d-flex gap-2">
-            <button id="refresh-columns-btn" class="btn btn-primary btn-sm">
-                <i class="fas fa-sync-alt me-1"></i> Apply Reorder
-            </button>
-            <button id="reset-columns-btn" class="btn btn-outline-secondary btn-sm">
-                <i class="fas fa-undo me-1"></i> Reset to Default
-            </button>
+        <div id="aiSearchTip" class="mt-2 small text-muted" style="display: none;">
+            <i class="fas fa-lightbulb text-warning me-1"></i>
+            <strong>AI Tip:</strong> Try natural language queries like "overdue high priority" or "blocked by dependencies"
         </div>
+        {# Dropdown for All Boards results — shown only in all_boards scope #}
+        <div id="globalSearchResults" class="mt-2" style="display:none;"></div>
     </div>
 </div>
 
 <!-- Kanban Board -->
-<div class="kanban-board" id="kanban-board">
+<div class="kanban-board" id="kanban-board" data-board-id="{{ board.id }}">
     {% for column in columns %}
     {% with col_meta=column_meta|get_item:column.id %}
-    <div class="kanban-column {% if col_meta.wip_exceeded %}wip-exceeded{% endif %}" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true">
-        {# ── Column Header (redesigned) ── #}
-        <div class="kanban-column-header {% if col_meta.wip_exceeded %}wip-exceeded-header{% endif %}">
+    <div class="kanban-column {% if col_meta.wip_exceeded %}wip-exceeded{% endif %}" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true"
+         data-aging-enabled="{{ col_meta.aging.enabled|yesno:'1,0' }}"
+         data-aging-warning="{{ col_meta.aging.warning }}"
+         data-aging-critical="{{ col_meta.aging.critical }}"
+         data-aging-show="{{ col_meta.aging.show }}">
+        <div class="column-aging-banner-slot"></div>
+        {# -- Column Header (redesigned) -- #}
+        <div class="kanban-column-header kanban-column-header--{{ column.color|default:'blue' }} {% if col_meta.wip_exceeded %}wip-exceeded-header{% endif %}" data-column-name="{{ column.name }}">
             <div class="d-flex justify-content-between align-items-center w-100">
                 <div class="d-flex align-items-center gap-2">
                     <span class="column-name-text fw-bold">{{ column.name }}</span>
@@ -803,7 +1083,7 @@
                     {% endif %}
                     <div class="dropdown" draggable="false">
                         <button type="button" class="btn btn-sm btn-link text-muted p-0"
-                                data-bs-toggle="dropdown" aria-expanded="false" title="Column options"
+                                data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Column options"
                                 draggable="false"
                                 style="font-size:1rem;line-height:1;padding:4px 6px !important;">
                             <i class="fas fa-ellipsis-v"></i>
@@ -817,9 +1097,14 @@
                                 </button>
                             </li>
                             <li>
-                                <button type="button" class="dropdown-item collapse-column-btn"
-                                        data-column-id="{{ column.id }}">
-                                    <i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column
+                                <button type="button" class="dropdown-item set-aging-btn d-flex flex-column align-items-start"
+                                        data-column-id="{{ column.id }}"
+                                        data-aging-mode="{{ col_meta.aging_mode }}"
+                                        data-aging-warning="{{ col_meta.aging.warning }}"
+                                        data-aging-critical="{{ col_meta.aging.critical }}"
+                                        data-bs-toggle="modal" data-bs-target="#columnAgingModal">
+                                    <span><i class="fas fa-hourglass-half me-2 text-warning"></i>Aging Alerts</span>
+                                    <small class="text-muted ms-4" style="font-size:.7rem;">{{ col_meta.aging_subtitle }}</small>
                                 </button>
                             </li>
                             <li>
@@ -831,6 +1116,7 @@
                             <li>
                                 <button type="button" class="dropdown-item edit-column-btn"
                                         data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
+                                        data-column-type="{{ column.column_type }}"
                                         data-bs-toggle="modal" data-bs-target="#editColumnModal">
                                     <i class="fas fa-edit me-2 text-primary"></i>Rename
                                 </button>
@@ -850,7 +1136,7 @@
             </div>
         </div>
 
-        {# ── Task Cards (redesigned — compact, 110px) ── #}
+        {# -- Task Cards (redesigned — compact, 110px) -- #}
         <div class="kanban-column-tasks" data-column-id="{{ column.id }}">
             {% for task in tasks %}
                 {% if task.column.id == column.id %}
@@ -858,12 +1144,13 @@
                      id="task-{{ task.id }}"
                      draggable="true"
                      data-task-id="{{ task.id }}"
+                     data-column-entered-at="{{ task.column_entered_at|date:'c' }}"
                      hx-get="{% url 'task_quick_view' task.id %}"
                      hx-target="#task-drawer-body"
                      hx-swap="innerHTML"
                      hx-trigger="click"
                      style="border-left-color:{% if task.priority == 'high' or task.priority == 'urgent' %}#dc3545{% elif task.priority == 'medium' %}#f59e0b{% else %}#6c757d{% endif %};">
-                    {# ── Card body ── #}
+                    {# -- Card body -- #}
                     <div class="card-inner">
                         <div class="card-title-row">
                             <span class="card-task-id">{{ task_prefix }}-{{ task.id }}</span>
@@ -871,6 +1158,8 @@
                         </div>
                         <div class="card-meta-row">
                             <div class="d-flex align-items-center gap-2">
+                                {# Task-aging badge — populated/shown by kanban_aging.js based on days in column #}
+                                <span class="card-aging-badge d-none" hidden></span>
                                 {% if task.due_date %}
                                 <span class="card-due {% if task.is_overdue %}overdue{% elif task.is_at_risk %}at-risk{% endif %}">
                                     <i class="far fa-calendar-alt"></i>
@@ -890,6 +1179,13 @@
                                 {% endif %}
                                 {% endwith %}
                                 {% endif %}
+                                {% with cl=task.checklist_progress %}
+                                {% if cl %}
+                                <span class="card-checklist-badge" title="Checklist: {{ cl.completed }}/{{ cl.total }}" style="font-size:.7rem;color:{% if cl.completed == cl.total %}#198754{% else %}#6c757d{% endif %};">
+                                    <i class="fas fa-check-square"></i> {{ cl.completed }}/{{ cl.total }}
+                                </span>
+                                {% endif %}
+                                {% endwith %}
                             </div>
                             {% if task.assigned_to %}
                             <span class="card-avatar" title="{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}">
@@ -903,22 +1199,25 @@
                         </div>
                     </div>
 
-                    {# ── Hover action bar ── #}
+                    {# -- Hover action bar -- #}
                     <div class="card-hover-actions" onclick="event.stopPropagation();">
-                        <button class="card-action-btn status-change-btn" data-task-id="{{ task.id }}" title="Change status">⇄ Status</button>
-                        <button class="card-action-btn assignee-change-btn" data-task-id="{{ task.id }}" title="Assign">+ Assign</button>
-                        <a href="{% url 'task_detail' task.id %}" class="card-action-btn" title="Open full detail">↗ Open</a>
+                        <button class="card-action-btn status-change-btn" data-task-id="{{ task.id }}" title="Change status"><i class="fas fa-arrows-alt-h me-1"></i> Status</button>
+                        <button class="card-action-btn assignee-change-btn" data-task-id="{{ task.id }}" title="Assign"><i class="fas fa-user-plus me-1"></i> Assign</button>
+                        <a href="{% url 'task_detail' task.id %}" class="card-action-btn" title="Open full detail"><i class="fas fa-external-link-alt me-1"></i> Open</a>
                     </div>
 
-                    {# ── Inline status dropdown (hidden by default) ── #}
+                    {# -- Inline status dropdown (hidden by default) -- #}
+                    {% comment %}All columns are rendered; the option matching the card's CURRENT column
+                       is filtered out live when the flyout opens (see openPickerFlyout), so the
+                       list stays correct after a drag-and-drop move (which doesn't reload).{% endcomment %}
                     <div class="inline-status-picker d-none" data-task-id="{{ task.id }}" onclick="event.stopPropagation();">
-                        {% for col in columns %}{% if col.id != task.column.id %}
+                        {% for col in columns %}
                         <button class="inline-pick-option"
                                 data-column-id="{{ col.id }}">{{ col.name }}</button>
-                        {% endif %}{% endfor %}
+                        {% endfor %}
                     </div>
 
-                    {# ── Inline assignee picker (hidden by default) ── #}
+                    {# -- Inline assignee picker (hidden by default) -- #}
                     <div class="inline-assignee-picker d-none" data-task-id="{{ task.id }}" onclick="event.stopPropagation();">
                         <button class="inline-pick-option {% if not task.assigned_to %}active{% endif %}"
                                 data-assignee-id="">Unassigned</button>
@@ -928,7 +1227,7 @@
                         {% endfor %}
                     </div>
 
-                    {# ── 3px progress bar at bottom ── #}
+                    {# -- 3px progress bar at bottom -- #}
                     <div class="card-progress-strip">
                         <div class="card-progress-fill {% if task.progress == 100 %}bg-success{% elif task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
                              style="width:{{ task.progress }}%;" data-progress="{{ task.progress }}"></div>
@@ -938,7 +1237,7 @@
             {% endfor %}
         </div>
 
-        {# ── Add Task Button ── #}
+        {# -- Add Task Button -- #}
         <div class="p-2">
             <a href="{% url 'create_task_in_column' board.id column.id %}" class="btn btn-sm btn-outline-secondary w-100 add-task-btn"
                onclick="event.stopPropagation();">
@@ -957,8 +1256,8 @@
     </div>
 </div>
 
-{# ═══════ Quick-View Drawer (Tier 1) — HTML now in base.html ═══════ #}
-<!-- Wiki Links moved to Board Settings → Link Wiki Pages (3-dot menu) -->
+{# ------- Quick-View Drawer (Tier 1) — HTML now in base.html ------- #}
+<!-- Wiki Links moved to Board Menu → Link Wiki Pages (3-dot menu) -->
 
 <!-- Set WIP Limit Modal -->
 <div class="modal fade" id="wipLimitModal" tabindex="-1" aria-hidden="true">
@@ -975,6 +1274,50 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" id="wipLimitSaveBtn">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Task Aging Alerts (per-column) Modal -->
+<div class="modal fade" id="columnAgingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-hourglass-half text-warning me-2"></i>Aging Alerts</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">Control how the aging badge behaves for this column.</p>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="agingMode" id="agingModeInherit" value="inherit">
+                    <label class="form-check-label" for="agingModeInherit">
+                        Use board defaults <span class="text-muted" id="agingBoardDefaults"></span>
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="agingMode" id="agingModeCustom" value="custom">
+                    <label class="form-check-label" for="agingModeCustom">Custom for this column</label>
+                </div>
+                <div class="row ms-1 mb-2 mt-1" id="agingCustomInputs">
+                    <div class="col-6">
+                        <label for="agingWarningInput" class="form-label small mb-1">Warning (days)</label>
+                        <input type="number" class="form-control form-control-sm" id="agingWarningInput" min="1" max="365">
+                    </div>
+                    <div class="col-6">
+                        <label for="agingCriticalInput" class="form-label small mb-1">Critical (days)</label>
+                        <input type="number" class="form-control form-control-sm" id="agingCriticalInput" min="1" max="365">
+                    </div>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="agingMode" id="agingModeDisabled" value="disabled">
+                    <label class="form-check-label" for="agingModeDisabled">Disable aging badges for this column</label>
+                </div>
+                <div class="text-danger small mt-2" id="agingError" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="agingSaveBtn">Save</button>
             </div>
         </div>
     </div>
@@ -1040,8 +1383,26 @@
                 {% csrf_token %}
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="editColumnName" class="form-label">Column Name</label>
+                        <label for="editColumnName" class="form-label">Column Name <span class="required-asterisk">*</span></label>
                         <input type="text" class="form-control" id="editColumnName" name="name" required>
+                        <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Column name is required.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editColumnType" class="form-label">Column type</label>
+                        <select class="form-select" id="editColumnType" name="column_type">
+                            <option value="">Auto (detect from name)</option>
+                            <option value="todo">To Do</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="review">Review</option>
+                            <option value="done">Done</option>
+                            <option value="blocked">Blocked</option>
+                            <option value="other">Other</option>
+                        </select>
+                        <small class="form-text text-muted">
+                            Leave on Auto to detect from the name. Set explicitly if you name the
+                            column something custom (e.g. &quot;Achieved&quot;) so features still
+                            recognise it as a Done column.
+                        </small>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1201,24 +1562,605 @@
     </div>
 </div>
 
+
+<!-- -- AI Tools Slide-Out Panel -- -->
+<div class="offcanvas offcanvas-end" id="aiToolsPanel" tabindex="-1" aria-labelledby="aiToolsPanelLabel" data-bs-scroll="true" data-bs-backdrop="false">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="aiToolsPanelLabel"><i class="fas fa-bolt me-2"></i>AI Tools</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        {# ── Section 1: ANALYZE ─────────────────────────── #}
+        <div class="ai-panel-section">
+            <div class="ai-panel-section-header"
+                 data-bs-toggle="collapse" data-bs-target="#panelAnalyze"
+                 aria-expanded="false" aria-controls="panelAnalyze">
+                <span><i class="fas fa-chart-bar me-1"></i> Analyze</span>
+                <i class="fas fa-chevron-right section-chevron"></i>
+            </div>
+            <div class="collapse" id="panelAnalyze">
+                <div class="ai-panel-grid">
+                    <a class="ai-panel-tile" href="{% url 'board_analytics' board.id %}" title="View board analytics, charts, and AI insights">
+                        <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-chart-pie"></i></span>
+                        <span class="tile-label">Analytics</span>
+                    </a>
+                    {% if features.show_burndown %}
+                    <a class="ai-panel-tile" href="{% url 'burndown_dashboard' board.id %}" title="AI-powered burndown prediction and completion forecast">
+                        <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-chart-line"></i></span>
+                        <span class="tile-label">Burndown</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-chart-line"></i></span>
+                        <span class="tile-label">Burndown <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_skill_gaps %}
+                    <a class="ai-panel-tile" href="{% url 'skill_gap_dashboard' board.id %}" title="Identify team skill gaps and create development plans">
+                        <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-wand-magic-sparkles"></i></span>
+                        <span class="tile-label">Skill Gaps</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-wand-magic-sparkles"></i></span>
+                        <span class="tile-label">Skill Gaps <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    <a class="ai-panel-tile" href="{% url 'board_status_report' board.id %}" title="Generate stakeholder-ready project status reports">
+                        <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-file-alt"></i></span>
+                        <span class="tile-label">Status Report</span>
+                    </a>
+                    {% if features.show_resource_optimization %}
+                    <a class="ai-panel-tile" href="#" onclick="event.preventDefault(); openResourceOptimization();" title="AI-powered team workload optimization and task reassignment">
+                        <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-users-cog"></i></span>
+                        <span class="tile-label">Resource Optimization</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-users-cog"></i></span>
+                        <span class="tile-label">Resource Optimization <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# ── Section 2: PLAN ────────────────────────────── #}
+        <div class="ai-panel-section">
+            <div class="ai-panel-section-header"
+                 data-bs-toggle="collapse" data-bs-target="#panelPlan"
+                 aria-expanded="false" aria-controls="panelPlan">
+                <span><i class="fas fa-calendar-check me-1"></i> Plan</span>
+                <i class="fas fa-chevron-right section-chevron"></i>
+            </div>
+            <div class="collapse" id="panelPlan">
+                <div class="ai-panel-grid">
+                    {% if features.show_budget_roi %}
+                    <a class="ai-panel-tile" href="{% url 'budget_dashboard' board.id %}" title="Track budget, costs, and return on investment">
+                        <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-dollar-sign"></i></span>
+                        <span class="tile-label">Budget & ROI</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-dollar-sign"></i></span>
+                        <span class="tile-label">Budget & ROI <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_scope_tracking %}
+                    <a class="ai-panel-tile" href="{% url 'scope_dashboard' board.id %}" title="Monitor scope changes, snapshots, and constraints">
+                        <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-chart-area"></i></span>
+                        <span class="tile-label">Scope</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-chart-area"></i></span>
+                        <span class="tile-label">Scope <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_requirements %}
+                    <a class="ai-panel-tile" href="{% url 'requirements:dashboard' board.id %}" title="AI-powered requirement analysis, quality scoring, gap detection, and traceability">
+                        <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-clipboard-list"></i></span>
+                        <span class="tile-label">Requirements</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-clipboard-list"></i></span>
+                        <span class="tile-label">Requirements <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_discovery %}
+                    <a class="ai-panel-tile" href="{% url 'discovery_dashboard' %}"
+                       id="discoveryPanelTile"
+                       title="PrizmDiscovery — ideas inbox and impact/effort matrix">
+                        <span class="tile-icon" style="color: #f59e0b;"><i class="fas fa-lightbulb"></i></span>
+                        <span class="tile-label">Discovery</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #f59e0b;"><i class="fas fa-lightbulb"></i></span>
+                        <span class="tile-label">Discovery <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# ── Section 3: AI INSIGHTS ─────────────────────── #}
+        <div class="ai-panel-section">
+            <div class="ai-panel-section-header"
+                 data-bs-toggle="collapse" data-bs-target="#panelInsights"
+                 aria-expanded="false" aria-controls="panelInsights">
+                <span><i class="fas fa-lightbulb me-1"></i> AI Insights</span>
+                <i class="fas fa-chevron-right section-chevron"></i>
+            </div>
+            <div class="collapse" id="panelInsights">
+                <div class="ai-panel-grid">
+                    {% if features.show_ai_coach %}
+                    <a class="ai-panel-tile" href="{% url 'coach_dashboard' board.id %}" title="Proactive AI coaching suggestions for your project">
+                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-user-graduate"></i></span>
+                        <span class="tile-label">AI Coach</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-user-graduate"></i></span>
+                        <span class="tile-label">AI Coach <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_prizm_brief %}
+                    <a class="ai-panel-tile" href="{% url 'prizmbrief_setup' board.id %}" title="Generate AI presentation slides from board data">
+                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-magic"></i></span>
+                        <span class="tile-label">PrizmBrief</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-magic"></i></span>
+                        <span class="tile-label">PrizmBrief <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    <a class="ai-panel-tile" href="{% url 'organizational_memory' %}?project={{ board.id }}" title="Organizational Memory: decisions, lessons, risks &amp; milestones — with AI-discovered connections">
+                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-brain"></i></span>
+                        <span class="tile-label">Memory</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        {# ── Section 4: SCENARIOS & RISK ────────────────── #}
+        <div class="ai-panel-section">
+            <div class="ai-panel-section-header"
+                 data-bs-toggle="collapse" data-bs-target="#panelScenarios"
+                 aria-expanded="false" aria-controls="panelScenarios">
+                <span><i class="fas fa-exclamation-triangle me-1"></i> Scenarios & Risk</span>
+                <i class="fas fa-chevron-right section-chevron"></i>
+            </div>
+            <div class="collapse" id="panelScenarios">
+                <div class="ai-panel-grid">
+                    {% if features.show_whatif %}
+                    <a class="ai-panel-tile" href="{% url 'whatif_dashboard' board.id %}" title="Simulate scenario changes and analyze impact">
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-flask"></i></span>
+                        <span class="tile-label">What-If</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-flask"></i></span>
+                        <span class="tile-label">What-If <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_shadow_board %}
+                    <a class="ai-panel-tile" href="{% url 'shadow_board_list' board.id %}" title="Create parallel universe simulations of your project">
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-atom"></i></span>
+                        <span class="tile-label">Shadow Board</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-atom"></i></span>
+                        <span class="tile-label">Shadow Board <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_premortem %}
+                    <a class="ai-panel-tile" href="{% url 'premortem_dashboard' board.id %}" title="Simulate failure scenarios before they happen">
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-shield-alt"></i></span>
+                        <span class="tile-label">Pre-Mortem</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-shield-alt"></i></span>
+                        <span class="tile-label">Pre-Mortem <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_stress_test %}
+                    <a class="ai-panel-tile" href="{% url 'stress_test_dashboard' board.id %}" title="Red-team your project plan with AI attack scenarios">
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-bolt"></i></span>
+                        <span class="tile-label">Stress Test</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-bolt"></i></span>
+                        <span class="tile-label">Stress Test <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# ── Section 5: PROJECT REVIEW ──────────────────── #}
+        <div class="ai-panel-section">
+            <div class="ai-panel-section-header"
+                 data-bs-toggle="collapse" data-bs-target="#panelReview"
+                 aria-expanded="false" aria-controls="panelReview">
+                <span><i class="fas fa-clipboard-check me-1"></i> Project Review</span>
+                <i class="fas fa-chevron-right section-chevron"></i>
+            </div>
+            <div class="collapse" id="panelReview">
+                <div class="ai-panel-grid">
+                    {% if features.show_ai_retrospectives %}
+                    <a class="ai-panel-tile" href="{% url 'retrospective_dashboard' board.id %}" title="AI-powered retrospectives and improvement tracking">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-history"></i></span>
+                        <span class="tile-label">Retrospectives</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-history"></i></span>
+                        <span class="tile-label">Retrospectives <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_scope_autopsy %}
+                    <a class="ai-panel-tile" href="{% url 'scope_autopsy_dashboard' board.id %}" title="Forensic analysis of how your scope grew">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-microscope"></i></span>
+                        <span class="tile-label">Scope Autopsy</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-microscope"></i></span>
+                        <span class="tile-label">Scope Autopsy <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_exit_protocol %}
+                    <a class="ai-panel-tile" href="{% url 'exit_protocol:dashboard' board.id %}" title="Manage project wind-down, knowledge preservation, and archival">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-skull-crossbones"></i></span>
+                        <span class="tile-label">Exit Protocol</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-skull-crossbones"></i></span>
+                        <span class="tile-label">Exit Protocol <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var panel = document.getElementById('aiToolsPanel');
+    var btn = document.getElementById('aiToolsToggle');
+    if (!panel || !btn) return;
+
+    var bsOffcanvas = null;
+
+    // Lazily get the Bootstrap offcanvas instance once it's initialised
+    function getOffcanvas() {
+        if (!bsOffcanvas) bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(panel);
+        return bsOffcanvas;
+    }
+
+    // Active button indicator
+    panel.addEventListener('show.bs.offcanvas', function() { btn.classList.add('active'); });
+    panel.addEventListener('hidden.bs.offcanvas', function() { btn.classList.remove('active'); });
+
+    // Close when clicking outside the panel (no backdrop because data-bs-backdrop="false")
+    document.addEventListener('click', function(e) {
+        // Only act when the panel is currently open
+        if (!panel.classList.contains('show')) return;
+        // Ignore clicks on the toggle button itself (Bootstrap handles the toggle)
+        if (btn.contains(e.target)) return;
+        // Ignore clicks inside the panel
+        if (panel.contains(e.target)) return;
+        getOffcanvas().hide();
+    }, true); // capture phase so it fires before Bootstrap stops propagation
+
+    // ── Collapsible section state persistence ──
+    var boardId = '{{ board.id }}';
+    var storageKey = 'prizmai_panel_state_' + boardId;
+    var presetName = '{{ features.preset_name|default:"lean" }}';
+    var sectionIds = ['panelAnalyze', 'panelPlan', 'panelInsights', 'panelScenarios', 'panelReview'];
+
+    // Determine default state: enterprise → expanded, otherwise collapsed
+    var defaultExpanded = (presetName === 'enterprise');
+
+    function loadPanelState() {
+        var saved = null;
+        try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
+
+        sectionIds.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            var header = el.previousElementSibling;
+            var shouldShow = saved ? !!saved[id] : defaultExpanded;
+            if (shouldShow) {
+                el.classList.add('show');
+                if (header) header.setAttribute('aria-expanded', 'true');
+            } else {
+                el.classList.remove('show');
+                if (header) header.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
+    function savePanelState() {
+        var state = {};
+        sectionIds.forEach(function(id) {
+            var el = document.getElementById(id);
+            state[id] = el ? el.classList.contains('show') : false;
+        });
+        try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
+    }
+
+    // Listen for Bootstrap collapse events
+    sectionIds.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('shown.bs.collapse', function() {
+            var h = el.previousElementSibling;
+            if (h) h.setAttribute('aria-expanded', 'true');
+            savePanelState();
+        });
+        el.addEventListener('hidden.bs.collapse', function() {
+            var h = el.previousElementSibling;
+            if (h) h.setAttribute('aria-expanded', 'false');
+            savePanelState();
+        });
+    });
+
+    // Restore state on load
+    loadPanelState();
+
+    // ── Board Preset dropdown (AJAX) ──
+    // Wrapped in DOMContentLoaded because the #boardModeModal HTML is
+    // rendered after this script block in the template.
+    document.addEventListener('DOMContentLoaded', function() {
+        var presetSel = document.getElementById('boardPresetSelect');
+        var presetStatus = document.getElementById('boardPresetStatus');
+        if (presetSel) {
+            presetSel.addEventListener('change', function() {
+                var val = presetSel.value;
+                presetStatus.textContent = 'Saving…';
+                presetStatus.style.color = 'var(--text-secondary,#9ca3af)';
+                var fd = new FormData();
+                fd.append('local_preset', val);
+                fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+                fetch('/boards/' + boardId + '/preset/', {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                }).then(function(r) { return r.json(); })
+                  .then(function(data) {
+                    if (data.success) {
+                        presetStatus.textContent = 'Saved — reloading…';
+                        presetStatus.style.color = '#16a34a';
+                        setTimeout(function() { location.reload(); }, 600);
+                    } else {
+                        presetStatus.textContent = data.error || 'Error saving preset.';
+                        presetStatus.style.color = '#dc2626';
+                    }
+                }).catch(function() {
+                    presetStatus.textContent = 'Network error.';
+                    presetStatus.style.color = '#dc2626';
+                });
+            });
+        }
+    });
+})();
+</script>
+
+{# -- Single flyout portal for card hover pickers (escapes all overflow containers) -- #}
+<div id="inline-picker-flyout"
+     class="d-none"
+     onclick="event.stopPropagation();"
+     style="position:fixed;z-index:9999;background:var(--card-bg,#fff);border:1px solid var(--border-color,#dee2e6);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:200px;overflow-y:auto;min-width:120px;"></div>
+
+<!-- Resource Optimization Modal -->
+<div class="modal fade" id="resourceOptimizationModal" tabindex="-1" aria-labelledby="resourceOptimizationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="border-left:4px solid #5046e5;">
+                <h5 class="modal-title" id="resourceOptimizationModalLabel">
+                    <i class="fas fa-users-cog" style="color:#5046e5;"></i> AI Resource Optimization
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% include 'kanban/resource_leveling_widget.html' %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openResourceOptimization() {
+    // Close the AI Tools panel
+    var aiPanel = document.getElementById('aiToolsPanel');
+    if (aiPanel && aiPanel.classList.contains('show')) {
+        var offcanvas = bootstrap.Offcanvas.getInstance(aiPanel);
+        if (offcanvas) offcanvas.hide();
+    }
+    // Open the resource optimization modal
+    var modal = new bootstrap.Modal(document.getElementById('resourceOptimizationModal'));
+    modal.show();
+    // Load data when modal opens
+    loadResourceOptimization();
+}
+</script>
+
+{# ── Board Mode Modal ── #}
+{% if board.organization and not is_demo_board %}
+<div class="modal fade" id="boardModeModal" tabindex="-1" aria-labelledby="boardModeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="boardModeModalLabel">
+                    <i class="fas fa-layer-group me-1 text-secondary"></i> Workspace Mode
+                </h6>
+                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="text-muted mb-2" style="font-size:.78rem;">
+                    Choose a mode for this board. Modes above the workspace ceiling are disabled.
+                </p>
+                <select id="boardPresetSelect" class="form-select form-select-sm" {% if not can_edit_board %}disabled{% endif %}>
+                    <option value="inherit" {% if not board_preset_local %}selected{% endif %}>
+                        Inherit from workspace ({{ board_preset_global|title }})
+                    </option>
+                    <option value="lean"
+                        {% if board_preset_local == 'lean' %}selected{% endif %}>
+                        Lean / Startup
+                    </option>
+                    <option value="professional"
+                        {% if board_preset_local == 'professional' %}selected{% endif %}
+                        {% if board_preset_global == 'lean' %}disabled title="Exceeds workspace ceiling"{% endif %}>
+                        Professional / Growth
+                    </option>
+                    <option value="enterprise"
+                        {% if board_preset_local == 'enterprise' %}selected{% endif %}
+                        {% if board_preset_global != 'enterprise' %}disabled title="Exceeds workspace ceiling"{% endif %}>
+                        Enterprise / Heavyweight
+                    </option>
+                </select>
+                <div id="boardPresetStatus" class="mt-1" style="font-size:.7rem; color:var(--text-secondary,#9ca3af);"></div>
+                {% if not can_edit_board %}
+                <p class="text-danger mt-2 mb-0" style="font-size:.72rem;">
+                    <i class="fas fa-info-circle me-1"></i> Only board owners and org admins can change this.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Initialize Bootstrap 5 tooltips for locked tiles ── #}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function(el) {
+        new bootstrap.Tooltip(el, { trigger: 'hover', placement: 'top' });
+    });
+});
+</script>
+
+{% if pending_scope_reason_task_id %}
+<!-- Scope Change Reason Modal (Fix 2) — shown once after a task is created when a baseline exists -->
+<div class="modal fade" id="scopeReasonModal" tabindex="-1"
+     aria-labelledby="scopeReasonModalLabel" aria-modal="true" role="dialog">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:460px;">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-1">
+                <h5 class="modal-title fw-semibold" id="scopeReasonModalLabel">
+                    <i class="fas fa-microscope text-warning me-2"></i>Why was this task added?
+                </h5>
+            </div>
+            <div class="modal-body pt-1">
+                <p class="text-muted small mb-3">
+                    Recording the reason helps <strong>Scope Autopsy</strong> give you more accurate forensic analysis
+                    — instead of reporting this addition as undocumented growth.
+                </p>
+                <div class="mb-3">
+                    <label for="scopeReasonSelect" class="form-label fw-semibold small">Reason</label>
+                    <select class="form-select form-select-sm" id="scopeReasonSelect">
+                        <option value="requirement_change">Requirement Change</option>
+                        <option value="stakeholder_request">Stakeholder Request</option>
+                        <option value="discovered_complexity">Discovered Complexity</option>
+                        <option value="gold_plating">Gold Plating</option>
+                        <option value="initial_planning">Initial Planning (added at project start)</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="mb-1">
+                    <label for="scopeReasonNote" class="form-label fw-semibold small">
+                        Brief note <span class="text-muted fw-normal">(optional)</span>
+                    </label>
+                    <textarea class="form-control form-control-sm" id="scopeReasonNote"
+                              rows="2" placeholder="Any additional context…"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-1">
+                <button type="button" class="btn btn-link btn-sm text-muted text-decoration-none"
+                        onclick="skipScopeReason()">Skip for now</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="saveScopeReason()">
+                    <i class="fas fa-save me-1"></i>Save Reason
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var TASK_ID = {{ pending_scope_reason_task_id }};
+    var CSRF = '{{ csrf_token }}';
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var el = document.getElementById('scopeReasonModal');
+        if (!el) return;
+        var modal = new bootstrap.Modal(el, { backdrop: 'static', keyboard: false });
+        modal.show();
+    });
+
+    function postReason(reason, note) {
+        fetch('/tasks/' + TASK_ID + '/scope-reason/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: reason, note: note }),
+        }).catch(function () {});
+        var el = document.getElementById('scopeReasonModal');
+        var modal = el ? bootstrap.Modal.getInstance(el) : null;
+        if (modal) modal.hide();
+    }
+
+    window.saveScopeReason = function () {
+        var reason = document.getElementById('scopeReasonSelect').value;
+        var note = (document.getElementById('scopeReasonNote').value || '').trim();
+        postReason(reason, note);
+    };
+
+    window.skipScopeReason = function () {
+        postReason('unrecorded', '');
+    };
+}());
+</script>
+{% endif %}
+
+{% endblock content %}
 {% block extra_js %}
 <script src="{% static 'js/kanban.js' %}?v={{ board.id }}_{% now 'U' %}" id="kanban-script"></script>
 <script>
+    // Lightweight toast helper (showToast not provided globally by kanban.js)
+    function showToast(message, type) {
+        const bg = type === 'success' ? '#198754' : type === 'danger' ? '#dc3545' : '#0d6efd';
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;padding:12px 20px;border-radius:8px;color:#fff;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,.2);transition:opacity .4s';
+        toast.style.backgroundColor = bg;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 400); }, 3500);
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         // Apply label colors
         document.querySelectorAll('.task-label').forEach(label => {
             label.style.backgroundColor = label.dataset.color;
         });
 
-        // Set progress bar widths after DOM is loaded
+        // Progress bar widths are already set server-side via inline styles.
+        // Only re-apply for bars that somehow lost their width (e.g. dynamic content).
         document.querySelectorAll('.progress-bar[data-progress], .card-progress-fill[data-progress]').forEach(el => {
-            const progressValue = el.dataset.progress;
-            el.style.width = progressValue + '%';
-            if (el.setAttribute) el.setAttribute('aria-valuenow', progressValue);
-            el.offsetHeight;
+            if (!el.style.width) {
+                el.style.width = el.dataset.progress + '%';
+            }
         });
         
-        // ── Quick-view drawer open / close ──
+        // -- Quick-view drawer open / close --
         const drawer    = document.getElementById('task-drawer');
         const backdrop  = document.getElementById('drawer-backdrop');
 
@@ -1228,6 +2170,9 @@
             document.body.style.overflow = 'hidden';
         };
         window.closeDrawer = function() {
+            // Guard against losing staged (unsaved) drawer edits.
+            if (window._qvConfirmDiscard && !window._qvConfirmDiscard()) return;
+            if (window._qvClearStaged) window._qvClearStaged();
             drawer.classList.remove('open');
             backdrop.classList.remove('open');
             document.body.style.overflow = '';
@@ -1241,9 +2186,9 @@
             }
         });
 
-        // ══════════════════════════════════════════════════════
+        // ------------------------------------------------------
         // Quick-view drawer field handlers (event delegation)
-        // ══════════════════════════════════════════════════════
+        // ------------------------------------------------------
         // ONE change handler + ONE click handler on the
         // persistent #task-drawer-body container.  Uses plain
         // fetch (not htmx.ajax) for drawer reload to avoid
@@ -1251,6 +2196,30 @@
         (function() {
             const drawerBody = document.getElementById('task-drawer-body');
             if (!drawerBody) return;
+
+            // Idempotency guard. The quick-view drawer (#task-drawer-body) lives
+            // in base.html and is shared across every page; this initializer must
+            // attach the change/click delegates EXACTLY ONCE. If the board
+            // <script> is ever evaluated twice, a second binding would make every
+            // drawer mutation run its handler twice — two POSTs per user action
+            // (the BUG-02 / BUG-05 "fires exactly twice" root cause: one assignee
+            // change produced two POST /update-assignee/ in the server log). The
+            // flag is stored on the element so it survives even if this IIFE runs
+            // again on the same DOM.
+            if (drawerBody.dataset.qvHandlersBound === '1') return;
+            drawerBody.dataset.qvHandlersBound = '1';
+
+            // In-flight lock: even with a single binding, drop a duplicate
+            // submission for the same (task, endpoint) while one is still pending,
+            // so a stray double event can never reach the server twice.
+            const _qvInFlight = new Set();
+            function qvOnce(key, run) {
+                if (_qvInFlight.has(key)) return Promise.resolve(null);
+                _qvInFlight.add(key);
+                return Promise.resolve(run()).finally(function() {
+                    _qvInFlight.delete(key);
+                });
+            }
 
             function drawerCsrf() {
                 return drawerBody.querySelector('[name=csrfmiddlewaretoken]')?.value
@@ -1277,7 +2246,7 @@
                 if (badge) badge.textContent = cnt;
             }
 
-            // ── Update the kanban card on the board using data from the API ──
+            // -- Update the kanban card on the board using data from the API --
             function refreshCard(cardData) {
                 if (!cardData || !cardData.id) return;
                 var card = document.getElementById('task-' + cardData.id);
@@ -1289,14 +2258,14 @@
                     taskIdEl.textContent = cardData.task_id_display;
                 }
 
-                // Priority → border-left color
+                // Priority ? border-left color
                 var prio = cardData.priority;
                 var borderColor = '#6c757d'; // default (low)
                 if (prio === 'high' || prio === 'urgent') borderColor = '#dc3545';
                 else if (prio === 'medium') borderColor = '#f59e0b';
                 card.style.borderLeftColor = borderColor;
 
-                // Progress → bottom strip
+                // Progress ? bottom strip
                 var fill = card.querySelector('.card-progress-fill');
                 if (fill) {
                     fill.style.width = cardData.progress + '%';
@@ -1357,118 +2326,143 @@
                 }
             }
 
-            // Helper: POST FormData, refresh card + drawer
-            function postAndReload(url, fd) {
-                return fetch(url, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': drawerCsrf() },
-                    body: fd,
-                })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (data.card) refreshCard(data.card);
-                    reloadDrawer();
-                    return data;
-                })
-                .catch(function() { reloadDrawer(); });
+            // ── Staged-edit model ────────────────────────────────────────────
+            // Drawer fields do NOT write to the DB on change. Each edit is staged
+            // locally and committed only when the user clicks Save, which posts
+            // all changed fields in ONE request -> one task.save() -> the
+            // automation engine fires every applicable trigger from the combined
+            // before/after diff. This makes firing predictable (a burst of +/-
+            // clicks = one save = one trigger) and removes debounce guesswork.
+            var _qvStaged = {};   // field -> value, only fields the user changed
+            function qvSaveBtn()   { return drawerBody.querySelector('.qv-save-btn'); }
+            function qvDirtyFlag()  { return drawerBody.querySelector('.qv-dirty-flag'); }
+            function qvIsDirty()    { return Object.keys(_qvStaged).length > 0; }
+            function qvSyncFooter() {
+                var dirty = qvIsDirty();
+                var btn = qvSaveBtn();   if (btn)  btn.disabled = !dirty;
+                var flag = qvDirtyFlag(); if (flag) flag.style.display = dirty ? '' : 'none';
             }
+            function qvStage(field, value) { _qvStaged[field] = value; qvSyncFooter(); }
+            function qvClearStaged()        { _qvStaged = {}; qvSyncFooter(); }
 
-            // ── Single CHANGE handler (covers all selects & inputs) ──
+            // -- CHANGE handler: stage edits, never POST --
             drawerBody.addEventListener('change', function(e) {
-                var target = e.target;
+                var t = e.target;
+                if (t.matches('.qv-status-select'))   { qvStage('column_id',   t.value); return; }
+                if (t.matches('.qv-assignee-select')) { qvStage('assignee_id', t.value); return; }
+                if (t.matches('.qv-due-date'))        { qvStage('due_date',    t.value); return; }
+                if (t.matches('.qv-priority-select')) { qvStage('priority',    t.value); return; }
+                if (t.matches('.qv-progress-input'))  {
+                    var v = Math.max(0, Math.min(100, parseInt(t.value, 10) || 0));
+                    t.value = v;
+                    qvRenderProgress(v);
+                    qvStage('progress', v);
+                    return;
+                }
+            });
 
-                // Status
-                if (target.matches('.qv-status-select')) {
-                    var taskId      = target.dataset.taskId;
-                    var newColumnId = target.value;
+            // -- Progress +/- buttons: adjust the STAGED value locally only --
+            // No network per click. Save (below) commits the final value once.
+            function qvCurrentProgress() {
+                if ('progress' in _qvStaged) return _qvStaged.progress;
+                var num = drawerBody.querySelector('.qv-progress-input');
+                if (num && num.value !== '') {
+                    return Math.max(0, Math.min(100, parseInt(num.value, 10) || 0));
+                }
+                var bar = drawerBody.querySelector('.progress-bar');
+                return bar ? (parseInt(bar.getAttribute('data-progress'), 10) || 0) : 0;
+            }
+            function qvRenderProgress(val) {
+                var bar = drawerBody.querySelector('.progress-bar');
+                if (bar) {
+                    bar.style.width = val + '%';
+                    bar.className = 'progress-bar ' + (
+                        val === 100 ? 'bg-success' : val < 30 ? 'bg-danger'
+                        : val < 70 ? 'bg-warning' : 'bg-success');
+                    bar.setAttribute('data-progress', val);
+                }
+                var num = drawerBody.querySelector('.qv-progress-input');
+                if (num) num.value = val;
+            }
+            drawerBody.addEventListener('click', function(e) {
+                var btn = e.target.closest('.qv-progress-btn');
+                if (!btn) return;
+                var step = btn.dataset.direction === 'increase' ? 10 : -10;
+                var v = Math.max(0, Math.min(100, qvCurrentProgress() + step));
+                qvRenderProgress(v);          // optimistic local update only
+                qvStage('progress', v);
+            });
+
+            // -- SAVE: commit all staged fields in ONE request --
+            function qvSave() {
+                if (!qvIsDirty()) return;
+                var taskId = drawerTaskId();
+                if (!taskId) return;
+                var url    = '/tasks/' + taskId + '/update-fields/';
+                var staged = _qvStaged;       // snapshot for this request
+                qvOnce(url, function() {
                     var fd = new FormData();
-                    fd.append('column_id', newColumnId);
-                    fetch('/tasks/' + taskId + '/update-status/', {
+                    Object.keys(staged).forEach(function(k) { fd.append(k, staged[k]); });
+                    var btn = qvSaveBtn(); if (btn) btn.disabled = true;
+                    return fetch(url, {
                         method: 'POST',
                         headers: { 'X-CSRFToken': drawerCsrf() },
                         body: fd,
                     })
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
-                        if (data.card) refreshCard(data.card);
-                        if (data.success !== false) {
+                        if (data && data.error) { alert(data.error); qvSyncFooter(); return; }
+                        if (data && data.card) refreshCard(data.card);
+                        // Move the card on the board if the column (status) changed.
+                        if (data && data.new_column_id) {
                             var card    = document.getElementById('task-' + taskId);
                             var newList = document.querySelector(
-                                '.kanban-column-tasks[data-column-id="' + newColumnId + '"]');
+                                '.kanban-column-tasks[data-column-id="' + data.new_column_id + '"]');
                             if (card && newList) {
                                 var oldCol = card.closest('.kanban-column');
                                 newList.prepend(card);
-                                var newCol = newList.closest('.kanban-column');
                                 updateColumnBadge(oldCol);
-                                updateColumnBadge(newCol);
+                                updateColumnBadge(newList.closest('.kanban-column'));
                             }
                         }
-                        reloadDrawer();
+                        qvClearStaged();
+                        reloadDrawer();   // refresh predictions/badges from saved state
                     })
-                    .catch(function() { reloadDrawer(); });
-                    return;
-                }
-
-                // Assignee
-                if (target.matches('.qv-assignee-select')) {
-                    var fd = new FormData();
-                    fd.append('assignee_id', target.value);
-                    postAndReload('/tasks/' + target.dataset.taskId + '/update-assignee/', fd);
-                    return;
-                }
-
-                // Due date
-                if (target.matches('.qv-due-date')) {
-                    var fd = new FormData();
-                    fd.append('due_date', target.value);
-                    postAndReload('/tasks/' + target.dataset.taskId + '/update-fields/', fd);
-                    return;
-                }
-
-                // Priority
-                if (target.matches('.qv-priority-select')) {
-                    var fd = new FormData();
-                    fd.append('priority', target.value);
-                    postAndReload('/tasks/' + target.dataset.taskId + '/update-fields/', fd);
-                    return;
-                }
-
-                // Progress (number input)
-                if (target.matches('.qv-progress-input')) {
-                    var val = Math.max(0, Math.min(100, parseInt(target.value, 10) || 0));
-                    target.value = val;
-                    var fd = new FormData();
-                    fd.append('progress', val);
-                    postAndReload('/tasks/' + target.dataset.taskId + '/update-fields/', fd);
-                    return;
-                }
-            });
-
-            // ── Single CLICK handler (progress +/− buttons) ──
+                    .catch(function() { qvSyncFooter(); });
+                });
+            }
+            // Save button + "Open full detail" (abandons staged edits) clicks.
             drawerBody.addEventListener('click', function(e) {
-                var btn = e.target.closest('.qv-progress-btn');
-                if (!btn) return;
-                var direction = btn.dataset.direction;
-                var taskId    = btn.dataset.taskId;
-                fetch('/tasks/' + taskId + '/update-progress/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': drawerCsrf(),
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: JSON.stringify({ direction: direction }),
-                })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (data.card) refreshCard(data.card);
-                    reloadDrawer();
-                })
-                .catch(function() { reloadDrawer(); });
+                if (e.target.closest('.qv-save-btn')) { e.preventDefault(); qvSave(); return; }
+                var openFull = e.target.closest('.qv-open-full');
+                if (openFull && !qvConfirmDiscard()) { e.preventDefault(); }
             });
+
+            // -- Unsaved-changes guard --
+            function qvConfirmDiscard() {
+                return !qvIsDirty() ||
+                    window.confirm('You have unsaved changes in this task. Discard them?');
+            }
+            // A fresh task loaded into the drawer (HTMX swap) starts clean.
+            document.body.addEventListener('htmx:afterSwap', function(e) {
+                if (e.detail.target && e.detail.target.id === 'task-drawer-body') {
+                    _qvStaged = {};
+                }
+            });
+            // Opening another card while dirty: confirm before the HTMX request.
+            document.body.addEventListener('htmx:beforeRequest', function(e) {
+                var elt = e.detail && e.detail.elt;
+                if (elt && elt.classList && elt.classList.contains('kanban-task-v2')) {
+                    if (!qvConfirmDiscard()) { e.preventDefault(); }
+                    else { _qvStaged = {}; }
+                }
+            });
+            // Let closeDrawer()/backdrop consult the guard before closing.
+            window._qvConfirmDiscard = qvConfirmDiscard;
+            window._qvClearStaged    = function() { _qvStaged = {}; qvSyncFooter(); };
         })();
 
-        // ── Inline status picker (card hover bar) ──
+        // -- Inline status picker (card hover bar) --
         // Attach directly to buttons (not document delegation) because
         // the parent .card-hover-actions div uses stopPropagation to
         // prevent card-level HTMX click from firing.
@@ -1476,7 +2470,7 @@
             return document.querySelector('[name=csrfmiddlewaretoken]')?.value
                 || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
         }
-        // ── Flyout portal: single fixed div on <body> for all card pickers ──
+        // -- Flyout portal: single fixed div on <body> for all card pickers --
         const flyout = document.getElementById('inline-picker-flyout');
         let flyoutTaskId = null;
         let flyoutType = null;
@@ -1506,6 +2500,20 @@
                 type === 'status' ? '.inline-status-picker' : '.inline-assignee-picker'
             );
             flyout.innerHTML = srcPicker.innerHTML;
+
+            // For status: drop the option matching the card's CURRENT column.
+            // Read the column live from the DOM so this stays correct after a
+            // drag-and-drop move (which relocates the card without reloading).
+            if (type === 'status') {
+                const currentCol = card.closest('[data-column-id]');
+                const currentColId = currentCol ? currentCol.dataset.columnId : null;
+                if (currentColId) {
+                    const selfOpt = flyout.querySelector(
+                        `.inline-pick-option[data-column-id="${currentColId}"]`
+                    );
+                    if (selfOpt) selfOpt.remove();
+                }
+            }
 
             // Position: measure height first, then place above or below the button row
             const cardRect = card.getBoundingClientRect();
@@ -1564,14 +2572,14 @@
             });
         });
 
-        // ── Close flyout on click outside ──
+        // -- Close flyout on click outside --
         document.addEventListener('click', function(e) {
             if (!e.target.closest('#inline-picker-flyout, .status-change-btn, .assignee-change-btn')) {
                 closeFlyout();
             }
         });
 
-        // ── Set WIP Limit modal handler ──
+        // -- Set WIP Limit modal handler --
         (function() {
             const wipModal = document.getElementById('wipLimitModal');
             const wipInput = document.getElementById('wipLimitInput');
@@ -1617,26 +2625,89 @@
             });
         })();
 
-        // ── Collapse Column handler ──
-        // Use direct per-button listeners (not document delegation) so the
-        // handler fires at the button level, before Bootstrap's document-level
-        // clearMenus handler can call stopImmediatePropagation and swallow it.
-        document.querySelectorAll('.collapse-column-btn').forEach(function(btn) {
-            btn.addEventListener('click', function(e) {
-                const colId = this.dataset.columnId;
-                const colEl = document.getElementById('column-' + colId);
-                if (!colEl) return;
-                const isCollapsed = colEl.classList.toggle('column-collapsed');
-                const tasksDiv = colEl.querySelector('.kanban-column-tasks');
-                const addBtn  = colEl.querySelector('.p-2');
-                if (tasksDiv) tasksDiv.classList.toggle('d-none', isCollapsed);
-                if (addBtn)  addBtn.classList.toggle('d-none', isCollapsed);
-                this.innerHTML = isCollapsed
-                    ? '<i class="fas fa-expand-alt me-2 text-secondary"></i>Expand Column'
-                    : '<i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column';
+        // -- Aging Alerts (per-column) modal handler --
+        (function() {
+            const agingModal = document.getElementById('columnAgingModal');
+            if (!agingModal) return;
+            const customInputs = document.getElementById('agingCustomInputs');
+            const warnInput = document.getElementById('agingWarningInput');
+            const critInput = document.getElementById('agingCriticalInput');
+            const errBox = document.getElementById('agingError');
+            const saveBtn = document.getElementById('agingSaveBtn');
+            const boardDefaults = document.getElementById('agingBoardDefaults');
+            let _agingColumnId = null;
+
+            function selectedMode() {
+                const r = agingModal.querySelector('input[name="agingMode"]:checked');
+                return r ? r.value : 'inherit';
+            }
+            function syncCustomVisibility() {
+                customInputs.style.display = selectedMode() === 'custom' ? '' : 'none';
+            }
+            agingModal.querySelectorAll('input[name="agingMode"]').forEach(r =>
+                r.addEventListener('change', syncCustomVisibility));
+
+            agingModal.addEventListener('show.bs.modal', function(e) {
+                const trigger = e.relatedTarget;
+                if (!trigger || !trigger.classList.contains('set-aging-btn')) return;
+                _agingColumnId = trigger.dataset.columnId;
+                errBox.style.display = 'none';
+                const mode = trigger.dataset.agingMode || 'inherit';
+                document.getElementById('agingMode' + mode.charAt(0).toUpperCase() + mode.slice(1)).checked = true;
+                // The data-* warning/critical are already the EFFECTIVE values, so prefill them.
+                warnInput.value = trigger.dataset.agingWarning || '';
+                critInput.value = trigger.dataset.agingCritical || '';
+                // For a column in inherit mode the effective values ARE the board defaults.
+                if (mode === 'inherit' && trigger.dataset.agingWarning) {
+                    boardDefaults.textContent = `(${trigger.dataset.agingWarning}d / ${trigger.dataset.agingCritical}d)`;
+                } else {
+                    boardDefaults.textContent = '';
+                }
+                syncCustomVisibility();
             });
-        });
-        
+
+            saveBtn.addEventListener('click', function() {
+                if (!_agingColumnId) return;
+                const mode = selectedMode();
+                errBox.style.display = 'none';
+                const fd = new FormData();
+                fd.append('aging_mode', mode);
+                if (mode === 'custom') {
+                    const w = parseInt(warnInput.value, 10);
+                    const c = parseInt(critInput.value, 10);
+                    if (!(w >= 1) || !(c > w)) {
+                        errBox.textContent = 'Critical days must be greater than warning days (min 1).';
+                        errBox.style.display = 'block';
+                        return;
+                    }
+                    fd.append('aging_warning_days', w);
+                    fd.append('aging_critical_days', c);
+                }
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+                                || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+                saveBtn.disabled = true;
+                fetch(`/columns/${_agingColumnId}/update-aging/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    body: fd,
+                })
+                .then(r => r.json().then(d => ({ ok: r.ok, d })))
+                .then(({ ok, d }) => {
+                    if (!ok) {
+                        errBox.textContent = d.error || 'Could not save.';
+                        errBox.style.display = 'block';
+                        saveBtn.disabled = false;
+                        return;
+                    }
+                    bootstrap.Modal.getInstance(agingModal).hide();
+                    location.reload();
+                })
+                .catch(() => { saveBtn.disabled = false; location.reload(); });
+            });
+        })();
+
+        // -- Collapse Column handler (MOVED to standalone script below) --
+
         // Set up column delete functionality
         const deleteColumnBtns = document.querySelectorAll('.delete-column-btn');
         deleteColumnBtns.forEach(btn => {
@@ -1663,11 +2734,16 @@
             btn.addEventListener('click', function() {
                 const columnId = this.dataset.columnId;
                 const columnName = this.dataset.columnName;
+                const columnType = this.dataset.columnType || '';
                 const editForm = document.getElementById('editColumnForm');
                 const editColumnNameInput = document.getElementById('editColumnName');
-                
+                const editColumnTypeInput = document.getElementById('editColumnType');
+
                 editForm.action = `/columns/${columnId}/update/`;
                 editColumnNameInput.value = columnName;
+                if (editColumnTypeInput) {
+                    editColumnTypeInput.value = columnType;
+                }
             });
         });
           // Set up task delete functionality
@@ -1746,6 +2822,7 @@
     
     </script>
 
+<script src="{% static 'js/kanban_aging.js' %}?v={{ STATIC_VERSION|default:'9' }}_{% now 'U' %}"></script>
 <script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'9' }}"></script>
 
 <!-- Déjà Vu Banner Script -->
@@ -1764,163 +2841,3 @@
 })();
 </script>
 {% endblock %}
-
-<!-- ── AI Tools Slide-Out Panel ── -->
-<div class="offcanvas offcanvas-end" id="aiToolsPanel" tabindex="-1" aria-labelledby="aiToolsPanelLabel" data-bs-scroll="true" data-bs-backdrop="false">
-    <div class="offcanvas-header">
-        <h5 class="offcanvas-title" id="aiToolsPanelLabel"><i class="fas fa-bolt me-2"></i>AI Tools</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-    </div>
-    <div class="offcanvas-body">
-        <!-- Section 1: Analyze -->
-        <div class="ai-panel-section">
-            <div class="ai-panel-section-header">📊 Analyze</div>
-            <div class="ai-panel-grid">
-                <a class="ai-panel-tile" href="{% url 'board_analytics' board.id %}">
-                    <span class="tile-icon text-primary"><i class="fas fa-chart-pie"></i></span>
-                    <span class="tile-label">Analytics</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'burndown_dashboard' board.id %}">
-                    <span class="tile-icon text-success"><i class="fas fa-chart-line"></i></span>
-                    <span class="tile-label">Burndown</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'skill_gap_dashboard' board.id %}">
-                    <span class="tile-icon text-warning"><i class="fas fa-wand-magic-sparkles"></i></span>
-                    <span class="tile-label">Skill Gaps</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'board_status_report' board.id %}">
-                    <span class="tile-icon text-dark"><i class="fas fa-file-alt"></i></span>
-                    <span class="tile-label">Status Report</span>
-                </a>
-            </div>
-        </div>
-
-        <!-- Section 2: Plan -->
-        <div class="ai-panel-section">
-            <div class="ai-panel-section-header">📅 Plan</div>
-            <div class="ai-panel-grid">
-                <a class="ai-panel-tile" href="{% url 'gantt_chart' board.id %}">
-                    <span class="tile-icon text-info"><i class="fas fa-chart-gantt"></i></span>
-                    <span class="tile-label">Gantt Chart</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'board_calendar' board.id %}">
-                    <span class="tile-icon text-secondary"><i class="fas fa-calendar-alt"></i></span>
-                    <span class="tile-label">Calendar</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'budget_dashboard' board.id %}">
-                    <span class="tile-icon text-success"><i class="fas fa-dollar-sign"></i></span>
-                    <span class="tile-label">Budget & ROI</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'scope_dashboard' board.id %}">
-                    <span class="tile-icon text-primary"><i class="fas fa-chart-area"></i></span>
-                    <span class="tile-label">Scope</span>
-                </a>
-            </div>
-        </div>
-
-        <!-- Section 3: AI Actions -->
-        <div class="ai-panel-section">
-            <div class="ai-panel-section-header">🤖 AI Actions</div>
-            <div class="ai-panel-grid">
-                <a class="ai-panel-tile" href="{% url 'coach_dashboard' board.id %}">
-                    <span class="tile-icon" style="color:#667eea;"><i class="fas fa-user-graduate"></i></span>
-                    <span class="tile-label">AI Coach</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'prizmbrief_setup' board.id %}">
-                    <span class="tile-icon text-primary"><i class="fas fa-magic"></i></span>
-                    <span class="tile-label">PrizmBrief</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'whatif_dashboard' board.id %}">
-                    <span class="tile-icon text-info"><i class="fas fa-flask"></i></span>
-                    <span class="tile-label">What-If</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'shadow_board_list' board.id %}">
-                    <span class="tile-icon" style="color: #9c27b0;"><i class="fas fa-atom"></i></span>
-                    <span class="tile-label">Shadow Board</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'premortem_dashboard' board.id %}">
-                    <span class="tile-icon text-danger"><i class="fas fa-shield-alt"></i></span>
-                    <span class="tile-label">Pre-Mortem</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'stress_test_dashboard' board.id %}">
-                    <span class="tile-icon text-warning"><i class="fas fa-bolt"></i></span>
-                    <span class="tile-label">Stress Test</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'retrospective_dashboard' board.id %}">
-                    <span class="tile-icon text-secondary"><i class="fas fa-history"></i></span>
-                    <span class="tile-label">Retrospectives</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'scope_autopsy_dashboard' board.id %}">
-                    <span class="tile-icon text-warning"><i class="fas fa-microscope"></i></span>
-                    <span class="tile-label">Scope Autopsy</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'exit_protocol:dashboard' board.id %}">
-                    <span class="tile-icon" style="color: #e65100;"><i class="fas fa-skull-crossbones"></i></span>
-                    <span class="tile-label">Exit Protocol</span>
-                </a>
-            </div>
-        </div>
-
-        <!-- Section 4: Board Settings -->
-        <div class="ai-panel-section">
-            <div class="ai-panel-section-header">⚙️ Board Settings</div>
-            <div class="ai-panel-grid">
-                <a class="ai-panel-tile" href="{% url 'automations_list' board.id %}">
-                    <span class="tile-icon text-warning"><i class="fas fa-bolt"></i></span>
-                    <span class="tile-label">Automations</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'board_knowledge' board.id %}">
-                    <span class="tile-icon text-info"><i class="fas fa-wand-magic-sparkles"></i></span>
-                    <span class="tile-label">Knowledge Base</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'export_board' board.id %}?format=json">
-                    <span class="tile-icon text-success"><i class="fas fa-file-export"></i></span>
-                    <span class="tile-label">Export JSON</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'export_board' board.id %}?format=csv">
-                    <span class="tile-icon text-success"><i class="fas fa-file-csv"></i></span>
-                    <span class="tile-label">Export CSV</span>
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-(function() {
-    var panel = document.getElementById('aiToolsPanel');
-    var btn = document.getElementById('aiToolsToggle');
-    if (!panel || !btn) return;
-
-    var bsOffcanvas = null;
-
-    // Lazily get the Bootstrap offcanvas instance once it's initialised
-    function getOffcanvas() {
-        if (!bsOffcanvas) bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(panel);
-        return bsOffcanvas;
-    }
-
-    // Active button indicator
-    panel.addEventListener('show.bs.offcanvas', function() { btn.classList.add('active'); });
-    panel.addEventListener('hidden.bs.offcanvas', function() { btn.classList.remove('active'); });
-
-    // Close when clicking outside the panel (no backdrop because data-bs-backdrop="false")
-    document.addEventListener('click', function(e) {
-        // Only act when the panel is currently open
-        if (!panel.classList.contains('show')) return;
-        // Ignore clicks on the toggle button itself (Bootstrap handles the toggle)
-        if (btn.contains(e.target)) return;
-        // Ignore clicks inside the panel
-        if (panel.contains(e.target)) return;
-        getOffcanvas().hide();
-    }, true); // capture phase so it fires before Bootstrap stops propagation
-})();
-</script>
-
-{# ── Single flyout portal for card hover pickers (escapes all overflow containers) ── #}
-<div id="inline-picker-flyout"
-     class="d-none"
-     onclick="event.stopPropagation();"
-     style="position:fixed;z-index:9999;background:var(--card-bg,#fff);border:1px solid var(--border-color,#dee2e6);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:200px;overflow-y:auto;min-width:120px;"></div>
-
-{% endblock content %}

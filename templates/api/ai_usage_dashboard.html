@@ -11,10 +11,9 @@
         --success-color: #10b981;
         --warning-color: #f59e0b;
         --danger-color: #ef4444;
-        --bg-light: #f9fafb;
-        --border-color: #e5e7eb;
-        --text-primary: #111827;
-        --text-secondary: #6b7280;
+        /* NOTE: do NOT redefine --border-color / --text-primary / --text-secondary
+           here — those are global theme tokens (css/theme.css) that flip for dark
+           mode. Overriding them at :root forced dark text on every theme. */
     }
     
     .ai-usage-container {
@@ -51,7 +50,7 @@
     }
     
     .usage-card {
-        background: white;
+        background: var(--card-bg);
         border: 1px solid var(--border-color);
         border-radius: 16px;
         padding: 32px;
@@ -215,7 +214,7 @@
     }
     
     .stat-box {
-        background: white;
+        background: var(--card-bg);
         border: 1px solid var(--border-color);
         border-radius: 12px;
         padding: 24px;
@@ -335,7 +334,7 @@
         color: var(--text-secondary);
         position: relative;
         z-index: 1;
-        background: white;
+        background: var(--card-bg);
     }
     
     .empty-state i {
@@ -399,9 +398,9 @@
 {% block content %}
 <div class="ai-usage-container">
     <!-- Back Button -->
-    <button onclick="goBack()" class="btn btn-outline-secondary back-to-dashboard">
+    <a href="{% url 'dashboard' %}" class="btn-prizm-back back-to-dashboard">
         <i class="fas fa-arrow-left me-1"></i> Back
-    </button>
+    </a>
     
     <!-- Page Header -->
     <div class="page-header">
@@ -634,7 +633,7 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script src="{% static 'vendor/chart.min.3.9.1.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
 // Auto-refresh usage stats every 30 seconds
 let refreshInterval = null;

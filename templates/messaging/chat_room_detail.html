@@ -11,7 +11,7 @@
         height: 600px;
         border: 1px solid #ddd;
         border-radius: 8px;
-        background: white;
+        background: var(--card-bg);
         overflow: hidden;
     }
 
@@ -37,7 +37,7 @@
     .message {
         margin-bottom: 1rem;
         padding: 0.75rem;
-        background: white;
+        background: var(--card-bg);
         border-radius: 8px;
         border-left: 3px solid #667eea;
     }
@@ -59,12 +59,12 @@
 
     .message-content {
         margin-top: 0.25rem;
-        color: #333;
+        color: var(--text-primary);
     }
 
     .message-time {
         font-size: 0.8rem;
-        color: #999;
+        color: var(--text-muted);
         margin-top: 0.25rem;
     }
 
@@ -99,7 +99,7 @@
     }
 
     .message-read-btn.read {
-        color: #999;
+        color: var(--text-muted);
         cursor: default;
         text-decoration: line-through;
     }
@@ -140,9 +140,64 @@
     }
 
     .chat-input-area {
+        position: relative;
         padding: 1rem;
         border-top: 1px solid #ddd;
-        background: white;
+        background: var(--card-bg);
+    }
+
+    /* ---- @mention autocomplete ---- */
+    .mention-dropdown {
+        display: none;
+        position: absolute;
+        bottom: 100%;
+        left: 1rem;
+        right: 1rem;
+        margin-bottom: 0.25rem;
+        background: var(--card-bg);
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.12);
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 20;
+    }
+
+    .mention-dropdown.show {
+        display: block;
+    }
+
+    .mention-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        font-size: 0.9rem;
+    }
+
+    .mention-item:hover,
+    .mention-item.active {
+        background: #f0f0ff;
+    }
+
+    .mention-item .mention-avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #6c5ce7;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: 600;
+        flex-shrink: 0;
+    }
+
+    .mention-item .mention-username {
+        color: #666;
+        font-size: 0.8rem;
     }
 
     .chat-form {
@@ -211,7 +266,7 @@
     #ai-compose-preview .ai-rewritten-text {
         font-size: 0.95rem;
         line-height: 1.5;
-        color: #333;
+        color: var(--text-primary);
         white-space: pre-wrap;
         word-break: break-word;
     }
@@ -256,6 +311,291 @@
     /* AI spinner inside buttons */
     .ai-btn-spinner {
         display: none;
+    }
+
+    /* ---- Presence indicators ---- */
+    .presence-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+        margin-top: 3px;
+        transition: background-color 0.4s ease;
+    }
+    .presence-dot.status-active  { background-color: #28a745; }
+    .presence-dot.status-away    { background-color: #ffc107; }
+    .presence-dot.status-offline { background-color: #ced4da; }
+
+    .last-seen-text {
+        font-size: 0.72rem;
+        color: #8a9099;
+        display: block;
+        margin-top: 1px;
+    }
+
+    #active-count-display {
+        font-size: 0.78rem;
+        font-weight: 400;
+        opacity: 0.85;
+        letter-spacing: 0.01em;
+    }
+
+    /* Privacy toggle row in members sidebar */
+    .presence-toggle-row {
+        padding-top: 0.6rem;
+        border-top: 1px solid #e9ecef;
+        margin-top: 0.6rem;
+    }
+    .presence-toggle-row .form-check-label {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        cursor: pointer;
+    }
+
+    /* ---- In-room message search ---- */
+    #searchToggleBtn {
+        background: none;
+        border: none;
+        color: rgba(255,255,255,0.85);
+        padding: 0.25rem 0.4rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1rem;
+        line-height: 1;
+        transition: color 0.15s, background 0.15s;
+        flex-shrink: 0;
+    }
+    #searchToggleBtn:hover,
+    #searchToggleBtn.active {
+        color: #fff;
+        background: rgba(255,255,255,0.18);
+    }
+
+    .search-bar-wrapper {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.25s ease;
+        background: #f0ecff;
+        border-bottom: 1px solid #d8d0f0;
+    }
+    .search-bar-wrapper.open {
+        max-height: 80px;
+    }
+    .search-anchor {
+        position: relative; /* positioning context for .search-results-panel; must stay a
+                                normal block box (not flex/grid) so top:100% resolves directly
+                                below the search bar instead of the flex container's origin */
+    }
+    .search-bar-inner {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+    }
+    .search-bar-inner input[type="text"] {
+        flex: 1;
+        min-width: 0;
+        font-size: 0.9rem;
+    }
+    .search-bar-inner select {
+        font-size: 0.85rem;
+        max-width: 160px;
+        flex-shrink: 0;
+    }
+    #searchCloseBtn {
+        background: none;
+        border: none;
+        color: #666;
+        font-size: 1.1rem;
+        line-height: 1;
+        padding: 0.1rem 0.3rem;
+        cursor: pointer;
+        flex-shrink: 0;
+        border-radius: 3px;
+    }
+    #searchCloseBtn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+
+    /* Results overlay — anchored to .search-anchor, directly below the search bar */
+    .search-results-panel {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 120;
+        background: var(--card-bg);
+        border: 1px solid #d0c8f0;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        max-height: 300px;
+        overflow-y: auto;
+        box-shadow: 0 6px 18px rgba(102,126,234,0.18);
+    }
+    .search-results-header {
+        padding: 0.5rem 1rem 0.4rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #5a2d82;
+        background: #f8f4ff;
+    }
+    .search-results-divider {
+        margin: 0;
+        border: none;
+        border-top: 1px solid #e0d5f8;
+    }
+    .search-result-item {
+        padding: 0.65rem 1rem;
+        border-bottom: 1px solid #f0edf8;
+        cursor: pointer;
+        transition: background 0.12s;
+    }
+    .search-result-item:last-child { border-bottom: none; }
+    .search-result-item:hover { background: #f5f0ff; }
+    .search-result-meta {
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        margin-bottom: 0.2rem;
+    }
+    .search-result-content {
+        font-size: 0.88rem;
+        color: var(--text-primary);
+        word-break: break-word;
+    }
+    .search-status-msg {
+        padding: 0.75rem 1rem;
+        font-size: 0.85rem;
+        color: #666;
+        font-style: italic;
+    }
+    mark.search-highlight {
+        background: #fef3c7;
+        color: inherit;
+        padding: 0;
+        border-radius: 2px;
+    }
+
+    /* Yellow flash animation for jump-to-message */
+    @keyframes messageFlash {
+        0%   { background: #fef3c7; box-shadow: 0 0 0 3px #fde68a; }
+        100% { background: transparent; box-shadow: none; }
+    }
+    .message-flash {
+        animation: messageFlash 1.5s ease-out forwards;
+    }
+
+    /* ---- Dark mode overrides (hardcoded light surfaces don't flip on their own) ---- */
+    [data-bs-theme="dark"] .chat-container {
+        border-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .chat-messages {
+        background-color: var(--bg-primary);
+    }
+
+    [data-bs-theme="dark"] .chat-header {
+        border-bottom-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .message {
+        border-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .message.own {
+        background: rgba(118, 75, 162, 0.18);
+    }
+
+    [data-bs-theme="dark"] .chat-input-area {
+        border-top-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .mention-dropdown {
+        border-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .mention-item:hover,
+    [data-bs-theme="dark"] .mention-item.active {
+        background: var(--bg-tertiary);
+    }
+
+    [data-bs-theme="dark"] .mention-item .mention-username {
+        color: var(--text-muted);
+    }
+
+    [data-bs-theme="dark"] .ai-toolbar {
+        background: rgba(118, 75, 162, 0.15);
+        border-bottom-color: rgba(118, 75, 162, 0.35);
+    }
+
+    [data-bs-theme="dark"] .ai-toolbar .ai-label {
+        color: #c9a8f0;
+    }
+
+    [data-bs-theme="dark"] #ai-thread-summary {
+        background: rgba(118, 75, 162, 0.15);
+    }
+
+    [data-bs-theme="dark"] #ai-compose-preview {
+        background: rgba(118, 75, 162, 0.15);
+    }
+
+    [data-bs-theme="dark"] #ai-compose-preview .ai-alt-chip {
+        background: rgba(118, 75, 162, 0.3);
+        color: #d9b8ff;
+    }
+
+    [data-bs-theme="dark"] #ai-compose-preview .ai-alt-chip:hover {
+        background: rgba(118, 75, 162, 0.45);
+    }
+
+    [data-bs-theme="dark"] .msg-ai-extract-btn {
+        color: #c9a8f0;
+    }
+
+    [data-bs-theme="dark"] .msg-ai-extract-btn:hover {
+        color: #d9b8ff;
+    }
+
+    [data-bs-theme="dark"] .last-seen-text {
+        color: var(--text-muted);
+    }
+
+    [data-bs-theme="dark"] .presence-toggle-row {
+        border-top-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .search-bar-wrapper {
+        background: rgba(118, 75, 162, 0.15);
+        border-bottom-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] #searchCloseBtn {
+        color: var(--text-muted);
+    }
+
+    [data-bs-theme="dark"] .search-results-panel {
+        border-color: var(--border-color);
+        background: var(--card-bg);
+    }
+
+    [data-bs-theme="dark"] .search-results-header {
+        background: rgba(118, 75, 162, 0.2);
+        color: #d9b8ff;
+    }
+
+    [data-bs-theme="dark"] .search-results-divider {
+        border-top-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .search-result-item {
+        border-bottom-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .search-result-item:hover {
+        background: var(--bg-tertiary);
+    }
+
+    [data-bs-theme="dark"] .search-status-msg {
+        color: var(--text-muted);
     }
 </style>
 {% endblock %}
@@ -593,6 +933,7 @@
             const messageEl = document.createElement('div');
             messageEl.classList.add('message');
             messageEl.setAttribute('data-message-id', data.id);
+            messageEl.id = 'message-' + data.id;  // needed for jump-to-message from search
             messageEl.setAttribute('data-read-by', '1');  // Only sender has "read" it
             
             // Mark own messages with different styling
@@ -696,7 +1037,6 @@
             addFileToList(data);
         }
         else if (data.type === 'user_typing') {
-            console.log(data.username + ' is typing...');
             showTypingIndicator(data.username);
         }
         else if (data.type === 'user_stop_typing') {
@@ -707,6 +1047,10 @@
         }
         else if (data.type === 'user_leave') {
             console.log(data.username + ' left the room');
+        }
+        else if (data.type === 'presence_update') {
+            console.log('[Presence] presence_update received:', data.active_count, 'active,', data.members?.length, 'members');
+            updatePresenceUI(data.members, data.active_count);
         }
         else if (data.type === 'message_deleted') {
             // Remove message from DOM immediately for all users
@@ -766,17 +1110,144 @@
 
     // Handle Enter key to send message
     document.querySelector('input[name="message"]').addEventListener('keypress', function(e) {
+        if (window.mentionDropdownOpen) return; // let the @mention dropdown handle Enter
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             document.querySelector('.chat-form').dispatchEvent(new Event('submit'));
         }
     });
 
+    // --- @mention autocomplete ---
+    (function() {
+        const messageInputEl = document.querySelector('input[name="message"]');
+        const mentionDropdown = document.getElementById('mentionDropdown');
+        const chatMembers = Array.from(document.querySelectorAll('#members-presence-list li[data-user-id]'))
+            .map(function(li) {
+                return {
+                    username: li.dataset.username,
+                    fullName: li.querySelector(':scope > div > div').textContent.replace(/\s*Creator\s*$/, '').trim()
+                };
+            })
+            .filter(function(m) { return m.username && m.username !== currentUsername; });
+
+        let mentionMatches = [];
+        let mentionActiveIndex = -1;
+        let mentionStart = -1; // index of '@' within the input value
+        window.mentionDropdownOpen = false;
+
+        function closeMentionDropdown() {
+            mentionDropdown.classList.remove('show');
+            mentionDropdown.innerHTML = '';
+            mentionMatches = [];
+            mentionActiveIndex = -1;
+            mentionStart = -1;
+            window.mentionDropdownOpen = false;
+        }
+
+        function renderMentionDropdown() {
+            mentionDropdown.innerHTML = mentionMatches.map(function(m, i) {
+                return '<div class="mention-item' + (i === mentionActiveIndex ? ' active' : '') + '" data-index="' + i + '">' +
+                    '<span class="mention-avatar">' + m.fullName.charAt(0).toUpperCase() + '</span>' +
+                    '<span>' + m.fullName + ' <span class="mention-username">@' + m.username + '</span></span>' +
+                    '</div>';
+            }).join('');
+            mentionDropdown.classList.add('show');
+            window.mentionDropdownOpen = true;
+        }
+
+        function selectMention(index) {
+            const m = mentionMatches[index];
+            if (!m) return;
+            const value = messageInputEl.value;
+            const cursor = messageInputEl.selectionStart;
+            const before = value.slice(0, mentionStart);
+            const after = value.slice(cursor);
+            const insertion = '@' + m.username + ' ';
+            messageInputEl.value = before + insertion + after;
+            const newCursor = (before + insertion).length;
+            messageInputEl.setSelectionRange(newCursor, newCursor);
+            closeMentionDropdown();
+            messageInputEl.focus();
+        }
+
+        messageInputEl.addEventListener('input', function() {
+            const cursor = messageInputEl.selectionStart;
+            const uptoCursor = messageInputEl.value.slice(0, cursor);
+            const match = uptoCursor.match(/(?:^|\s)@(\w*)$/);
+            if (!match) {
+                closeMentionDropdown();
+                return;
+            }
+            const query = match[1].toLowerCase();
+            mentionStart = cursor - match[1].length - 1;
+            mentionMatches = chatMembers.filter(function(m) {
+                if (m.username.toLowerCase().startsWith(query)) return true;
+                return m.fullName.toLowerCase().split(/\s+/).some(function(w) { return w.startsWith(query); });
+            }).slice(0, 6);
+            if (mentionMatches.length === 0) {
+                closeMentionDropdown();
+                return;
+            }
+            mentionActiveIndex = 0;
+            renderMentionDropdown();
+        });
+
+        messageInputEl.addEventListener('keydown', function(e) {
+            if (!window.mentionDropdownOpen) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                mentionActiveIndex = (mentionActiveIndex + 1) % mentionMatches.length;
+                renderMentionDropdown();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                mentionActiveIndex = (mentionActiveIndex - 1 + mentionMatches.length) % mentionMatches.length;
+                renderMentionDropdown();
+            } else if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                selectMention(mentionActiveIndex);
+            } else if (e.key === 'Escape') {
+                closeMentionDropdown();
+            }
+        });
+
+        // Use mousedown (fires before the input's blur) so selecting an item doesn't
+        // require a second click to refocus the input.
+        mentionDropdown.addEventListener('mousedown', function(e) {
+            const item = e.target.closest('.mention-item');
+            if (!item) return;
+            e.preventDefault();
+            selectMention(parseInt(item.dataset.index, 10));
+        });
+
+        document.addEventListener('click', function(e) {
+            if (e.target !== messageInputEl && !mentionDropdown.contains(e.target)) {
+                closeMentionDropdown();
+            }
+        });
+    })();
+
+    // --- Typing sender ---
+    // Sends 'typing' on keydown and auto-sends 'stop_typing' after 3 s of silence.
+    let typingTimer = null;
+    let isTypingSent = false;
+    document.querySelector('input[name="message"]').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') return; // suppress on send
+        if (!isTypingSent) {
+            chatSocketManager.send({ type: 'typing' });
+            isTypingSent = true;
+        }
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(function() {
+            chatSocketManager.send({ type: 'stop_typing' });
+            isTypingSent = false;
+        }, 3000);
+    });
+
     // Cleanup on page unload
     window.addEventListener('beforeunload', function() {
         chatSocketManager.close();
     });
-    
+
     // Typing indicator functions
     const typingUsers = new Set();
     function showTypingIndicator(username) {
@@ -803,15 +1274,116 @@
         if (typingUsers.size === 0) {
             indicator.textContent = '';
             indicator.style.display = 'none';
-        } else if (typingUsers.size === 1) {
-            indicator.textContent = `${[...typingUsers][0]} is typing...`;
-            indicator.style.display = 'block';
         } else {
-            indicator.textContent = `${typingUsers.size} people are typing...`;
+            const names = [...typingUsers];
+            let label;
+            if (names.length === 1) {
+                label = `${names[0]} is typing...`;
+            } else if (names.length === 2) {
+                label = `${names[0]} and ${names[1]} are typing...`;
+            } else {
+                const extra = names.length - 2;
+                label = `${names[0]}, ${names[1]} and ${extra} other${extra > 1 ? 's' : ''} are typing...`;
+            }
+            indicator.textContent = label;
             indicator.style.display = 'block';
         }
     }
-    
+
+    // --- Presence update UI ---
+    function formatLastSeen(isoString) {
+        if (!isoString) return '';
+        const dt = new Date(isoString);
+        const now = new Date();
+        const diffMs = now - dt;
+        const diffMins = Math.floor(diffMs / 60000);
+        if (diffMins < 1) return 'Last seen just now';
+        if (diffMins < 60) return `Last seen ${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours < 24) {
+            const hh = dt.getHours().toString().padStart(2, '0');
+            const mm = dt.getMinutes().toString().padStart(2, '0');
+            return `Last seen today at ${hh}:${mm}`;
+        }
+        return `Last seen ${dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+    }
+
+    function updatePresenceUI(members, activeCount) {
+        // Update header active count
+        const countEl = document.getElementById('active-count-display');
+        if (countEl) {
+            if (activeCount > 0) {
+                countEl.textContent = `${activeCount} active now`;
+            } else {
+                countEl.textContent = '';
+            }
+        }
+        // Update each member's dot and last-seen text
+        members.forEach(function(m) {
+            let dot = document.getElementById('presence-dot-' + m.user_id);
+
+            // ── Dynamic insert ────────────────────────────────────────────
+            // If the member joined after User A loaded the page (auto-added
+            // via is_user_authorized), their <li> won't exist yet. Create it
+            // so the dot update isn't silently dropped.
+            if (!dot) {
+                const list = document.getElementById('members-presence-list');
+                if (list) {
+                    const li = document.createElement('li');
+                    li.className = 'd-flex align-items-start gap-2 py-1';
+                    li.dataset.userId = m.user_id;
+                    li.innerHTML =
+                        `<span class="presence-dot status-offline" id="presence-dot-${m.user_id}" title="Offline"></span>` +
+                        `<div>` +
+                            `<div>${m.display_name}</div>` +
+                            `<span class="last-seen-text" id="last-seen-${m.user_id}" style="display:none;"></span>` +
+                        `</div>`;
+                    list.appendChild(li);
+                    dot = document.getElementById('presence-dot-' + m.user_id);
+                }
+            }
+            // ─────────────────────────────────────────────────────────────
+
+            const lastSeenEl = document.getElementById('last-seen-' + m.user_id);
+            if (dot) {
+                dot.className = 'presence-dot status-' + m.status;
+                console.log('[Presence dot]', m.user_id, '→', 'status-' + m.status);
+                const statusLabel = m.status === 'active' ? 'Active in this room'
+                    : m.status === 'away' ? 'Online elsewhere'
+                    : 'Offline';
+                dot.title = statusLabel;
+            }
+            if (lastSeenEl) {
+                if (m.status === 'offline' && m.last_seen_iso) {
+                    lastSeenEl.textContent = formatLastSeen(m.last_seen_iso);
+                    lastSeenEl.style.display = 'block';
+                } else {
+                    lastSeenEl.textContent = '';
+                    lastSeenEl.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    // --- Last-seen privacy toggle ---
+    const lastSeenToggle = document.getElementById('showLastSeenToggle');
+    if (lastSeenToggle) {
+        lastSeenToggle.addEventListener('change', function() {
+            fetch('{% url "update_presence_preference" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]') ?
+                        document.querySelector('[name=csrfmiddlewaretoken]').value :
+                        getCookie('csrftoken')
+                },
+                body: JSON.stringify({ show_last_seen: this.checked })
+            }).catch(function(err) {
+                console.error('Failed to update presence preference', err);
+            });
+        });
+    }
+
     // Function to add file to the files list dynamically
     function addFileToList(fileData) {
         const filesList = document.getElementById('filesList');
@@ -1417,10 +1989,12 @@ function aiSummarizeThread() {
     const spinner = document.getElementById('summarize-spinner');
     const panel = document.getElementById('ai-thread-summary');
     const textEl = document.getElementById('ai-summary-text');
+    const copyBtn = document.getElementById('btn-copy-summary');
 
     btn.disabled = true;
     spinner.style.display = 'inline-block';
     panel.classList.add('d-none');
+    copyBtn.classList.add('d-none');
 
     fetch(AI_SUMMARIZE_URL, {
         method: 'POST',
@@ -1434,6 +2008,7 @@ function aiSummarizeThread() {
         } else {
             textEl.textContent = data.summary;
             panel.className = 'alert alert-info mb-0';
+            copyBtn.classList.remove('d-none');
         }
         panel.classList.remove('d-none');
     })
@@ -1445,6 +2020,22 @@ function aiSummarizeThread() {
     .finally(() => {
         btn.disabled = false;
         spinner.style.display = 'none';
+    });
+}
+
+function aiCopySummary() {
+    const textEl = document.getElementById('ai-summary-text');
+    const copyBtn = document.getElementById('btn-copy-summary');
+    const text = textEl.textContent || '';
+
+    navigator.clipboard.writeText(text).then(() => {
+        const original = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<i class="fas fa-check me-1"></i> Copied';
+        setTimeout(() => { copyBtn.innerHTML = original; }, 1500);
+    }).catch(() => {
+        const original = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<i class="fas fa-times me-1"></i> Failed';
+        setTimeout(() => { copyBtn.innerHTML = original; }, 1500);
     });
 }
 
@@ -1466,7 +2057,7 @@ function aiExtractTasksThread() {
             alert('AI error: ' + data.error);
             return;
         }
-        _showTaskSuggestionsModal(data.tasks || []);
+        _showTaskSuggestionsModal(data.tasks || [], data.target_column);
     })
     .catch(() => alert('Request failed. Please check your connection and try again.'))
     .finally(() => {
@@ -1489,7 +2080,7 @@ function aiExtractTasksFromMessage(messageId) {
             alert('AI error: ' + data.error);
             return;
         }
-        _showTaskSuggestionsModal(data.tasks || []);
+        _showTaskSuggestionsModal(data.tasks || [], data.target_column);
     })
     .catch(() => alert('Request failed. Please check your connection and try again.'));
 }
@@ -1502,8 +2093,9 @@ const PRIORITY_BADGE = {
     urgent: 'bg-danger',
 };
 
-function _showTaskSuggestionsModal(tasks) {
+function _showTaskSuggestionsModal(tasks, targetColumn) {
     _aiPendingTasks = tasks;
+    document.getElementById('ai-target-column-name').textContent = targetColumn || 'To Do';
     const listEl = document.getElementById('ai-task-list');
     const noTasksEl = document.getElementById('ai-no-tasks-msg');
 
@@ -1526,7 +2118,7 @@ function _showTaskSuggestionsModal(tasks) {
                 confidenceHtml = `
                 <div class="d-flex align-items-center mt-1" title="AI Confidence: ${pct}%">
                     <small class="text-muted me-1" style="font-size:0.72rem;">Confidence:</small>
-                    <div style="flex:1;max-width:100px;height:6px;background:#e9ecef;border-radius:3px;overflow:hidden;">
+                    <div style="flex:1;max-width:100px;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;">
                         <div style="width:${pct}%;height:100%;background:${confColor};border-radius:3px;"></div>
                     </div>
                     <small class="ms-1 fw-semibold" style="font-size:0.72rem;color:${confColor};">${pct}%</small>
@@ -1632,32 +2224,221 @@ function aiConfirmCreateTasks() {
         spinner.classList.add('d-none');
     });
 }
+
+// ============================================================
+// In-room message search
+// ============================================================
+const SEARCH_URL = "{% url 'messaging:search_room_messages' room_id=chat_room.id %}";
+
+let _searchDebounceTimer = null;
+let _searchActive = false;
+
+function toggleSearchBar() {
+    if (_searchActive) {
+        closeSearch();
+    } else {
+        _searchActive = true;
+        const wrapper = document.getElementById('searchBarWrapper');
+        wrapper.classList.add('open');
+        document.getElementById('searchToggleBtn').classList.add('active');
+        // Focus input after transition
+        setTimeout(() => document.getElementById('searchInput').focus(), 260);
+    }
+}
+
+function closeSearch() {
+    _searchActive = false;
+    clearTimeout(_searchDebounceTimer);
+    document.getElementById('searchBarWrapper').classList.remove('open');
+    document.getElementById('searchToggleBtn').classList.remove('active');
+    document.getElementById('searchInput').value = '';
+    document.getElementById('senderFilter').value = '';
+    document.getElementById('searchResultsPanel').classList.add('d-none');
+    document.getElementById('searchResultsPanel').innerHTML = '';
+}
+
+function _showSearchPanel(html) {
+    const panel = document.getElementById('searchResultsPanel');
+    panel.innerHTML = html;
+    panel.classList.remove('d-none');
+}
+
+function _escapeSearchHtml(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function _highlightMatch(text, query) {
+    // Escape HTML first, then wrap case-insensitive matches in <mark>
+    const safe = _escapeSearchHtml(text);
+    const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return safe.replace(new RegExp(safeQuery, 'gi'), m => `<mark class="search-highlight">${m}</mark>`);
+}
+
+function _formatSearchDate(isoString) {
+    const d = new Date(isoString);
+    return d.toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function _searchResultsHeaderHtml(count, query) {
+    const q = _escapeSearchHtml(query);
+    const label = count === 0
+        ? `No messages found for "${q}"`
+        : `Search Results for "${q}" (${count} found)`;
+    return `<div class="search-results-header"><i class="fas fa-search me-1"></i>${label}</div><hr class="search-results-divider">`;
+}
+
+function performSearch() {
+    const q = document.getElementById('searchInput').value.trim();
+    const senderId = document.getElementById('senderFilter').value;
+
+    if (q.length < 3) {
+        _showSearchPanel('<div class="search-status-msg">Type at least 3 characters to search</div>');
+        return;
+    }
+
+    _showSearchPanel('<div class="search-status-msg">Searching...</div>');
+
+    let url = SEARCH_URL + '?q=' + encodeURIComponent(q);
+    if (senderId) url += '&sender_id=' + encodeURIComponent(senderId);
+
+    fetch(url, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.results || data.results.length === 0) {
+            _showSearchPanel(_searchResultsHeaderHtml(0, data.query));
+            return;
+        }
+        let html = _searchResultsHeaderHtml(data.results.length, data.query);
+        data.results.forEach(msg => {
+            html += `<div class="search-result-item" onclick="jumpToMessage(${msg.id})">
+                <div class="search-result-meta">
+                    <strong>${_escapeSearchHtml(msg.author_display_name)}</strong>
+                    &nbsp;&middot;&nbsp;${_escapeSearchHtml(_formatSearchDate(msg.created_at))}
+                </div>
+                <div class="search-result-content">${_highlightMatch(msg.content, data.query)}</div>
+            </div>`;
+        });
+        _showSearchPanel(html);
+    })
+    .catch(() => {
+        _showSearchPanel('<div class="search-status-msg">Search failed. Please try again.</div>');
+    });
+}
+
+function jumpToMessage(messageId) {
+    closeSearch();
+    const el = document.getElementById('message-' + messageId);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('message-flash');
+    // Force reflow so removing + re-adding restarts animation
+    void el.offsetWidth;
+    el.classList.add('message-flash');
+    setTimeout(() => el.classList.remove('message-flash'), 1600);
+}
+
+// Wire up search bar events
+document.addEventListener('DOMContentLoaded', function () {
+    const searchInput = document.getElementById('searchInput');
+    const senderFilter = document.getElementById('senderFilter');
+
+    searchInput.addEventListener('keyup', function (e) {
+        if (e.key === 'Escape') { closeSearch(); return; }
+        clearTimeout(_searchDebounceTimer);
+        const q = this.value.trim();
+        if (q.length === 0) {
+            document.getElementById('searchResultsPanel').classList.add('d-none');
+            return;
+        }
+        if (q.length < 3) {
+            _showSearchPanel('<div class="search-status-msg">Type at least 3 characters to search</div>');
+            return;
+        }
+        _searchDebounceTimer = setTimeout(performSearch, 400);
+    });
+
+    senderFilter.addEventListener('change', function () {
+        clearTimeout(_searchDebounceTimer);
+        if (document.getElementById('searchInput').value.trim().length >= 3) {
+            performSearch();
+        }
+    });
+});
+
+// Global Escape listener closes the search bar from anywhere
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && _searchActive) {
+        closeSearch();
+    }
+});
 </script>
 {% endblock %}
 
 {% block content %}
 <div class="mb-3">
-    <button onclick="goBack()" class="btn btn-outline-secondary btn-sm">
+    <a href="{% url 'messaging:messaging_hub' %}" class="btn-prizm-back btn-sm">
         <i class="fas fa-arrow-left me-1"></i> Back
-    </button>
+    </a>
+    {% if not has_board_access %}
+    <span class="badge bg-secondary ms-2" title="You have chat-room access only — the board is not accessible to you.">
+        <i class="fas fa-lock me-1"></i> Chat Room Access Only
+    </span>
+    {% endif %}
 </div>
 
 <div class="row">
     <div class="col-lg-8">
-        <div class="chat-container">
+        <div class="chat-container" style="position: relative;">
             <div class="chat-header">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <h2 class="mb-0"><i class="fas fa-comments me-2"></i>{{ chat_room.name }}
+                        <h2 class="mb-0 d-flex align-items-center gap-2"><i class="fas fa-comments me-2"></i>{{ chat_room.name }}
                             {% include 'partials/favorite_toggle.html' with favorite_type='chat_room' object_id=chat_room.id is_favorited=is_favorited %}
+                            <button id="searchToggleBtn" type="button" title="Search messages" onclick="toggleSearchBar()"><i class="fas fa-search"></i></button>
                         </h2>
                         {% if chat_room.description %}
                             <p class="mb-0 text-light">{{ chat_room.description }}</p>
                         {% endif %}
+                        <!-- Active user count (updated in real time by presence_update) -->
+                        <small id="active-count-display" class="text-light"></small>
                         <!-- WebSocket Connection Status -->
                         <span id="ws-connection-status" style="font-size: 0.75rem; display: none;"></span>
                     </div>
                 </div>
+            </div>
+
+            <!-- Search bar + results overlay share a plain block positioning context (.search-anchor)
+                 so the results panel's top:100% resolves directly below the bar. Must not be flex/grid,
+                 and the panel must stay a sibling of #searchBarWrapper (not a child) since the bar's
+                 overflow:hidden is load-bearing for its accordion transition and would clip the panel. -->
+            <div id="searchAnchor" class="search-anchor">
+                <!-- In-room message search bar (collapses via max-height transition) -->
+                <div id="searchBarWrapper" class="search-bar-wrapper">
+                    <div class="search-bar-inner">
+                        <input type="text" id="searchInput" class="form-control form-control-sm"
+                               placeholder="Search messages..." autocomplete="off">
+                        <select id="senderFilter" class="form-select form-select-sm">
+                            <option value="">All senders</option>
+                            {# NOTE: members.all() is used here. The room creator is expected to be in members.
+                               If edge cases arise where the creator is not a member, they won't appear. #}
+                            {% for member in chat_room.members.all %}
+                                <option value="{{ member.id }}">{{ member.get_full_name|default:member.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <button id="searchCloseBtn" type="button" title="Close search" onclick="closeSearch()">&times;</button>
+                    </div>
+                </div>
+
+                <!-- Search results overlay panel (anchors to .search-anchor via position:relative) -->
+                <div id="searchResultsPanel" class="search-results-panel d-none"></div>
             </div>
 
             <!-- AI Tools Toolbar -->
@@ -1682,14 +2463,19 @@ function aiConfirmCreateTasks() {
                         <strong><i class="fas fa-robot me-1"></i> AI Thread Summary</strong>
                         <p id="ai-summary-text" class="mb-0 mt-1"></p>
                     </div>
-                    <button type="button" class="btn-close ms-3 flex-shrink-0" onclick="document.getElementById('ai-thread-summary').classList.add('d-none')" aria-label="Close"></button>
+                    <div class="d-flex align-items-start ms-3 flex-shrink-0">
+                        <button type="button" id="btn-copy-summary" class="btn btn-sm btn-outline-secondary d-none me-2" onclick="aiCopySummary()" title="Copy summary to clipboard">
+                            <i class="fas fa-copy me-1"></i> Copy
+                        </button>
+                        <button type="button" class="btn-close" onclick="document.getElementById('ai-thread-summary').classList.add('d-none')" aria-label="Close"></button>
+                    </div>
                 </div>
             </div>
 
             {% if user == chat_room.created_by or user.is_staff %}
             <div class="chat-header-actions">
                 <div>
-                    {% if is_demo_mode %}
+                    {% if is_demo_account %}
                     <button type="button" id="showDemoBannerBtn" class="btn btn-sm btn-outline-success" onclick="showDemoBanner()" style="display: none; margin-right: 0.5rem;">
                         <i class="fas fa-info-circle me-1"></i> Show Multi-User Test Instructions
                     </button>
@@ -1699,7 +2485,7 @@ function aiConfirmCreateTasks() {
                     <i class="fas fa-trash me-1"></i> Clear All Messages
                 </button>
             </div>
-            {% elif is_demo_mode %}
+            {% elif is_demo_account %}
             <div class="chat-header-actions">
                 <div></div>
                 <button type="button" id="showDemoBannerBtn" class="btn btn-sm btn-success" onclick="showDemoBanner()" style="display: none;">
@@ -1709,7 +2495,7 @@ function aiConfirmCreateTasks() {
             {% endif %}
 
             <!-- Demo Mode Info Banner (Dismissible) -->
-            {% if is_demo_mode %}
+            {% if is_demo_account %}
             <div id="demoMultiUserBanner" class="alert alert-success mb-0" style="border-radius: 0; border-left: 4px solid #4caf50; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); position: relative;">
                 <button type="button" class="btn-close" onclick="dismissDemoBanner()" style="position: absolute; top: 10px; right: 10px; font-size: 0.8rem;" aria-label="Close"></button>
                 <div class="d-flex align-items-start">
@@ -1720,30 +2506,27 @@ function aiConfirmCreateTasks() {
                         <h6 class="mb-2" style="color: #1b5e20;"><strong>🔓 Test Real-Time Messaging with Multiple Users</strong></h6>
                         <p class="mb-2" style="font-size: 0.9rem;">Want to see messages arrive in real-time? <strong>Open an incognito/private window</strong> and login as a different user to experience true real-time delivery!</p>
                         
-                        <div style="background: white; padding: 0.75rem; border-radius: 6px; border: 1px solid #81c784; margin-bottom: 0.75rem;">
-                            <strong style="color: #2e7d32; font-size: 0.9rem;"><i class="fas fa-users me-1"></i> Available Demo Accounts (all use password: <code style="background: #f1f8f4; padding: 0.2rem 0.4rem; border-radius: 3px;">demo123</code>):</strong>
+                        <div style="background: var(--card-bg); padding: 0.75rem; border-radius: 6px; border: 1px solid #81c784; margin-bottom: 0.75rem;">
+                            <strong style="color: #2e7d32; font-size: 0.9rem;"><i class="fas fa-users me-1"></i> Available Demo Accounts (password <code style="background: #f1f8f4; padding: 0.2rem 0.4rem; border-radius: 3px;">DemoUser@2026</code>):</strong>
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; margin-top: 0.5rem;">
                                 <div style="font-family: monospace; font-size: 0.85rem; background: #f1f8f4; padding: 0.4rem; border-radius: 4px; border: 1px solid #a5d6a7;">
-                                    <i class="fas fa-user me-1"></i> demo_admin_solo
+                                    <i class="fas fa-user me-1"></i> priya.sharma
                                 </div>
                                 <div style="font-family: monospace; font-size: 0.85rem; background: #f1f8f4; padding: 0.4rem; border-radius: 4px; border: 1px solid #a5d6a7;">
-                                    <i class="fas fa-user me-1"></i> alex_chen_demo
+                                    <i class="fas fa-user me-1"></i> marcus.chen
                                 </div>
                                 <div style="font-family: monospace; font-size: 0.85rem; background: #f1f8f4; padding: 0.4rem; border-radius: 4px; border: 1px solid #a5d6a7;">
-                                    <i class="fas fa-user me-1"></i> sam_rivera_demo
-                                </div>
-                                <div style="font-family: monospace; font-size: 0.85rem; background: #f1f8f4; padding: 0.4rem; border-radius: 4px; border: 1px solid #a5d6a7;">
-                                    <i class="fas fa-user me-1"></i> jordan_taylor_demo
+                                    <i class="fas fa-user me-1"></i> elena.vasquez
                                 </div>
                             </div>
                         </div>
                         
-                        <div style="font-size: 0.85rem; color: #333;">
+                        <div style="font-size: 0.85rem; color: var(--text-primary);">
                             <strong style="color: #1b5e20;"><i class="fas fa-lightbulb me-1"></i> Quick Test:</strong>
                             <ol style="margin: 0.3rem 0 0 1.2rem; padding: 0; font-size: 0.85rem;">
                                 <li>Keep this window open</li>
                                 <li>Open a <strong>new incognito/private window</strong></li>
-                                <li>Login with username: <code>sam_rivera_demo</code> and password: <code>demo123</code></li>
+                                <li>Login with username: <code>marcus.chen</code> and password: <code>DemoUser@2026</code></li>
                                 <li>Navigate to this same chat room</li>
                                 <li>Send messages from either window and watch real-time delivery! 🚀</li>
                             </ol>
@@ -1755,7 +2538,7 @@ function aiConfirmCreateTasks() {
 
             <div class="chat-messages" id="messages">
                 {% for message in chat_messages %}
-                    <div class="message" data-message-id="{{ message.id }}" data-read-by="{{ message.read_by.count }}">
+                    <div class="message" id="message-{{ message.id }}" data-message-id="{{ message.id }}" data-read-by="{{ message.read_by.count }}">
                         <div class="message-author">{{ message.author.username }}</div>
                         <div class="message-content">{{ message.content }}</div>
                         <div class="message-time" data-timestamp="{{ message.created_at|date:'c' }}" title="{{ message.created_at|date:'M j, Y g:i A' }}">{{ message.created_at|date:"g:i A" }}</div>
@@ -1794,7 +2577,7 @@ function aiConfirmCreateTasks() {
                     <div class="alert alert-info alert-sm mb-2 p-2" role="alert">
                         <small><i class="fas fa-info-circle"></i> Files are uploaded to this room and visible to all members in the <strong>Files</strong> section on the right.</small>
                     </div>
-                    <form id="chatFileForm" method="post" action="{% url 'messaging:upload_chat_room_file' room_id=chat_room.id %}" enctype="multipart/form-data">
+                    <form id="chatFileForm" class="no-validate" method="post" action="{% url 'messaging:upload_chat_room_file' room_id=chat_room.id %}" enctype="multipart/form-data">
                         {% csrf_token %}
                         <div class="input-group input-group-sm">
                             <input type="file" name="file" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" required>
@@ -1809,9 +2592,10 @@ function aiConfirmCreateTasks() {
                     </form>
                 </div>
                 
-                <form class="chat-form" method="post" action="{% url 'messaging:send_chat_message' room_id=chat_room.id %}">
+                <div class="mention-dropdown" id="mentionDropdown"></div>
+                <form class="chat-form no-validate" method="post" action="{% url 'messaging:send_chat_message' room_id=chat_room.id %}">
                     {% csrf_token %}
-                    <input type="text" name="message" class="form-control" placeholder="Type your message... (use @username to mention)" required autofocus>
+                    <input type="text" name="message" class="form-control" placeholder="Type your message... (use @username to mention)" required autofocus autocomplete="off">
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary flex-grow-1" title="Send (or press Enter)">
                             <i class="fas fa-paper-plane"></i> Send
@@ -1856,16 +2640,32 @@ function aiConfirmCreateTasks() {
     <div class="col-lg-4">
         <div class="members-sidebar">
             <h5><i class="fas fa-users me-2"></i> Members ({{ chat_room.members.count }})</h5>
-            <ul class="members-list">
+            <ul class="members-list" id="members-presence-list">
                 {% for member in chat_room.members.all %}
-                    <li>
-                        {{ member.get_full_name|default:member.username }}
-                        {% if member == chat_room.created_by %}<span class="badge bg-primary">Creator</span>{% endif %}
+                    <li class="d-flex align-items-start gap-2 py-1" data-user-id="{{ member.id }}" data-username="{{ member.username }}">
+                        <span class="presence-dot status-offline" id="presence-dot-{{ member.id }}" title="Offline"></span>
+                        <div>
+                            <div>
+                                {{ member.get_full_name|default:member.username }}
+                                {% if member == chat_room.created_by %}<span class="badge bg-primary ms-1">Creator</span>{% endif %}
+                            </div>
+                            <span class="last-seen-text" id="last-seen-{{ member.id }}" style="display:none;"></span>
+                        </div>
                     </li>
                 {% empty %}
                     <li class="text-muted">No members</li>
                 {% endfor %}
             </ul>
+            <!-- Last-seen privacy toggle (Option B: only hides your own timestamp for others) -->
+            <div class="presence-toggle-row">
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="showLastSeenToggle"
+                           {% if request.user.profile.show_last_seen %}checked{% endif %}>
+                    <label class="form-check-label" for="showLastSeenToggle">
+                        Show my last seen to others
+                    </label>
+                </div>
+            </div>
         </div>
 
         <!-- Files Section -->
@@ -1947,7 +2747,7 @@ function aiConfirmCreateTasks() {
                 <p class="text-muted small mb-3">
                     <i class="fas fa-info-circle me-1"></i>
                     Review the tasks below. Uncheck any you don't want to create.
-                    Confirmed tasks will be added to the <strong>To&nbsp;Do</strong> column on
+                    Confirmed tasks will be added to the <strong id="ai-target-column-name">To&nbsp;Do</strong> column on
                     board <strong id="ai-target-board-name">{{ chat_room.board.name }}</strong>.
                 </p>
                 <div id="ai-task-list">

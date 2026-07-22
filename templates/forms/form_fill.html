@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ form_obj.title }} — Forms{% endblock %}
+{% block page_title %}{{ form_obj.title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.fill-card {
+    max-width: 680px;
+    margin: 0 auto;
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 10px;
+    padding: 1.75rem;
+    background: var(--card-bg, #fff);
+}
+.fill-static-block { font-size: 0.9rem; margin-bottom: 1rem; color: var(--text-muted, #6c757d); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <nav aria-label="breadcrumb" style="font-size:0.82rem;">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'form_list' %}">Forms</a></li>
+            <li class="breadcrumb-item active">{{ form_obj.title }}</li>
+        </ol>
+    </nav>
+
+    <div class="fill-card">
+        {% if form_obj.description %}<p class="text-muted">{{ form_obj.description }}</p>{% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+
+            {% for field in fields %}
+                {% if field.field_type == 'STATIC_CONTENT' %}
+                <div class="fill-static-block">
+                    <strong>{{ field.label }}</strong>
+                    {% if field.help_text %}<div>{{ field.help_text }}</div>{% endif %}
+                </div>
+                {% else %}
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">
+                        {{ field.label }}{% if field.is_required %} <span class="text-danger">*</span>{% endif %}
+                    </label>
+
+                    {% if field.field_type == 'SHORT_TEXT' %}
+                        <input type="text" class="form-control" name="answer_{{ field.pk }}" {% if field.is_required %}required{% endif %}>
+                    {% elif field.field_type == 'LONG_TEXT' %}
+                        <textarea class="form-control" rows="4" name="answer_{{ field.pk }}" {% if field.is_required %}required{% endif %}></textarea>
+                    {% elif field.field_type == 'SINGLE_SELECT' %}
+                        <select class="form-select" name="answer_{{ field.pk }}" {% if field.is_required %}required{% endif %}>
+                            <option value="">— Select —</option>
+                            {% for choice in field.choices %}
+                            <option value="{{ choice }}">{{ choice }}</option>
+                            {% endfor %}
+                        </select>
+                    {% elif field.field_type == 'MULTI_SELECT' %}
+                        {% for choice in field.choices %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="answer_{{ field.pk }}[]" value="{{ choice }}" id="choice-{{ field.pk }}-{{ forloop.counter }}">
+                            <label class="form-check-label" for="choice-{{ field.pk }}-{{ forloop.counter }}">{{ choice }}</label>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                </div>
+                {% endif %}
+            {% endfor %}
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-paper-plane me-1"></i>{{ form_obj.submit_button_text }}
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

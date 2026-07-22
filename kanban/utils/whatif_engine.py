@@ -12,13 +12,13 @@ import math
 from datetime import date, timedelta
 from decimal import Decimal
 
-import google.generativeai as genai
 from django.conf import settings
 from django.db.models import Sum, Avg
 
 from kanban.models import Board, Task
 from kanban.budget_models import ProjectBudget
 from kanban.burndown_models import BurndownPrediction, TeamVelocitySnapshot
+from kanban_board.ai_cache import get_cached_ai_response
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +53,17 @@ class WhatIfEngine:
         tasks_added = int(params.get('tasks_added', 0))
         team_delta = int(params.get('team_size_delta', 0))
         deadline_shift = int(params.get('deadline_shift_days', 0))
+        # velocity_health is an optional multiplicative health signal supplied by
+        # the live shadow-branch recalculation path: actual_7d_velocity / branch_baseline_velocity.
+        # What-If dashboard calls leave this as 1.0 (neutral) so baseline simulations
+        # remain deterministic across runs.
+        velocity_health = params.get('velocity_health', 1.0)
 
         baseline = self._capture_baseline()
         projected = self._compute_projected(baseline, tasks_added, team_delta, deadline_shift)
         deltas = self._compute_deltas(baseline, projected)
         conflicts = self._detect_new_conflicts(baseline, projected, tasks_added, team_delta, deadline_shift)
-        feasibility = self._compute_feasibility(projected, deltas, conflicts)
+        feasibility = self._compute_feasibility(projected, deltas, conflicts, velocity_health)
         warnings = self._generate_warnings(baseline)
 
         return {
@@ -72,13 +77,12 @@ class WhatIfEngine:
 
     def analyze_with_ai(self, params: dict, simulation_results: dict) -> dict:
         """
-        Ask Gemini to evaluate a what-if scenario and provide strategic advice.
+        Ask AI to evaluate a what-if scenario and provide strategic advice.
 
         Returns a structured dict or an error dict on failure.
         """
         try:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-2.5-flash')
+            from ai_assistant.utils.ai_router import AIRouter
 
             baseline = simulation_results['baseline']
             projected = simulation_results['projected']
@@ -88,14 +92,19 @@ class WhatIfEngine:
 
             prompt = self._build_ai_prompt(params, baseline, projected, deltas, conflicts, feasibility)
 
-            config = {
-                'temperature': 0.4,
-                'top_p': 0.8,
-                'top_k': 40,
-                'max_output_tokens': 4096,
-            }
-            response = model.generate_content(prompt, generation_config=config)
-            raw = response.text.strip()
+            router = AIRouter()
+            raw = get_cached_ai_response(
+                prompt=prompt,
+                model_call=lambda: router.complete(
+                    prompt=prompt,
+                    user=None,
+                    complexity='complex',
+                )['text'],
+                operation='whatif_analysis',
+                context_id=f"board_{self.board.id}",
+            )
+            if not raw:
+                return {'error': 'AI analysis unavailable. Please try again.'}
 
             # Strip markdown fences
             if raw.startswith('```'):
@@ -153,22 +162,36 @@ class WhatIfEngine:
         risk_level = 'unknown'
         confidence_pct = None
         if prediction:
-            velocity = float(prediction.current_velocity or 0)
+            # Use average_velocity to match what the Burndown Prediction dashboard displays.
+            # current_velocity is only the most-recent week; average_velocity is the mean
+            # across all historical weekly snapshots — the correct baseline for projections.
+            velocity = float(prediction.average_velocity or prediction.current_velocity or 0)
             predicted_date = prediction.predicted_completion_date
             delay_probability = float(prediction.delay_probability or 0)
             risk_level = prediction.risk_level or 'unknown'
             confidence_pct = prediction.confidence_percentage
 
-        # Velocity fallback from snapshots
+        # Velocity fallback: average recent weekly snapshots (mirrors burndown predictor logic)
         if not velocity:
-            latest_vel = TeamVelocitySnapshot.objects.filter(
+            recent_snapshots = TeamVelocitySnapshot.objects.filter(
                 board=board,
-            ).order_by('-period_end').first()
-            if latest_vel:
-                velocity = float(latest_vel.tasks_completed or 0)
+            ).order_by('-period_end')[:8]
+            counts = [float(s.tasks_completed or 0) for s in recent_snapshots]
+            if counts:
+                velocity = sum(counts) / len(counts)
+
+        # Recompute predicted_date from live remaining tasks and velocity so the
+        # baseline date uses the same derivation method as `_compute_projected`.
+        # Without this, baseline.predicted_date stays pinned to whatever the
+        # scheduled BurndownPrediction job last saved (often weeks stale), while
+        # projected.predicted_date is recomputed from today on every call — making
+        # the timeline delta look implausible (the AI then calls it a "fundamental
+        # flaw" even when the math is self-consistent).
+        if velocity and velocity >= 0.5 and remaining > 0:
+            predicted_date = date.today() + timedelta(weeks=remaining / velocity)
 
         # Team
-        team_size = board.members.count() or 1
+        team_size = board.memberships.count() or 1
 
         # Resource utilization estimate
         active_per_member = remaining / team_size if team_size else remaining
@@ -221,25 +244,17 @@ class WhatIfEngine:
         new_velocity = round(max(new_velocity, 0.1), 2)
 
         # --- Timeline ---
-        # Guard: velocity below threshold → don't extrapolate a date (avoids year-2034 explosions)
+        # Predicted completion is purely a function of remaining work and team
+        # velocity.  The deadline shift moves `new_deadline` (below) but never
+        # the predicted-completion date itself — conflating the two produced
+        # the +207-day projection artefact when scope was reduced.
         VELOCITY_THRESHOLD = 0.5
         low_velocity = new_velocity < VELOCITY_THRESHOLD
 
-        if not low_velocity and new_velocity > 0:
-            weeks_for_remaining = new_remaining / new_velocity
-            additional_weeks = weeks_for_remaining - (
-                baseline['remaining_tasks'] / baseline['velocity_per_week']
-                if baseline['velocity_per_week'] >= VELOCITY_THRESHOLD else 0
-            )
-        else:
-            additional_weeks = 0
-
-        timeline_shift_days = round(additional_weeks * 7) - deadline_shift
-
         new_predicted_date = None
-        if not low_velocity and baseline['predicted_date']:
-            base_date = date.fromisoformat(baseline['predicted_date'])
-            new_predicted_date = base_date + timedelta(days=timeline_shift_days)
+        if not low_velocity:
+            weeks_for_remaining = new_remaining / new_velocity
+            new_predicted_date = date.today() + timedelta(weeks=weeks_for_remaining)
 
         new_deadline = None
         if baseline['effective_deadline']:
@@ -248,14 +263,29 @@ class WhatIfEngine:
                 + timedelta(days=deadline_shift)
             )
 
+        # --- Schedule overshoot (UNCLAMPED severity signal) ---
+        # How many days the projected completion overshoots the deadline.
+        # This keeps growing with scope/scenario severity even after
+        # delay_probability has saturated at 99, so two deeply-infeasible
+        # branches can still be ordered against each other.  Display/conflict
+        # logic continues to use the clamped delay_probability below.
+        schedule_overshoot_days = 0
+        if new_predicted_date and new_deadline and new_predicted_date > new_deadline:
+            schedule_overshoot_days = (new_predicted_date - new_deadline).days
+
+        # --- Schedule buffer (signed; None when there isn't enough data) ---
+        # Positive = days of slack before the deadline, negative = overshoot.
+        # Used only to differentiate penalty-free scenarios (see the headroom
+        # ceiling in _compute_feasibility) — never affects the penalty math above.
+        buffer_days = None
+        if new_predicted_date and new_deadline:
+            buffer_days = (new_deadline - new_predicted_date).days
+
         # --- Delay probability ---
         new_delay_prob = self._estimate_delay_probability(
             new_remaining, new_velocity, new_predicted_date, new_deadline,
             baseline['delay_probability'],
         )
-
-        # --- Risk level ---
-        new_risk = self._risk_from_delay(new_delay_prob)
 
         # --- Budget ---
         additional_cost = tasks_added * baseline['avg_cost_per_task']
@@ -266,8 +296,21 @@ class WhatIfEngine:
         )
 
         # --- Utilization ---
+        # `utilization_raw` is the UNCLAMPED value (can exceed 200); kept as a
+        # severity signal so over-allocated scenarios stay ordered after the
+        # displayed `utilization_pct` saturates at 200.
         active_per_member = new_remaining / new_team if new_team else new_remaining
-        new_utilization = min(round(active_per_member / 8 * 100, 1), 200)
+        utilization_raw = round(active_per_member / 8 * 100, 1)
+        new_utilization = min(utilization_raw, 200)
+
+        # --- Risk level ---
+        # Delay probability sets the baseline band, but a scenario can be
+        # low on delay risk while still being dangerous on resourcing or
+        # spend (e.g. utilization spiking to 187% with delay probability
+        # only at 40%) — escalate risk level to match the worst signal so
+        # it doesn't silently disagree with the conflicts/feasibility panel.
+        new_risk = self._risk_from_delay(new_delay_prob)
+        new_risk = self._escalate_risk(new_risk, utilization_raw, new_budget_util)
 
         return {
             'total_tasks': new_total,
@@ -287,6 +330,9 @@ class WhatIfEngine:
             'risk_level': new_risk,
             'confidence_pct': baseline['confidence_pct'],
             'utilization_pct': new_utilization,
+            'utilization_raw': utilization_raw,
+            'schedule_overshoot_days': schedule_overshoot_days,
+            'buffer_days': buffer_days,
         }
 
     # ------------------------------------------------------------------
@@ -377,40 +423,175 @@ class WhatIfEngine:
     # ------------------------------------------------------------------
     # Feasibility score  (0.0 – 1.0)
     # ------------------------------------------------------------------
-    def _compute_feasibility(self, projected, deltas, conflicts) -> float:
+    def _compute_feasibility(self, projected, deltas, conflicts,
+                             velocity_health: float = 1.0) -> float:
+        """
+        Continuous, piecewise-linear penalty curves.  Each curve preserves the
+        prior step-function's upper anchor values so existing What-If baselines
+        don't shift, but interpolates linearly between anchors so small board
+        changes (e.g. a single task completion) produce a small visible score
+        movement instead of being clamped to the same step.
+
+        `velocity_health` is `actual_recent_velocity / branch_baseline_velocity`,
+        supplied only by the shadow-branch recalc path.  Values > 1.0 (team is
+        outperforming the original projection) add up to +0.10; values < 1.0
+        subtract up to -0.10.  Capped so the velocity signal never dominates
+        the structural penalties.
+        """
         score = 1.0
 
-        # Penalize high delay probability
+        # --- Delay probability (continuous; anchors preserved at 40/60/80) ---
+        # 0–40   →  0
+        # 40–60  →  0    → -0.10
+        # 60–80  →  -0.10 → -0.20
+        # 80–100 →  -0.20 → -0.35  (steeper, matches prior >80 cliff)
         dp = projected.get('delay_probability', 0)
         if dp > 80:
-            score -= 0.35
+            score -= 0.20 + min(dp - 80, 20) / 20 * 0.15
         elif dp > 60:
-            score -= 0.2
+            score -= 0.10 + (dp - 60) / 20 * 0.10
         elif dp > 40:
-            score -= 0.1
+            score -= (dp - 40) / 20 * 0.10
 
-        # Penalize resource overload
+        # --- Resource utilization (continuous; same anchors as before) ---
+        # 100–130 →  -0.05 → -0.15  (was a flat -0.15 step; now ramps from -0.05)
+        # 130–200 →  -0.15 → -0.25  (preserved from prior linear band)
         util = projected.get('utilization_pct', 0)
         if util > 130:
-            score -= 0.25
+            excess_pct = min(util - 130, 70) / 70
+            score -= 0.15 + excess_pct * 0.10
         elif util > 100:
-            score -= 0.15
+            score -= 0.05 + (util - 100) / 30 * 0.10
 
-        # Penalize budget overrun
+        # --- Budget overrun (continuous) ---
+        # 100–120 →  0    → -0.10
+        # 120–150 →  -0.10 → -0.20  (extrapolated cap at -0.20)
         bu = projected.get('budget_utilization_pct', 0)
         if bu > 120:
-            score -= 0.2
+            score -= 0.10 + min(bu - 120, 30) / 30 * 0.10
         elif bu > 100:
-            score -= 0.1
+            score -= (bu - 100) / 20 * 0.10
 
-        # Penalize each conflict
+        # --- Conflicts (kept as discrete since each conflict is a discrete event) ---
         for c in conflicts:
             if c['severity'] == 'critical':
                 score -= 0.1
             elif c['severity'] == 'high':
                 score -= 0.05
 
-        return round(max(score, 0.0), 2)
+        # --- Velocity health adjustment (live recalc path only) ---
+        # velocity_health = actual_recent_velocity / branch_baseline_velocity.
+        # Each 10% deviation moves the feasibility score by ~1 point, capped at
+        # +/-10 points so the velocity signal never overwhelms structural penalties.
+        # Accept 0.0 as a valid signal (means "no real-board completions in the
+        # last 7 days") — that should *penalize*, not be silently skipped.
+        if velocity_health is not None and velocity_health >= 0:
+            score += max(-0.10, min(0.10, velocity_health - 1.0))
+
+        # --- Saturation differentiation tail ---
+        # The structural penalties above stop responding once delay_probability
+        # pins at its 99 ceiling and utilization clamps at 200, so two
+        # deeply-infeasible scenarios of very different magnitude (e.g. +4 vs
+        # +8 tasks) collapse to the *same* score.  This tail keeps subtracting
+        # a small, bounded amount that grows with the UNCLAMPED severity
+        # signals, restoring strict ordering between such scenarios.
+        #
+        # It contributes EXACTLY 0 below the clamps (delay_probability < 99 and
+        # raw utilization <= 200), so any scenario that isn't already saturated
+        # keeps its previous score unchanged.  Combined tail capped at 0.10 so
+        # it differentiates without flipping the High/Medium/Low tier.
+        tail = 0.0
+        if projected.get('delay_probability', 0) >= 99:
+            overshoot = projected.get('schedule_overshoot_days', 0) or 0
+            if overshoot > 0:
+                tail += 0.06 * math.tanh(overshoot / 120.0)
+        util_raw = projected.get('utilization_raw', util)
+        if util_raw > 200:
+            tail += 0.04 * math.tanh((util_raw - 200) / 100.0)
+        if tail:
+            score -= min(tail, 0.10)
+
+        # --- Headroom ceiling ---
+        # The penalty bands above only ever fire once a metric crosses a risk
+        # threshold (delay_probability > 40, utilization > 100, budget > 100).
+        # Below those thresholds every "healthy" scenario scores identically
+        # (score == 1.0, later clamped), even though a scenario with a huge
+        # schedule buffer and idle capacity is obviously safer than one that
+        # just barely clears the thresholds. `headroom` is a pure function of
+        # already-computed `projected` values — it re-uses the same signals
+        # that feed the penalties, so it stays deterministic and adds no
+        # smoothing/damping across recalcs.
+        def _slack(value, full_credit_at, floor_at=0):
+            if value is None:
+                return 0.5  # no data — neutral, avoids rewarding/punishing missing deadlines
+            span = full_credit_at - floor_at
+            if span <= 0:
+                return 0.5
+            return max(0.0, min(1.0, (value - floor_at) / span))
+
+        # Schedule buffer saturates at a 90-day horizon: beyond ~a quarter of
+        # runway, extra buffer adds little real feasibility, but within it a
+        # bigger buffer (and completing work, which grows it) should still lift
+        # the score. Utilization carries the most weight because among healthy
+        # scenarios it is the lever that BOTH differentiates scope trade-offs
+        # (cut-scope vs add-scope) AND moves as real tasks complete — so it
+        # keeps the score responsive to progress instead of flat-lining.
+        schedule_slack = _slack(projected.get('buffer_days'), full_credit_at=90, floor_at=0)
+        utilization_slack = 1 - _slack(util, full_credit_at=100, floor_at=0)
+        budget_slack = 1 - _slack(bu, full_credit_at=100, floor_at=0)
+        headroom = 0.30 * schedule_slack + 0.50 * utilization_slack + 0.20 * budget_slack
+
+        # Soft ceiling: real projects never have *zero* residual risk —
+        # unforeseen scope creep, illness, dependencies — so the maximum
+        # displayed score is 0.98, reached only by scenarios with the most
+        # headroom (big schedule buffer, idle capacity, budget slack).
+        # Scenarios that merely clear the risk thresholds without much margin
+        # land well below (down to ~0.68) instead of tying near the top —
+        # otherwise a scope-adding scenario that just barely avoids conflicts
+        # reads almost identically to a scope-cutting scenario with room to
+        # spare, leaving every branch clustered so tightly the user can't tell
+        # which to commit to. The floor/span were widened (0.68 + 0.30) so
+        # healthy scenarios spread across a ~10-point band and completing tasks
+        # produces a visible move. The 0.0 hard floor stays (a project can
+        # legitimately be fully blocked).
+        HEADROOM_FLOOR = 0.68
+        HEADROOM_SPAN = 0.30
+        ceiling = min(0.98, HEADROOM_FLOOR + HEADROOM_SPAN * headroom)
+        final = max(0.0, min(score, ceiling))
+
+        # --- Descope / value penalty (applied AFTER the ceiling clamp) ---
+        # Every other term here is deliverability-only: it rewards a plan for
+        # being easy to finish and says nothing about whether the plan still
+        # delivers the product.  Removing scope lowers delay probability,
+        # utilization AND budget at once — and, crucially, it also MAXES OUT the
+        # headroom ceiling (idle capacity + big schedule buffer).  So "cut
+        # tasks" wasn't just a near-dominant strategy on the penalty terms; the
+        # ceiling actively rewarded it, and any penalty applied to `score`
+        # before the clamp was invisible because the ceiling was the binding
+        # constraint.  Applying the value penalty to the CLAMPED result is what
+        # makes a leaner plan read as "lower risk" without automatically reading
+        # as "best".
+        #
+        # Deliberately asymmetric and zero-anchored:
+        #   * Only fires when scope is REDUCED (deltas['tasks'] < 0).  Adding
+        #     scope is already penalized structurally above — charging it here
+        #     too would double-count.
+        #   * Contributes EXACTLY 0 when scope is unchanged or grown, so every
+        #     existing What-If baseline and no-op recalc scores identically to
+        #     before this term existed (preserves the "baselines don't shift"
+        #     invariant documented on the headroom ceiling above).
+        # Scaled by the fraction of the project's scope removed and capped at
+        # -0.12 so a heavy descope is clearly penalized but the term never
+        # overwhelms the structural feasibility signals or flips a genuinely
+        # infeasible plan to look good.
+        scope_delta = deltas.get('tasks', 0) or 0
+        if scope_delta < 0:
+            baseline_total = projected.get('total_tasks', 0) - scope_delta
+            if baseline_total > 0:
+                removed_fraction = min(-scope_delta / baseline_total, 1.0)
+                final = max(0.0, final - min(0.12, 0.12 * removed_fraction))
+
+        return round(final, 4)
 
     # ------------------------------------------------------------------
     # Warnings for missing data
@@ -510,6 +691,26 @@ class WhatIfEngine:
             return 'medium'
         return 'low'
 
+    _RISK_ORDER = ('low', 'medium', 'high', 'critical')
+
+    @classmethod
+    def _escalate_risk(cls, risk_level: str, utilization_raw: float, budget_util: float) -> str:
+        """Bump risk_level up to match utilization/budget severity if worse.
+
+        Mirrors the thresholds used for resource_overload/budget_overrun
+        conflicts (100% / 130% utilization, 100% / 120% budget) so the Risk
+        card never shows a calmer band than the conflicts it's about to list.
+        """
+        floor = 'low'
+        if utilization_raw > 130 or budget_util > 120:
+            floor = 'high'
+        elif utilization_raw > 100 or budget_util > 100:
+            floor = 'medium'
+
+        if cls._RISK_ORDER.index(floor) > cls._RISK_ORDER.index(risk_level):
+            return floor
+        return risk_level
+
     # ------------------------------------------------------------------
     # AI prompt
     # ------------------------------------------------------------------
@@ -519,9 +720,36 @@ class WhatIfEngine:
             f"  - [{c['severity'].upper()}] {c['description']}" for c in conflicts
         ) or '  None detected.'
 
+        # Pre-bind the feasibility tier so the AI's assessment field cannot
+        # disagree with the computed score.  Past prompts let the model freely
+        # label a 41% scenario "Medium" or even contradict the number with its
+        # own narrative ("a critical error", "mathematically inconsistent");
+        # locking the tier and explicitly telling the model not to argue with
+        # the inputs eliminated that whole class of incoherent recommendations.
+        feasibility_pct = round(feasibility * 100, 1)
+        if feasibility_pct >= 70:
+            forced_tier = 'High'
+        elif feasibility_pct >= 50:
+            forced_tier = 'Medium'
+        else:
+            forced_tier = 'Low'
+
         return f"""You are a senior program manager and strategic advisor. A project manager is
 considering the following hypothetical changes to their project and needs your
 expert analysis of the trade-offs.
+
+GROUND RULES (do not violate):
+- Treat every number under "Current State", "Projected State After Changes",
+  "Key Deltas", and "Feasibility Score" as authoritative inputs computed by a
+  deterministic engine.  Do NOT call them "errors", "inconsistent",
+  "mathematically impossible", or "implausible" — they are the engine's
+  ground truth.  Your job is to interpret and advise, not to audit the math.
+- Your "feasibility_assessment" field MUST be exactly "{forced_tier}" because
+  the computed feasibility is {feasibility_pct:.1f}% (High ≥70, Medium 50-69,
+  Low <50).  Do not pick a different tier.
+- Mitigations and trade-offs must be consistent with the sign of each delta
+  (e.g., if tasks_added is negative, that's a scope REDUCTION, not an
+  expansion; if deadline_shift_days is negative, the deadline got TIGHTER).
 
 **Project:** {self.board.name}
 

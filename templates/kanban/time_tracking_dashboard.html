@@ -17,9 +17,9 @@
             <a href="{% url 'my_timesheet' %}" class="btn btn-primary">
                 <i class="fas fa-calendar-week"></i> My Timesheet
             </a>
-            <button onclick="goBack()" class="btn btn-sm btn-outline-secondary">
+            <a href="{% url 'dashboard' %}" class="btn-prizm-back btn-sm">
                 <i class="fas fa-arrow-left"></i> Back
-            </button>
+            </a>
         </div>
     </div>
 
@@ -136,7 +136,7 @@
                         <br><small class="text-muted">{{ alert.suggestion }}</small>
                     </div>
                     <div class="btn-group-vertical btn-group-sm ms-3">
-                        <button type="button" class="btn btn-outline-light btn-sm text-danger" onclick="showSplitEntryModal('{{ alert.date_str }}', {{ alert.hours }})" title="Split these hours across multiple days">
+                        <button type="button" class="btn btn-outline-light btn-sm text-danger" onclick="showSplitEntryModal('{{ alert.date_str }}', {{ alert.hours }}, {{ alert.entry_id|default:"null" }})" title="Split these hours across multiple days">
                             <i class="fas fa-code-branch"></i> Split Entry
                         </button>
                         <button type="button" class="btn btn-outline-light btn-sm text-danger" onclick="acknowledgeAlert('{{ alert.date_str }}')" title="Confirm this was intentional">
@@ -154,7 +154,7 @@
                         <br><small class="text-muted">{{ alert.suggestion }}</small>
                     </div>
                     <div class="btn-group-vertical btn-group-sm ms-3">
-                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="showSplitEntryModal('{{ alert.date_str }}', {{ alert.hours }})" title="Split these hours across multiple days">
+                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="showSplitEntryModal('{{ alert.date_str }}', {{ alert.hours }}, {{ alert.entry_id|default:"null" }})" title="Split these hours across multiple days">
                             <i class="fas fa-code-branch"></i> Split Entry
                         </button>
                         <button type="button" class="btn btn-outline-dark btn-sm" onclick="acknowledgeAlert('{{ alert.date_str }}')" title="Confirm this was intentional">
@@ -210,9 +210,7 @@
                                 {% if my_tasks %}
                                 <optgroup label="My Assigned Tasks">
                                 {% for task in my_tasks %}
-                                {% if task.id not in suggested_task_ids %}
                                 <option value="{{ task.id }}">{{ task.title|truncatechars:50 }}</option>
-                                {% endif %}
                                 {% endfor %}
                                 </optgroup>
                                 {% endif %}
@@ -246,12 +244,16 @@
                         <div class="mb-3">
                             <label class="form-label">Date</label>
                             <input type="date" class="form-control" id="quick-date" 
-                                   value="{{ "now"|date:"Y-m-d" }}" required>
+                                   value="{{ today_date }}" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Description</label>
                             <textarea class="form-control" id="quick-description" 
                                       rows="2" placeholder="What did you work on?"></textarea>
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="quick-is-billable" checked>
+                            <label class="form-check-label" for="quick-is-billable">Billable</label>
                         </div>
                         <button type="submit" class="btn btn-primary w-100">
                             <i class="fas fa-plus"></i> Log Time
@@ -335,21 +337,22 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script src="{% static 'vendor/chart.min.3.9.1.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Daily Hours Chart
     const chartData = {{ chart_data|safe }};
     const ctx = document.getElementById('dailyHoursChart').getContext('2d');
-    new Chart(ctx, {
+    const chartTheme = window.getChartTheme ? window.getChartTheme() : { textColor: '#444', gridColor: 'rgba(0,0,0,0.05)' };
+    const dailyHoursChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: chartData.map(d => d.day + ' ' + d.date.substring(5)),
             datasets: [{
                 label: 'Hours',
                 data: chartData.map(d => d.hours),
-                backgroundColor: 'rgba(13, 110, 253, 0.5)',
-                borderColor: 'rgba(13, 110, 253, 1)',
+                backgroundColor: chartTheme.isDark ? 'rgba(94, 157, 255, 0.7)' : 'rgba(13, 110, 253, 0.5)',
+                borderColor: chartTheme.isDark ? 'rgba(94, 157, 255, 1)' : 'rgba(13, 110, 253, 1)',
                 borderWidth: 1
             }]
         },
@@ -370,9 +373,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 y: {
                     beginAtZero: true,
                     ticks: {
+                        color: chartTheme.textColor,
                         callback: function(value) {
                             return value + 'h';
                         }
+                    },
+                    grid: {
+                        color: chartTheme.gridColor
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: chartTheme.textColor
+                    },
+                    grid: {
+                        color: chartTheme.gridColor
                     }
                 }
             },
@@ -390,6 +405,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+
+    if (window.PrizmCharts) {
+        PrizmCharts.register(dailyHoursChart);
+    }
 
     // Show day breakdown modal
     function showDayBreakdown(dateStr) {
@@ -514,10 +533,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Submit time entry directly
     function submitTimeEntry(taskId, hours, date, description) {
+        const isBillable = document.getElementById('quick-is-billable')?.checked !== false;
         const formData = new FormData();
         formData.append('hours', hours);
         formData.append('description', description);
         formData.append('work_date', date);
+        formData.append('is_billable', isBillable ? 'true' : 'false');
         formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
         
         fetch(`/task/${taskId}/time/quick-log/`, {
@@ -986,24 +1007,45 @@ document.addEventListener('DOMContentLoaded', function() {
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted mb-3">
-                    Split <strong id="splitTotalHours">0</strong>h from <strong id="splitOriginalDate"></strong> across multiple days.
-                </p>
-                <div id="splitEntriesContainer">
-                    <!-- Split entries will be added here dynamically -->
+                <!-- Loading state while entries for the date are fetched -->
+                <div id="splitEntryLoading" class="text-center py-4">
+                    <i class="fas fa-spinner fa-spin fa-2x"></i>
+                    <p class="mt-2 text-muted">Loading entries...</p>
                 </div>
-                <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="addSplitRow()">
-                    <i class="fas fa-plus"></i> Add Another Day
-                </button>
-                <hr>
-                <div class="d-flex justify-content-between">
-                    <span>Remaining to allocate:</span>
-                    <strong id="splitRemainingHours">0h</strong>
+
+                <!-- Entry picker: shown when the date has more than one time entry, so the
+                     user chooses which one to split instead of us guessing the largest. -->
+                <div id="splitEntryPicker" style="display: none;">
+                    <p class="text-muted mb-3">
+                        <strong id="splitPickerDate"></strong> has multiple time entries. Choose which one to split:
+                    </p>
+                    <div id="splitEntryPickerList" class="list-group mb-2">
+                        <!-- Entry choices injected here -->
+                    </div>
+                </div>
+
+                <!-- Split allocation form: shown once a single entry is known (either the
+                     only entry that day, or the one the user picked above). -->
+                <div id="splitEntryForm" style="display: none;">
+                    <p class="text-muted mb-3">
+                        Split <strong id="splitTotalHours">0</strong>h from <strong id="splitOriginalDate"></strong> across multiple days.
+                    </p>
+                    <div id="splitEntriesContainer">
+                        <!-- Split entries will be added here dynamically -->
+                    </div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="addSplitRow()">
+                        <i class="fas fa-plus"></i> Add Another Day
+                    </button>
+                    <hr>
+                    <div class="d-flex justify-content-between">
+                        <span>Remaining to allocate:</span>
+                        <strong id="splitRemainingHours">0h</strong>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="submitSplitEntries()" id="submitSplitBtn" disabled>
+                <button type="button" class="btn btn-primary" onclick="submitSplitEntries()" id="submitSplitBtn" style="display: none;" disabled>
                     <i class="fas fa-check"></i> Apply Split
                 </button>
             </div>
@@ -1038,7 +1080,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 // Alert action functions
-let splitModalData = { date: null, totalHours: 0, entries: [], originalEntries: [] };
+let splitModalData = { date: null, totalHours: 0, selectedEntry: null, originalEntries: [] };
 
 function acknowledgeAlert(dateStr) {
     // Store acknowledgment in localStorage
@@ -1075,32 +1117,123 @@ function acknowledgeAlert(dateStr) {
     setTimeout(() => toast.remove(), 3000);
 }
 
-function showSplitEntryModal(dateStr, totalHours) {
-    splitModalData = { date: dateStr, totalHours: totalHours, entries: [], originalEntries: [] };
-    
-    document.getElementById('splitTotalHours').textContent = totalHours;
-    document.getElementById('splitOriginalDate').textContent = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    
-    // Initialize with two split rows
-    const container = document.getElementById('splitEntriesContainer');
-    container.innerHTML = '';
-    addSplitRow();
-    addSplitRow();
-    
-    updateSplitRemaining();
-    
-    // Pre-fetch original entries for this date so we have task_ids for submission
+function showSplitEntryModal(dateStr, totalHours, hintEntryId) {
+    splitModalData = { date: dateStr, totalHours: totalHours, selectedEntry: null, originalEntries: [] };
+
+    const dateLabel = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    document.getElementById('splitOriginalDate').textContent = dateLabel;
+    document.getElementById('splitPickerDate').textContent = dateLabel;
+
+    // Reset to a loading state until we know how many entries exist on this
+    // date — the day's alert total can span multiple entries/tasks, so we
+    // can't build the allocation form until that's resolved.
+    document.getElementById('splitEntryLoading').style.display = '';
+    document.getElementById('splitEntryPicker').style.display = 'none';
+    document.getElementById('splitEntryForm').style.display = 'none';
+    document.getElementById('submitSplitBtn').style.display = 'none';
+
+    const modal = new bootstrap.Modal(document.getElementById('splitEntryModal'));
+    modal.show();
+
     fetch(`/api/time-entries-by-date/?date=${dateStr}`)
         .then(r => r.json())
         .then(data => {
             if (data.success && data.entries.length > 0) {
                 splitModalData.originalEntries = data.entries;
             }
-        })
-        .catch(() => {});  // graceful fallback – user can still submit
+            document.getElementById('splitEntryLoading').style.display = 'none';
 
-    const modal = new bootstrap.Modal(document.getElementById('splitEntryModal'));
-    modal.show();
+            if (splitModalData.originalEntries.length > 1) {
+                // Multiple entries (possibly across different tasks) make up
+                // this day's total — let the user pick which one to split
+                // instead of guessing the largest, which can misattribute
+                // other tasks' hours into the split.
+                renderSplitEntryPicker(hintEntryId || null);
+            } else {
+                selectEntryToSplit(splitModalData.originalEntries[0] || null);
+            }
+        })
+        .catch(() => {
+            document.getElementById('splitEntryLoading').style.display = 'none';
+            // Graceful fallback – proceed with the alert's total; submission
+            // will surface an error if the task can't be resolved.
+            selectEntryToSplit(null);
+        });
+}
+
+function renderSplitEntryPicker(hintEntryId) {
+    const list = document.getElementById('splitEntryPickerList');
+    list.innerHTML = '';
+
+    splitModalData.originalEntries.forEach(entry => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'list-group-item list-group-item-action';
+
+        const row = document.createElement('div');
+        row.className = 'd-flex justify-content-between align-items-start';
+
+        const left = document.createElement('div');
+        left.className = 'flex-grow-1';
+
+        const heading = document.createElement('h6');
+        heading.className = 'mb-1';
+        heading.textContent = entry.task_title;
+        if (hintEntryId && entry.id === hintEntryId) {
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-danger ms-1';
+            badge.textContent = 'Flagged';
+            heading.appendChild(document.createTextNode(' '));
+            heading.appendChild(badge);
+        }
+        left.appendChild(heading);
+
+        if (entry.board_name) {
+            const boardEl = document.createElement('small');
+            boardEl.className = 'text-muted';
+            boardEl.textContent = entry.board_name;
+            left.appendChild(boardEl);
+        }
+
+        if (entry.description) {
+            const descEl = document.createElement('p');
+            descEl.className = 'mb-0 mt-1 small text-secondary';
+            descEl.textContent = entry.description;
+            left.appendChild(descEl);
+        }
+
+        const hoursBadge = document.createElement('span');
+        hoursBadge.className = 'badge bg-primary rounded-pill';
+        hoursBadge.textContent = `${entry.hours}h`;
+
+        row.appendChild(left);
+        row.appendChild(hoursBadge);
+        item.appendChild(row);
+        item.addEventListener('click', () => selectEntryToSplit(entry));
+        list.appendChild(item);
+    });
+
+    document.getElementById('splitEntryPicker').style.display = '';
+}
+
+function selectEntryToSplit(entry) {
+    splitModalData.selectedEntry = entry;
+    if (entry) {
+        splitModalData.totalHours = entry.hours;
+    }
+
+    document.getElementById('splitEntryPicker').style.display = 'none';
+    document.getElementById('splitTotalHours').textContent =
+        typeof splitModalData.totalHours === 'number' ? splitModalData.totalHours.toFixed(2) : splitModalData.totalHours;
+
+    const container = document.getElementById('splitEntriesContainer');
+    container.innerHTML = '';
+    addSplitRow();
+    addSplitRow();
+    updateSplitRemaining();
+
+    document.getElementById('splitEntryForm').style.display = '';
+    document.getElementById('submitSplitBtn').style.display = '';
 }
 
 function addSplitRow() {
@@ -1122,7 +1255,7 @@ function addSplitRow() {
             </div>
         </div>
         <div class="col-2">
-            ${rowIndex > 1 ? `<button type="button" class="btn btn-outline-danger btn-sm" onclick="removeSplitRow(this)"><i class="fas fa-times"></i></button>` : ''}
+            ${rowIndex > 0 ? `<button type="button" class="btn btn-outline-danger btn-sm" onclick="removeSplitRow(this)"><i class="fas fa-times"></i></button>` : ''}
         </div>
     `;
     container.appendChild(row);
@@ -1166,24 +1299,29 @@ function submitSplitEntries() {
         return;
     }
 
-    // Derive task_id from the original entries fetched for this date.
-    // Distribute hours proportionally if multiple original tasks; otherwise use first task.
-    const originalEntries = splitModalData.originalEntries;
-    const defaultTaskId = originalEntries.length > 0 ? originalEntries[0].task_id : null;
+    // The entry being split was resolved up front — either the day's only
+    // entry, or the specific one the user picked from the list.
+    const selectedEntry = splitModalData.selectedEntry;
 
-    if (!defaultTaskId) {
+    if (!selectedEntry) {
         alert('Unable to determine the original task for these entries. Please log entries manually.');
         return;
     }
 
     // Build entries payload — each split row inherits the task description from the original entry
-    const defaultDescription = originalEntries.length > 0 ? (originalEntries[0].description || '') : '';
+    const defaultDescription = selectedEntry.description || '';
     const entriesPayload = splits.map(s => ({
-        task_id: defaultTaskId,
+        task_id: selectedEntry.task_id,
         hours: s.hours,
         date: s.date,
         description: defaultDescription ? `[Split] ${defaultDescription}` : '[Split entry]'
     }));
+
+    // The selected entry is being replaced by the split, not added to — pass
+    // its ID so the backend removes it instead of stacking the new entries
+    // on top of the old hours. Any other entries logged that day (different
+    // task, or a different entry the user didn't pick) are left untouched.
+    const originalEntryIds = [selectedEntry.id];
 
     // Disable the submit button during processing
     const submitBtn = document.getElementById('submitSplitBtn');
@@ -1200,7 +1338,7 @@ function submitSplitEntries() {
             'Content-Type': 'application/json',
             'X-CSRFToken': csrfToken,
         },
-        body: JSON.stringify({ entries: entriesPayload })
+        body: JSON.stringify({ entries: entriesPayload, original_entry_ids: originalEntryIds })
     })
     .then(r => r.json())
     .then(data => {

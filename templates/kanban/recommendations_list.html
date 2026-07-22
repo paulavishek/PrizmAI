@@ -20,7 +20,7 @@
     .recommendation-card.priority-medium { border-left-color: #ffc107; }
     .recommendation-card.priority-low { border-left-color: #6c757d; }
     
-    .status-badge-pending { background-color: #ffc107; color: #000; }
+    .status-badge-pending { background-color: #ffc107; color: #212529; }
     .status-badge-accepted { background-color: #28a745; }
     .status-badge-rejected { background-color: #dc3545; }
     .status-badge-implemented { background-color: #17a2b8; }
@@ -29,7 +29,7 @@
         border-left: 3px solid #007bff;
         padding: 10px 15px;
         margin-bottom: 10px;
-        background-color: #f8f9fa;
+        background-color: var(--bg-tertiary);
         border-radius: 0 4px 4px 0;
     }
     
@@ -83,9 +83,10 @@
                             <li class="breadcrumb-item active">Recommendations</li>
                         </ol>
                     </nav>
+                    {% include 'partials/ai_disclaimer.html' %}
                 </div>
                 <div>
-                    <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-secondary">
+                    <a href="{% url 'budget_dashboard' board.id %}" class="btn-prizm-back">
                         <i class="fas fa-arrow-left"></i> Back to Budget
                     </a>
                 </div>
@@ -178,7 +179,7 @@
                                         <small class="text-muted">Risk buffer to prevent overruns</small>
                                         {% else %}
                                         <h6 class="text-muted mb-2">Estimated Savings</h6>
-                                        <h3 class="mb-0" style="color: #2c3e50;">
+                                        <h3 class="mb-0" style="color: var(--text-primary);">
                                             <i class="fas fa-piggy-bank text-success"></i>
                                             {{ board.budget.currency }} {{ rec.estimated_savings|floatformat:2 }}
                                         </h3>
@@ -259,7 +260,7 @@
                                 No AI recommendations have been generated yet.
                             {% endif %}
                         </p>
-                        <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-primary mt-3">
+                        <a href="{% url 'budget_dashboard' board.id %}" class="btn-prizm-back mt-3">
                             <i class="fas fa-arrow-left"></i> Back to Budget Dashboard
                         </a>
                     </div>
@@ -281,10 +282,8 @@
             </div>
             <div class="modal-body" id="previewModalBody">
                 <div class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2">Analyzing recommendation...</p>
+                    <div class="prizm-spinner"></div>
+                    <p class="mt-2 prizm-loading-message-inline" data-prizm-messages="recommendation">Analyzing recommendation…</p>
                 </div>
             </div>
             <div class="modal-footer">
@@ -306,10 +305,8 @@
             </div>
             <div class="modal-body" id="implementModalBody">
                 <div class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2">Loading changes preview...</p>
+                    <div class="prizm-spinner"></div>
+                    <p class="mt-2 prizm-loading-message-inline" data-prizm-messages="recommendation">Loading changes preview…</p>
                 </div>
             </div>
             <div class="modal-footer">
@@ -338,10 +335,8 @@
             </div>
             <div class="modal-body" id="detailsModalBody">
                 <div class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2">Loading implementation details...</p>
+                    <div class="prizm-spinner"></div>
+                    <p class="mt-2 prizm-loading-message-inline" data-prizm-messages="recommendation">Loading implementation details…</p>
                 </div>
             </div>
             <div class="modal-footer">

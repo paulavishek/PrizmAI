@@ -36,7 +36,7 @@ class Command(BaseCommand):
         # Check if refresh is needed
         if not options['force'] and not should_refresh_demo_dates():
             self.stdout.write(self.style.SUCCESS(
-                '✅ Demo dates were already refreshed today. Use --force to refresh anyway.'
+                '[OK] Demo dates were already refreshed today. Use --force to refresh anyway.'
             ))
             return
 
@@ -47,23 +47,23 @@ class Command(BaseCommand):
             # Print summary
             self.stdout.write('')
             self.stdout.write(self.style.SUCCESS('=' * 70))
-            self.stdout.write(self.style.SUCCESS('✅ Demo Data Dates Refreshed Successfully!'))
+            self.stdout.write(self.style.SUCCESS('[OK] Demo Data Dates Refreshed Successfully!'))
             self.stdout.write(self.style.SUCCESS('=' * 70))
-            self.stdout.write(self.style.SUCCESS(f'\n📊 Summary:'))
+            self.stdout.write(self.style.SUCCESS(f'\n Summary:'))
             
             for key, value in stats.items():
                 formatted_key = key.replace('_', ' ').title()
-                self.stdout.write(self.style.SUCCESS(f'   • {formatted_key}: {value}'))
+                self.stdout.write(self.style.SUCCESS(f'   - {formatted_key}: {value}'))
             
             # Show current date distribution
             self._show_date_distribution()
             
             self.stdout.write(self.style.SUCCESS('=' * 70))
-            self.stdout.write(self.style.SUCCESS('\n💡 Tip: Demo dates refresh automatically when users access demo mode!'))
+            self.stdout.write(self.style.SUCCESS('\n Tip: Demo dates refresh automatically when users access demo mode!'))
             self.stdout.write(self.style.SUCCESS('=' * 70 + '\n'))
             
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f'❌ Error refreshing demo dates: {e}'))
+            self.stdout.write(self.style.ERROR(f'[FAIL] Error refreshing demo dates: {e}'))
             raise
     
     def _show_date_distribution(self):
@@ -86,10 +86,10 @@ class Command(BaseCommand):
                 due_date__lt=now + timedelta(days=30)
             ).count()
             
-            self.stdout.write(self.style.SUCCESS(f'\n📅 Task Date Distribution:'))
-            self.stdout.write(self.style.SUCCESS(f'   • Past due dates: {past} ({overdue} overdue and incomplete)'))
-            self.stdout.write(self.style.SUCCESS(f'   • Future due dates: {future}'))
-            self.stdout.write(self.style.SUCCESS(f'   • Due in next 7 days: {next_week}'))
-            self.stdout.write(self.style.SUCCESS(f'   • Due in next 30 days: {next_month}'))
+            self.stdout.write(self.style.SUCCESS(f'\n Task Date Distribution:'))
+            self.stdout.write(self.style.SUCCESS(f'   - Past due dates: {past} ({overdue} overdue and incomplete)'))
+            self.stdout.write(self.style.SUCCESS(f'   - Future due dates: {future}'))
+            self.stdout.write(self.style.SUCCESS(f'   - Due in next 7 days: {next_week}'))
+            self.stdout.write(self.style.SUCCESS(f'   - Due in next 30 days: {next_month}'))
         except Exception:
             pass

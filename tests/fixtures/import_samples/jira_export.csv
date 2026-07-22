@@ -1,0 +1,6 @@
+Issue Key,Summary,Description,Issue Type,Status,Priority,Assignee,Due Date,Sprint,Story Points,Labels
+KAN-1,Set up CI pipeline,Configure GitHub Actions for the backend,Task,To Do,High,paul.biotech10@gmail.com,2026-07-01,Sprint 5,5,"devops,backend"
+KAN-2,Fix login redirect loop,Users bounce between login and dashboard,Bug,In Progress,Highest,jane@example.com,2026-06-18,Sprint 5,3,auth
+KAN-3,Add export to PDF,Allow exporting reports as PDF,Story,In Review,Medium,testuser1,2026-07-20,Sprint 6,8,reporting
+KAN-4,Update onboarding docs,Refresh the getting-started guide,Task,Done,Low,,2026-06-05,Sprint 4,2,docs
+KAN-5,Migrate search index and reindex all boards,Keep downtime under five minutes and preserve all historical records for audit and compliance,Epic,Backlog,Lowest,testuser1,,Sprint 7,13,"search,infra"
