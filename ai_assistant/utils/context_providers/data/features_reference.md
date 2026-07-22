@@ -58,6 +58,11 @@ named below).
 - **Use it when:** You need to discuss work with your team or share files.
 - **Where to find it:** Sidebar → Messages.
 
+### Forms
+- **What it does:** AI-assisted intake forms. Build a short form of questions; when a workspace member fills it out, the answers become either a new **PrizmDiscovery idea** (auto-scored by Spectra) or a **Kanban task** on a chosen board. Turns unstructured requests into structured, higher-quality intake.
+- **Use it when:** You want a consistent front door for incoming requests, feature ideas, or work items instead of ad-hoc messages — e.g. a bug-report form that files tasks, or an idea-submission form that feeds Discovery.
+- **Where to find it:** Sidebar → Forms (create a form, then share its fill link with your team).
+
 ### Conflicts
 - **What it does:** Detects and surfaces project conflicts (e.g. scheduling/resource clashes) with a resolution dashboard.
 - **Use it when:** You suspect overlapping commitments or want to review/resolve detected conflicts.
@@ -240,3 +245,50 @@ named below).
 - **What it does:** Use your own AI provider key (Gemini, OpenAI, or Anthropic) for AI features.
 - **Use it when:** You want to run AI on your own provider account/keys.
 - **Where to find it:** Profile / AI provider settings.
+
+---
+
+## Situation Playbooks
+
+When a user describes a *problem or pressure* (not just "which feature does X?"), recommend the
+feature(s) below that address it, say in one line why each fits, and give a concrete next step. Only
+recommend features that appear in this guide; never invent one. If none fit, give general PM advice and
+say PrizmAI has no specific tool for that situation.
+
+### A stakeholder wants to add scope mid-project
+- **What-If** — simulate the change's impact on timeline and workload *before* you agree, so you can respond with data, not a gut feel.
+- **Scope** — capture the request against the baseline so the growth is tracked, not silent.
+- **Pre-Mortem** — surface the new failure modes the added scope introduces so you can pre-empt them.
+- **Next step:** run a What-If for the proposed change, then take the projected slip/overload back to the stakeholder before committing.
+
+### Asked to cut the budget or costs
+- **Budget & ROI** — see the current spend, cost breakdown, and ROI so you know what a cut actually hits.
+- **What-If** — model the cut's effect on schedule and scope before you commit to it.
+- **Resource Optimization** — rebalance workload to protect delivery with fewer resources.
+- **Next step:** open Budget & ROI to find where the money is going, then What-If the reduction to show the trade-off.
+
+### Scope has already crept and you need to explain how
+- **Scope Autopsy** — a forensic timeline of exactly how and when scope grew, for an evidence-based conversation.
+- **Scope** — the baseline-vs-current view and open scope-creep alerts.
+- **Next step:** run a Scope Autopsy and use its timeline as the narrative for stakeholders.
+
+### The project is behind schedule / a deadline is at risk
+- **Burndown** — the completion forecast that tells you whether you'll actually finish on time.
+- **Resource Optimization** — rebalance work off overloaded people to recover pace.
+- **What-If** — test a recovery option (add people, cut scope, move the date) before choosing.
+- **Next step:** check Burndown for the forecast, then What-If the most realistic recovery lever.
+
+### A team member is overloaded
+- **Resource Optimization** — AI workload balancing with concrete reassignment suggestions.
+- **Skill Gaps** — check whether the work can move to someone with the right skills.
+- **Next step:** open Resource Optimization for rebalancing suggestions, then confirm the receiving person has the skills in Skill Gaps.
+
+### The plan feels risky before kickoff
+- **Pre-Mortem** — AI failure simulation that surfaces likely ways this could go wrong in advance.
+- **Stress Test** — red-teams the plan and gives an immunity score so you can harden the weak points.
+- **Next step:** run a Pre-Mortem first for the failure scenarios, then Stress Test to pressure-test the plan.
+
+### Recurring clashes / conflicting commitments
+- **Conflicts** — detects and surfaces scheduling/resource/dependency conflicts with a resolution dashboard.
+- **Focus Today** — batches the conflicts (and other decisions) into one prioritized daily queue.
+- **Next step:** review the Conflicts dashboard and clear them from Focus Today each morning.

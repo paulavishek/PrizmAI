@@ -1115,8 +1115,30 @@ def fetch_risk_scenarios_detail(board, limit=5):
     return result if found_any else None
 
 
-def fetch_discovery_summary(workspace):
-    """Return summary of workspace-scoped discovery ideas, or None."""
+def _discovery_scope_kwargs(workspace, user, is_demo_mode):
+    """ORM filter kwargs scoping DiscoveryIdea to the workspace + demo sandbox.
+
+    Mirrors kanban.discovery_views._idea_scope: workspace is the tenant
+    boundary, but in the shared demo workspace every demo user has their own
+    cloned idea set (sandbox_owner=user) alongside the canonical templates
+    (sandbox_owner=None). Scoping by workspace alone would leak every demo
+    user's clones plus the templates into one user's answer, so demo reads MUST
+    add sandbox_owner=user (and real reads must exclude any stray sandbox copy).
+    """
+    scope = {'workspace': workspace}
+    if is_demo_mode or getattr(workspace, 'is_demo', False):
+        scope['sandbox_owner'] = user
+    else:
+        scope['sandbox_owner__isnull'] = True
+    return scope
+
+
+def fetch_discovery_summary(workspace, user=None, is_demo_mode=False):
+    """Return summary of workspace-scoped discovery ideas, or None.
+
+    In demo mode the result is scoped to the caller's own sandbox clones (see
+    ``_discovery_scope_kwargs``) so it never bleeds other demo users' ideas.
+    """
     try:
         from kanban.discovery_models import DiscoveryIdea, IDEA_STAGE_CHOICES
     except Exception:
@@ -1124,7 +1146,9 @@ def fetch_discovery_summary(workspace):
 
     if workspace is None:
         return None
-    qs = DiscoveryIdea.objects.filter(workspace=workspace)
+    qs = DiscoveryIdea.objects.filter(
+        **_discovery_scope_kwargs(workspace, user, is_demo_mode)
+    )
     total = qs.count()
     if total == 0:
         return {'total': 0, 'by_stage': {}, 'promoted': 0}
@@ -1139,8 +1163,12 @@ def fetch_discovery_summary(workspace):
     return {'total': total, 'by_stage': by_stage, 'promoted': promoted}
 
 
-def fetch_discovery_detail(workspace, recent_limit=12):
-    """Return detail of workspace-scoped discovery ideas, or None."""
+def fetch_discovery_detail(workspace, user=None, is_demo_mode=False, recent_limit=12):
+    """Return detail of workspace-scoped discovery ideas, or None.
+
+    In demo mode the result is scoped to the caller's own sandbox clones (see
+    ``_discovery_scope_kwargs``) so it never bleeds other demo users' ideas.
+    """
     try:
         from kanban.discovery_models import DiscoveryIdea, IDEA_STAGE_CHOICES
     except Exception:
@@ -1148,7 +1176,9 @@ def fetch_discovery_detail(workspace, recent_limit=12):
 
     if workspace is None:
         return None
-    qs = DiscoveryIdea.objects.filter(workspace=workspace)
+    qs = DiscoveryIdea.objects.filter(
+        **_discovery_scope_kwargs(workspace, user, is_demo_mode)
+    )
     total = qs.count()
     if total == 0:
         return {'total': 0, 'by_stage': {}, 'by_quadrant': {}, 'recent': []}
@@ -1994,3 +2024,99 @@ def fetch_briefs_detail(board, user, accessible_boards):
             'board_name': b.board.name if not board else None,
         })
     return {'briefs': briefs}
+
+
+# ── Forms (intake) ─────────────────────────────────────────────────────
+# Form is workspace-scoped (like DiscoveryIdea) and uses the same demo-sandbox
+# isolation: demo copies are cloned per user with sandbox_owner=user, while real
+# / template forms have sandbox_owner=None. We MUST filter on sandbox_owner in
+# demo mode — demo users share one workspace, so scoping by workspace alone
+# would leak every demo user's cloned forms (the latent trap documented on the
+# Form.sandbox_owner field and in kanban/sandbox_views.py).
+
+def _forms_queryset(workspace, is_demo_mode):
+    """Workspace-scoped Form queryset, or None if the app/workspace is
+    unavailable. Callers apply the sandbox_owner filter (below) — demo mode
+    restricts to the caller's own cloned copies, real mode excludes sandbox
+    copies."""
+    if workspace is None:
+        return None
+    try:
+        from forms.models import Form
+    except Exception:
+        return None
+    return Form.objects.filter(workspace=workspace)
+
+
+def fetch_forms_summary(workspace, user, is_demo_mode=False):
+    """Return {'total', 'active', 'total_submissions'} for the workspace's
+    intake forms, or None if the Forms app/workspace is unavailable."""
+    qs = _forms_queryset(workspace, is_demo_mode)
+    if qs is None:
+        return None
+
+    if is_demo_mode:
+        qs = qs.filter(sandbox_owner=user)
+    else:
+        qs = qs.filter(sandbox_owner__isnull=True)
+
+    total = qs.count()
+    if total == 0:
+        return {'total': 0, 'active': 0, 'total_submissions': 0}
+
+    active = qs.filter(is_active=True).count()
+    total_submissions = 0
+    for row in qs.annotate(n=Count('submissions')).values_list('n', flat=True):
+        total_submissions += row or 0
+
+    return {
+        'total': total,
+        'active': active,
+        'total_submissions': total_submissions,
+    }
+
+
+def fetch_forms_detail(workspace, user, is_demo_mode=False):
+    """Return per-form detail for the workspace's intake forms, or None.
+
+    Shape: {'total', 'forms': [ {title, is_active, target_destination,
+    target_board, field_count, submission_count, scored_idea_count,
+    task_count} ]}."""
+    qs = _forms_queryset(workspace, is_demo_mode)
+    if qs is None:
+        return None
+
+    if is_demo_mode:
+        qs = qs.filter(sandbox_owner=user)
+    else:
+        qs = qs.filter(sandbox_owner__isnull=True)
+
+    qs = qs.select_related('target_board').prefetch_related(
+        'fields', 'submissions'
+    ).order_by('-created_at')
+
+    total = qs.count()
+    if total == 0:
+        return {'total': 0, 'forms': []}
+
+    forms = []
+    for form in qs[:25]:
+        submissions = list(form.submissions.all())
+        scored_idea_count = sum(
+            1 for s in submissions
+            if s.created_idea_id is not None
+            and getattr(s.created_idea, 'ai_score_impact', None) is not None
+        )
+        task_count = sum(1 for s in submissions if s.created_task_id is not None)
+        forms.append({
+            'title': form.title,
+            'is_active': form.is_active,
+            'target_destination': form.get_target_destination_display(),
+            'target_board': form.target_board.name if form.target_board else None,
+            'field_count': form.fields.count(),
+            'submission_count': len(submissions),
+            'scored_idea_count': scored_idea_count,
+            'task_count': task_count,
+        })
+
+    return {'total': total, 'forms': forms}

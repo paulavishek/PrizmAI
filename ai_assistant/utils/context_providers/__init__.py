@@ -199,6 +199,8 @@ def _auto_register():
         help_provider,
         # ── June 2026: Task aging / stalling detection ──
         task_aging_provider,
+        # ── July 2026: Intake Forms coverage gap ──
+        forms_provider,
     )
 
 

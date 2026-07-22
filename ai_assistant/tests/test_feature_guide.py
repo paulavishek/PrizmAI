@@ -50,6 +50,31 @@ class FeatureGuideProviderTests(TestCase):
         self.assertIn('Pre-Mortem', names)
         self.assertIn('Shadow Board', names)
 
+    def test_forms_feature_documented(self):
+        """Forms is now a documented feature Spectra can explain."""
+        names = [n for n, _ in _ENTRIES]
+        self.assertIn('Forms', names)
+        detail = self.provider.get_detail(
+            self.board, self.alice, query='what does the forms feature do?')
+        self.assertIn('Forms', detail)
+        self.assertIn('intake', detail.lower())
+
+    def test_situation_playbooks_present(self):
+        """Problem->playbook entries were parsed from the guide."""
+        names = [n for n, _ in _ENTRIES]
+        self.assertTrue(
+            any('scope' in n.lower() and 'stakeholder' in n.lower() for n in names),
+            f'No stakeholder-scope playbook entry found in: {names}',
+        )
+
+    def test_detail_matches_scope_playbook(self):
+        """A stakeholder-scope problem statement surfaces the What-If/Scope playbook."""
+        detail = self.provider.get_detail(
+            self.board, self.alice,
+            query='a stakeholder wants to add scope, what do i do?')
+        self.assertIn('What-If', detail)
+        self.assertIn('Scope', detail)
+
     def test_summary_is_single_help_line(self):
         summary = self.provider.get_summary(self.board, self.alice)
         self.assertIn('Feature help', summary)
@@ -107,4 +132,14 @@ class FeatureGuideRoutingTests(TestCase):
         tags = registry.get_all_tags()
         selected = route_query(
             'what does the pre-mortem feature do?', tags, use_ai=False)
+        self.assertIn(GUIDE, selected)
+
+    def test_router_selects_guide_for_problem_statement(self):
+        """A problem statement co-activates the guide (playbook advisor)."""
+        tags = registry.get_all_tags()
+        selected = route_query(
+            'a stakeholder wants to add scope, what should i do?',
+            tags,
+            use_ai=False,  # keyword tier only — no network in tests
+        )
         self.assertIn(GUIDE, selected)

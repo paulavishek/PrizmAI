@@ -1,10 +1,15 @@
 """
-Discovery Context Provider — DiscoveryIdea backlog (org-scoped).
+Discovery Context Provider — DiscoveryIdea backlog (workspace-scoped).
 
-DiscoveryIdea is organization-scoped (not board-scoped), so this provider
-works at the user's organization level. It surfaces the idea funnel:
-new / under_review / approved counts, AI scoring quadrants, and the most
-recent ideas. Promoted ideas link to a board via IdeaPromotion.
+DiscoveryIdea is workspace-scoped (not board-scoped), so this provider works at
+the user's active workspace level. It surfaces the idea funnel: new /
+under_review / approved counts, AI scoring quadrants, and the most recent ideas.
+Promoted ideas link to a board via IdeaPromotion.
+
+Demo isolation: the demo workspace is shared, so per-user idea clones are
+distinguished by sandbox_owner. The fetchers apply the sandbox_owner filter in
+demo mode (mirroring kanban.discovery_views._idea_scope) so one demo user never
+sees another's cloned ideas or the canonical templates.
 """
 
 import logging
@@ -25,7 +30,7 @@ class DiscoveryContextProvider(BaseContextProvider):
 
     def _get_summary_impl(self, board, user, is_demo_mode=False):
         if not board:
-            # Cross-board / org-level view still works
+            # Cross-board / workspace-level view still works
             pass
 
         from ai_assistant.utils.spectra_data_fetchers import fetch_discovery_summary
@@ -33,7 +38,7 @@ class DiscoveryContextProvider(BaseContextProvider):
         ws = self._get_user_workspace(user)
         if not ws:
             return ''
-        data = fetch_discovery_summary(ws)
+        data = fetch_discovery_summary(ws, user, is_demo_mode)
         if data is None or data['total'] == 0:
             return ''
 
@@ -51,7 +56,7 @@ class DiscoveryContextProvider(BaseContextProvider):
         ws = self._get_user_workspace(user)
         if not ws:
             return None
-        data = fetch_discovery_detail(ws)
+        data = fetch_discovery_detail(ws, user, is_demo_mode)
         if data is None or data['total'] == 0:
             return None
 

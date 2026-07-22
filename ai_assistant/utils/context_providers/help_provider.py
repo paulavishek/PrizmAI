@@ -69,6 +69,9 @@ _STOPWORDS = {
     'about', 'tell', 'explain', 'which', 'should', 'can', 'where', 'find',
     'work', 'works', 'used', 'when', 'stuck', 'get', 'getting', 'started',
     'prizmai', 'spectra',
+    # Greetings / filler so a bare "hello there" doesn't spuriously match an
+    # entry body (e.g. "there" inside "...tasks there)").
+    'hello', 'there', 'hey', 'please', 'thanks',
 }
 
 
@@ -112,6 +115,16 @@ class FeatureGuideContextProvider(BaseContextProvider):
         # Advisor intents (problem -> feature)
         'which feature', 'what should i use', 'recommend a feature',
         "i'm stuck", 'im stuck', 'stuck', 'what tool',
+        # Problem-statement advisor intents (situation -> playbook). These are
+        # multi-word phrases on purpose so they co-activate the Feature Guide
+        # alongside the relevant data provider (Budget, Scope, ...) without
+        # hijacking routing on a single hot word.
+        'what do i do', 'what should i do', 'how do i handle',
+        'how should i handle', 'help me with', 'help me deal', 'how do i deal',
+        'add scope', 'adding scope', 'more scope', 'scope change',
+        'cut the budget', 'cut budget', 'reduce budget', 'reduce the budget',
+        'behind schedule', 'at risk', 'running late', 'overloaded',
+        'stakeholder wants', 'stakeholder asked', 'stakeholder is asking',
         # Key feature names so name-drop queries route here
         'pre-mortem', 'premortem', 'shadow board', 'gantt', 'stress test',
         'what-if', 'scope autopsy', 'prizmbrief', 'retrospective',
