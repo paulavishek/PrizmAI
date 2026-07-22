@@ -79,6 +79,22 @@ def whatif_simulate(request, board_id):
     }
 
     engine = WhatIfEngine(board)
+
+    # Feed the same live velocity_health signal that Shadow Board promotion
+    # uses (kanban/tasks/shadow_branch_tasks.py), so a scenario's feasibility
+    # score doesn't jump the moment it's promoted to a branch. Baseline is
+    # captured once per request, so the score stays deterministic within
+    # this simulation call.
+    from kanban.tasks.shadow_branch_tasks import (
+        compute_actual_7d_velocity, MIN_BASELINE_VELOCITY,
+    )
+    baseline_velocity = float(engine._capture_baseline().get('velocity_per_week') or 0.0)
+    if baseline_velocity > 0:
+        baseline_velocity = max(baseline_velocity, MIN_BASELINE_VELOCITY)
+        params['velocity_health'] = compute_actual_7d_velocity(board) / baseline_velocity
+    else:
+        params['velocity_health'] = 1.0
+
     results = engine.simulate(params)
 
     # Optional AI analysis

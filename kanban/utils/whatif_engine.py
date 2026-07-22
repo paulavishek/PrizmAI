@@ -557,7 +557,41 @@ class WhatIfEngine:
         HEADROOM_FLOOR = 0.68
         HEADROOM_SPAN = 0.30
         ceiling = min(0.98, HEADROOM_FLOOR + HEADROOM_SPAN * headroom)
-        return round(max(0.0, min(score, ceiling)), 4)
+        final = max(0.0, min(score, ceiling))
+
+        # --- Descope / value penalty (applied AFTER the ceiling clamp) ---
+        # Every other term here is deliverability-only: it rewards a plan for
+        # being easy to finish and says nothing about whether the plan still
+        # delivers the product.  Removing scope lowers delay probability,
+        # utilization AND budget at once — and, crucially, it also MAXES OUT the
+        # headroom ceiling (idle capacity + big schedule buffer).  So "cut
+        # tasks" wasn't just a near-dominant strategy on the penalty terms; the
+        # ceiling actively rewarded it, and any penalty applied to `score`
+        # before the clamp was invisible because the ceiling was the binding
+        # constraint.  Applying the value penalty to the CLAMPED result is what
+        # makes a leaner plan read as "lower risk" without automatically reading
+        # as "best".
+        #
+        # Deliberately asymmetric and zero-anchored:
+        #   * Only fires when scope is REDUCED (deltas['tasks'] < 0).  Adding
+        #     scope is already penalized structurally above — charging it here
+        #     too would double-count.
+        #   * Contributes EXACTLY 0 when scope is unchanged or grown, so every
+        #     existing What-If baseline and no-op recalc scores identically to
+        #     before this term existed (preserves the "baselines don't shift"
+        #     invariant documented on the headroom ceiling above).
+        # Scaled by the fraction of the project's scope removed and capped at
+        # -0.12 so a heavy descope is clearly penalized but the term never
+        # overwhelms the structural feasibility signals or flips a genuinely
+        # infeasible plan to look good.
+        scope_delta = deltas.get('tasks', 0) or 0
+        if scope_delta < 0:
+            baseline_total = projected.get('total_tasks', 0) - scope_delta
+            if baseline_total > 0:
+                removed_fraction = min(-scope_delta / baseline_total, 1.0)
+                final = max(0.0, final - min(0.12, 0.12 * removed_fraction))
+
+        return round(final, 4)
 
     # ------------------------------------------------------------------
     # Warnings for missing data

@@ -9,11 +9,28 @@ from datetime import date as date_type, timedelta
 from django.utils import timezone
 from django.core.cache import caches
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
 
 MIN_BASELINE_VELOCITY = 0.5
+
+# Serialization lock for the read-dedup-insert critical section of a recalc.
+# Two recalcs for the same board can fire near-simultaneously from different
+# processes — e.g. the inline "Manual refresh" running in the Daphne request
+# thread and the countdown=2 "Task completed" Celery task in the worker.  Each
+# reads get_latest_snapshot() before the other commits its INSERT, so neither
+# sees the other as a duplicate and both land byte-identical rows one second
+# apart (the "×2 unchanged" pairs in Snapshot History).  Holding a per-board
+# lock across the loop makes the second recalc wait, so its dedup check sees
+# the first's committed snapshot and correctly suppresses the duplicate.
+# Must live on the cross-process 'ai_cache' (Redis) — 'default' is per-process
+# LocMemCache in local DEBUG and would NOT span the Daphne thread + Celery
+# worker, which is exactly where the race occurs (see sandbox_provisioning).
+SHADOW_RECALC_LOCK_TTL = 60          # seconds; safety net if a holder crashes
+SHADOW_RECALC_LOCK_WAIT = 8.0        # max seconds to wait for the lock
+SHADOW_RECALC_LOCK_POLL = 0.1        # spin-wait poll interval
 
 # Minimum score movement (in points, 0-100 scale) from a real board event
 # before it is recorded as a "Significant Score Change" (BranchDivergenceLog).
@@ -411,6 +428,31 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
     snapshots_created = 0
     snapshot_ids = []
 
+    # Serialize the read-dedup-insert loop against any other recalc for this
+    # same board so concurrent triggers (inline Manual refresh + countdown
+    # Task-completed task) don't each miss the other's snapshot and write a
+    # duplicate.  We WAIT for the lock (bounded) rather than bail: dropping a
+    # recalc could lose a real board event.  Failures acquiring the lock fail
+    # open — correctness of dedup degrades to the old behaviour, never blocks.
+    lock_cache = caches['ai_cache']
+    lock_key = f'shadow_recalc_lock_{board_id}'
+    got_lock = False
+    deadline = time.monotonic() + SHADOW_RECALC_LOCK_WAIT
+    while True:
+        try:
+            got_lock = lock_cache.add(lock_key, '1', timeout=SHADOW_RECALC_LOCK_TTL)
+        except Exception:
+            got_lock = True  # cache unavailable — fail open, never block a recalc
+        if got_lock or time.monotonic() >= deadline:
+            break
+        time.sleep(SHADOW_RECALC_LOCK_POLL)
+    if not got_lock:
+        logger.warning(
+            f'Proceeding with branch recalc for board {board_id} without the '
+            f'serialization lock after waiting {SHADOW_RECALC_LOCK_WAIT}s '
+            f'(trigger={trigger_event!r}) — a duplicate snapshot is possible.'
+        )
+
     # Compute the board-wide actual 7-day velocity once per recalc cycle.
     # Each branch then derives its own velocity_health by comparing this
     # against the velocity captured at branch creation.
@@ -600,6 +642,15 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
         except Exception as branch_err:
             logger.error(f'Error recalculating branch {branch.id}: {branch_err}', exc_info=True)
             continue
+
+    # Release the serialization lock so the next queued recalc for this board
+    # can proceed and see the snapshots we just committed.  Best-effort: the
+    # lock also carries a TTL so a crash before this point self-heals.
+    if got_lock:
+        try:
+            lock_cache.delete(lock_key)
+        except Exception:
+            pass
 
     logger.info(
         f'Branch recalculation complete: {snapshots_created} snapshots created, '

@@ -1540,7 +1540,25 @@ def _duplicate_board(template_board, user):
             )
             latest_snap_pk = branch_snaps[-1].pk if branch_snaps else None
 
+            # Collapse consecutive byte-identical snapshots (same score/deltas/
+            # conflicts) so the race-duplicate pairs baked into the template
+            # (two recalcs one second apart writing the same row) don't get
+            # faithfully reproduced into every sandbox on Reset Demo — the same
+            # collapse the divergence-log clone below already does.  The latest
+            # snapshot is always kept, since it's pinned to "today" to drive the
+            # "How It Affected Your Branches" standup window.
+            previous_snap_key = None
             for snap in branch_snaps:
+                snap_key = (
+                    round(float(snap.feasibility_score), 2),
+                    snap.scope_delta,
+                    snap.team_delta,
+                    snap.deadline_delta_weeks,
+                    tuple(snap.conflicts_detected or []),
+                )
+                if snap_key == previous_snap_key and snap.pk != latest_snap_pk:
+                    continue
+                previous_snap_key = snap_key
                 new_snap = BranchSnapshot.objects.create(
                     branch=new_branch,
                     scope_delta=snap.scope_delta,

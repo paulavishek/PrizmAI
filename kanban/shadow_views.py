@@ -1182,9 +1182,11 @@ def delete_branch(request, board_id, branch_id):
     """
     API endpoint: Permanently delete a shadow branch and all its snapshots.
 
-    If the deleted branch was active or committed, all archived branches on
-    the same board are automatically restored to active (since they were
-    archived because of that branch's commit).
+    If the deleted branch was committed, all archived branches on the same
+    board are automatically restored to active (since branches are only ever
+    archived as a side-effect of that branch's commit — see commit_branch).
+    Deleting a merely-active (never committed) branch has no bearing on why
+    other branches are archived, so it must not trigger a restore.
     """
     try:
         board = get_object_or_404(Board, id=board_id)
@@ -1195,14 +1197,14 @@ def delete_branch(request, board_id, branch_id):
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
         branch_name = branch.name
-        was_active_or_committed = branch.status in ('active', 'committed')
+        was_committed = branch.status == 'committed'
 
         branch.delete()
 
-        # When an active/committed branch is removed, restore any archived branches
+        # Only a committed branch's deletion should restore archived siblings
         # so the board isn't left with nothing to work with.
         restored_count = 0
-        if was_active_or_committed:
+        if was_committed:
             archived_qs = ShadowBranch.objects.filter(board=board, status='archived')
             restored_count = archived_qs.count()
             if restored_count:
