@@ -85,13 +85,18 @@ def build_board_stress_test_data(board, user):
                 'blocked_by': dep.title,
             })
 
-    # Conflicts
+    # Conflicts, broken down by type (resource/schedule/dependency) so the AI
+    # can reference real categories instead of guessing at them (mirrors the
+    # same fix in premortem_views._collect_board_snapshot).
     conflict_count = 0
+    conflict_type_breakdown = {}
     try:
         from kanban.conflict_models import ConflictDetection
-        conflict_count = ConflictDetection.objects.filter(
-            board=board, status='active'
-        ).count()
+        active_conflicts = ConflictDetection.objects.filter(board=board, status='active')
+        conflict_count = active_conflicts.count()
+        if conflict_count:
+            for row in active_conflicts.values('conflict_type').annotate(n=Count('id')):
+                conflict_type_breakdown[row['conflict_type']] = row['n']
     except Exception:
         pass
 
@@ -174,6 +179,7 @@ def build_board_stress_test_data(board, user):
         'start_date': str(start_date) if start_date else 'Not set',
         'project_deadline': str(project_deadline) if project_deadline else 'Not set',
         'conflict_count': conflict_count,
+        'conflict_type_breakdown': conflict_type_breakdown,
         'dependency_count': dependency_count,
         'column_names': column_names,
         'premortem_scenario_count': premortem_scenario_count,

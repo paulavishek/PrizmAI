@@ -15,7 +15,7 @@ from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.conf import settings
 
 from kanban.models import Board, Task
@@ -115,13 +115,17 @@ def _collect_board_snapshot(board):
     except Exception:
         budget_info = None
 
-    # Existing active conflicts
+    # Existing active conflicts, broken down by type (resource/schedule/dependency)
+    # so the AI can reference real categories instead of guessing at them.
     conflict_count = 0
+    conflict_type_breakdown = {}
     try:
         from kanban.conflict_models import ConflictDetection
-        conflict_count = ConflictDetection.objects.filter(
-            board=board, status='active'
-        ).count()
+        active_conflicts = ConflictDetection.objects.filter(board=board, status='active')
+        conflict_count = active_conflicts.count()
+        if conflict_count:
+            for row in active_conflicts.values('conflict_type').annotate(n=Count('id')):
+                conflict_type_breakdown[row['conflict_type']] = row['n']
     except Exception:
         pass
 
@@ -140,6 +144,7 @@ def _collect_board_snapshot(board):
         'days_remaining': days_remaining,
         'budget_info': budget_info,
         'conflict_count': conflict_count,
+        'conflict_type_breakdown': conflict_type_breakdown,
     }
     return snapshot
 
@@ -158,7 +163,12 @@ def _build_gemini_prompt(snapshot):
         "- Do NOT give generic project management advice.\n"
         "- Do NOT be reassuring or diplomatic. Be direct about risks.\n"
         "- Each failure scenario must be distinct — no overlapping causes.\n"
-        "- Think like a skeptic, not a cheerleader.\n\n"
+        "- Think like a skeptic, not a cheerleader.\n"
+        "- Only state an assumption in confidence_note about data that is genuinely "
+        "absent from PROJECT DATA below. Never guess at, or contradict, a fact that "
+        "is already given to you (e.g. if conflict types are listed, don't assume "
+        "their types; if no spend history is provided, don't assert whether burn "
+        "rate is linear or accelerating — that data was not given to you).\n\n"
         "Return ONLY valid JSON. No markdown, no backticks, no explanation outside the JSON."
     )
 
@@ -168,6 +178,13 @@ def _build_gemini_prompt(snapshot):
             f"{snapshot['days_available']} days total "
             f"({snapshot['days_remaining']} days remaining)"
         )
+
+    conflict_breakdown = snapshot.get('conflict_type_breakdown') or {}
+    if conflict_breakdown:
+        parts = [f"{count} {ctype}" for ctype, count in conflict_breakdown.items()]
+        conflicts_str = f"{snapshot['conflict_count']} ({', '.join(parts)})"
+    else:
+        conflicts_str = str(snapshot['conflict_count'])
 
     user_prompt = (
         "Analyze this project and generate a Pre-Mortem analysis.\n\n"
@@ -181,8 +198,9 @@ def _build_gemini_prompt(snapshot):
         f"- Tasks with no due date: {snapshot['no_deadline_count']}\n"
         f"- Team size: {snapshot['team_size']} people\n"
         f"- Timeline: {timeline_str}\n"
-        f"- Budget: {snapshot['budget_info'] or 'Not set'}\n"
-        f"- Existing conflicts detected: {snapshot['conflict_count']}\n\n"
+        f"- Budget: {snapshot['budget_info'] or 'Not set'} (single point-in-time snapshot — "
+        "no spend-over-time history is available, so do not assume a burn-rate trend)\n"
+        f"- Existing conflicts detected: {conflicts_str}\n\n"
         'Return this exact JSON structure:\n'
         '{\n'
         '  "failure_scenarios": [\n'
@@ -198,8 +216,10 @@ def _build_gemini_prompt(snapshot):
         '    }\n'
         '  ],\n'
         '  "overall_risk_level": "High" or "Medium" or "Low",\n'
-        '  "confidence_note": "One sentence describing what assumptions you made '
-        'due to missing data"\n'
+        '  "confidence_note": "One sentence naming ONLY data fields that are missing '
+        'or not set above (e.g. no budget, no deadline) and how that limits this '
+        'analysis. If nothing relevant is missing, state that the analysis is based '
+        'on complete project data instead of inventing an assumption."\n'
         '}'
     )
 

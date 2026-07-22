@@ -100,6 +100,12 @@ STRESS_TEST_SYSTEM_PROMPT = (
     "- has_recovery_path must be a boolean (true or false).\n"
     "- Vaccines must be STRUCTURAL — redundancies, buffers, decoupling, fallback paths.\n"
     "- Bad vaccines: 'communicate better', 'have a standup', 'monitor this'.\n"
+    "- assumptions_made must only list data genuinely absent from PROJECT DATA below "
+    "(e.g. no budget set, no deadline set). Never guess at, or contradict, a fact "
+    "already given to you — e.g. if conflict types are listed, don't assume their "
+    "types; if no spend-over-time history is provided, don't assert whether burn "
+    "rate is linear or accelerating. Modeling the pessimistic CASE is fine — "
+    "inventing pessimistic DATA that wasn't given to you is not.\n"
     "- All vaccines together should theoretically bring score to 80+.\n"
     "- projected_score_improvement must be honest — LOW effort targeting severe "
     "failure adds 8-12 pts, HIGH effort adds 15-20 pts.\n\n"
@@ -161,10 +167,12 @@ def build_stress_test_user_prompt(board_data):
         f"High-priority tasks: {board_data.get('high_priority_tasks', 0)}\n"
         f"Team size: {board_data.get('member_count', 0)} members\n"
         f"Team members: {', '.join(board_data.get('member_names', []))}\n"
-        f"Budget: {board_data.get('budget_info') or 'Not set'}\n"
+        f"Budget: {board_data.get('budget_info') or 'Not set'} (single point-in-time "
+        "snapshot — no spend-over-time history is available, so do not assume a "
+        "burn-rate trend)\n"
         f"Project start date: {board_data.get('start_date', 'Not set')}\n"
         f"Project deadline: {board_data.get('project_deadline', 'Not set')}\n"
-        f"Existing conflicts: {board_data.get('conflict_count', 0)}\n"
+        f"Existing conflicts: {_format_conflict_breakdown(board_data.get('conflict_count', 0), board_data.get('conflict_type_breakdown', {}))}\n"
         f"Dependency count: {board_data.get('dependency_count', 0)}\n"
         f"Board columns: {', '.join(board_data.get('column_names', []))}\n"
         f"Pre-mortem scenarios identified: {board_data.get('premortem_scenario_count', 0)}\n"
@@ -207,6 +215,14 @@ def build_stress_test_user_prompt(board_data):
         "- The pre-mortem count above is project context; always generate all 5 attack scenarios\n\n"
         "Respond with ONLY the JSON object. No other text."
     )
+
+
+def _format_conflict_breakdown(conflict_count, breakdown):
+    """Format conflict count with its type breakdown, if any, for the prompt."""
+    if not breakdown:
+        return str(conflict_count)
+    parts = [f"{count} {ctype}" for ctype, count in breakdown.items()]
+    return f"{conflict_count} ({', '.join(parts)})"
 
 
 def _format_assignee_breakdown(breakdown):
