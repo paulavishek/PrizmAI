@@ -90,6 +90,7 @@ def build_board_stress_test_data(board, user):
     # same fix in premortem_views._collect_board_snapshot).
     conflict_count = 0
     conflict_type_breakdown = {}
+    conflicts_on_critical_path = 0
     try:
         from kanban.conflict_models import ConflictDetection
         active_conflicts = ConflictDetection.objects.filter(board=board, status='active')
@@ -97,6 +98,14 @@ def build_board_stress_test_data(board, user):
         if conflict_count:
             for row in active_conflicts.values('conflict_type').annotate(n=Count('id')):
                 conflict_type_breakdown[row['conflict_type']] = row['n']
+
+            critical_path_ids = _estimate_critical_path_task_ids(tasks)
+            if critical_path_ids:
+                conflicts_on_critical_path = (
+                    active_conflicts.filter(tasks__id__in=critical_path_ids)
+                    .distinct()
+                    .count()
+                )
     except Exception:
         pass
 
@@ -180,6 +189,7 @@ def build_board_stress_test_data(board, user):
         'project_deadline': str(project_deadline) if project_deadline else 'Not set',
         'conflict_count': conflict_count,
         'conflict_type_breakdown': conflict_type_breakdown,
+        'conflicts_on_critical_path': conflicts_on_critical_path,
         'dependency_count': dependency_count,
         'column_names': column_names,
         'premortem_scenario_count': premortem_scenario_count,
@@ -193,3 +203,70 @@ def build_board_stress_test_data(board, user):
         'assignee_breakdown': assignee_breakdown,
         'blocking_dependencies': blocking_deps,
     }
+
+
+def _estimate_critical_path_task_ids(tasks):
+    """
+    Deterministically estimate the critical path as the longest chain of
+    dependent tasks by duration (not an LLM call — this only exists to check
+    whether existing conflicts actually sit on that chain, since the AI has
+    no other way to verify a "critical path" claim about them).
+
+    Duration per task is (due_date - start_date) in days when both are set,
+    else a 1-day default. Ties are broken by hop count. Returns the set of
+    task IDs on the longest chain, or an empty set if there are no
+    dependency edges to walk.
+    """
+    task_list = list(tasks.only('id', 'start_date', 'due_date').prefetch_related('dependencies'))
+    if not task_list:
+        return set()
+
+    duration_by_id = {}
+    deps_by_id = {}
+    for t in task_list:
+        if t.start_date and t.due_date:
+            due = t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date
+            duration_by_id[t.id] = max((due - t.start_date).days, 1)
+        else:
+            duration_by_id[t.id] = 1
+        deps_by_id[t.id] = [d.id for d in t.dependencies.all()]
+
+    # Longest path ending at each task (memoized DFS), guarding against cycles.
+    longest_end_at = {}
+    in_progress = set()
+
+    def longest_ending_at(task_id):
+        if task_id in longest_end_at:
+            return longest_end_at[task_id]
+        if task_id in in_progress or task_id not in duration_by_id:
+            return 0  # cycle guard / dangling dependency reference
+        in_progress.add(task_id)
+        best_prefix = 0
+        for dep_id in deps_by_id.get(task_id, []):
+            best_prefix = max(best_prefix, longest_ending_at(dep_id))
+        in_progress.discard(task_id)
+        result = best_prefix + duration_by_id[task_id]
+        longest_end_at[task_id] = result
+        return result
+
+    for t in task_list:
+        longest_ending_at(t.id)
+
+    if not longest_end_at:
+        return set()
+
+    end_task_id = max(longest_end_at, key=longest_end_at.get)
+    if longest_end_at[end_task_id] <= 1 and all(not v for v in deps_by_id.values()):
+        return set()  # no real dependency chain — every task is isolated
+
+    # Walk back from the chosen end task following the highest-scoring dependency each step.
+    path_ids = set()
+    current = end_task_id
+    while current is not None:
+        path_ids.add(current)
+        deps = deps_by_id.get(current, [])
+        if not deps:
+            break
+        current = max(deps, key=lambda d: longest_end_at.get(d, 0))
+
+    return path_ids

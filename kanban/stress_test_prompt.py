@@ -103,9 +103,12 @@ STRESS_TEST_SYSTEM_PROMPT = (
     "- assumptions_made must only list data genuinely absent from PROJECT DATA below "
     "(e.g. no budget set, no deadline set). Never guess at, or contradict, a fact "
     "already given to you — e.g. if conflict types are listed, don't assume their "
-    "types; if no spend-over-time history is provided, don't assert whether burn "
-    "rate is linear or accelerating. Modeling the pessimistic CASE is fine — "
-    "inventing pessimistic DATA that wasn't given to you is not.\n"
+    "types; the 'Existing conflicts' line already states how many conflicts sit on "
+    "the critical path, so never assert or imply a different critical-path "
+    "involvement for conflicts than what that line says; if no spend-over-time "
+    "history is provided, don't assert whether burn rate is linear or accelerating. "
+    "Modeling the pessimistic CASE is fine — inventing pessimistic DATA that wasn't "
+    "given to you is not.\n"
     "- All vaccines together should theoretically bring score to 80+.\n"
     "- projected_score_improvement must be honest — LOW effort targeting severe "
     "failure adds 8-12 pts, HIGH effort adds 15-20 pts.\n\n"
@@ -172,7 +175,7 @@ def build_stress_test_user_prompt(board_data):
         "burn-rate trend)\n"
         f"Project start date: {board_data.get('start_date', 'Not set')}\n"
         f"Project deadline: {board_data.get('project_deadline', 'Not set')}\n"
-        f"Existing conflicts: {_format_conflict_breakdown(board_data.get('conflict_count', 0), board_data.get('conflict_type_breakdown', {}))}\n"
+        f"Existing conflicts: {_format_conflict_breakdown(board_data.get('conflict_count', 0), board_data.get('conflict_type_breakdown', {}), board_data.get('conflicts_on_critical_path', 0))}\n"
         f"Dependency count: {board_data.get('dependency_count', 0)}\n"
         f"Board columns: {', '.join(board_data.get('column_names', []))}\n"
         f"Pre-mortem scenarios identified: {board_data.get('premortem_scenario_count', 0)}\n"
@@ -217,12 +220,21 @@ def build_stress_test_user_prompt(board_data):
     )
 
 
-def _format_conflict_breakdown(conflict_count, breakdown):
-    """Format conflict count with its type breakdown, if any, for the prompt."""
+def _format_conflict_breakdown(conflict_count, breakdown, conflicts_on_critical_path=0):
+    """Format conflict count with its type breakdown and verified critical-path
+    overlap, if any, for the prompt. The critical-path figure is computed
+    deterministically from real dependency/date data (see
+    _estimate_critical_path_task_ids in stress_test_data.py) — it is a fact,
+    not something the AI should guess at."""
     if not breakdown:
         return str(conflict_count)
     parts = [f"{count} {ctype}" for ctype, count in breakdown.items()]
-    return f"{conflict_count} ({', '.join(parts)})"
+    path_note = (
+        f"; {conflicts_on_critical_path} of these involve a task on the critical path"
+        if conflicts_on_critical_path
+        else "; none of these involve a task on the critical path"
+    )
+    return f"{conflict_count} ({', '.join(parts)}){path_note}"
 
 
 def _format_assignee_breakdown(breakdown):
