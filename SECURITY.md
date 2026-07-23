@@ -1,5 +1,9 @@
 ﻿# Security Policy
 
+> Looking for how PrizmAI's AI assistant may be used and who is responsible for a
+> given deployment? See **[Acceptable Use & Responsible Deployment](ACCEPTABLE_USE.md)**.
+> This document covers **security vulnerability disclosure** only.
+
 ## Supported Versions
 
 We actively support the following versions of PrizmAI:

@@ -657,7 +657,9 @@ class AIRouter:
             {"category": "HARM_CATEGORY_HARASSMENT",         "threshold": "BLOCK_ONLY_HIGH"},
             {"category": "HARM_CATEGORY_HATE_SPEECH",        "threshold": "BLOCK_ONLY_HIGH"},
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",  "threshold": "BLOCK_ONLY_HIGH"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT",  "threshold": "BLOCK_ONLY_HIGH"},
+            # DANGEROUS_CONTENT tightened (weapons/explosives/illicit how-to); other
+            # categories stay permissive so normal PM vocabulary isn't falsely blocked.
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT",  "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
         ]
 
         # google-generativeai 0.8.x uses a module-level global API key (genai.configure).

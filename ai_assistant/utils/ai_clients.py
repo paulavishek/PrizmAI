@@ -74,8 +74,11 @@ class GeminiClient:
                     "threshold": "BLOCK_ONLY_HIGH"
                 },
                 {
+                    # Tightened (weapons/explosives/illicit how-to). Other categories
+                    # stay BLOCK_ONLY_HIGH so normal PM phrasing ("kill this task",
+                    # "attack the deadline") isn't falsely blocked.
                     "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                    "threshold": "BLOCK_ONLY_HIGH"
+                    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
                 },
             ]
             

@@ -1226,7 +1226,9 @@ python manage.py cache_management --action=test
 - **Audit Logging** — Complete audit trail of sensitive operations with IP tracking
 - **HTTPS Enforcement** — HSTS support for encrypted data in transit
 
-**→ [Security Policy](SECURITY.md)**
+**→ [Security Policy](SECURITY.md)** · **[Acceptable Use & Responsible Deployment](ACCEPTABLE_USE.md)**
+
+> **Responsible use.** Spectra is a project-management assistant and declines requests outside that scope, including dangerous or harmful content. PrizmAI is Bring-Your-Own-Key: whoever deploys an instance supplies their own AI provider key and is responsible for its use. See [ACCEPTABLE_USE.md](ACCEPTABLE_USE.md).
 
 ---
 
