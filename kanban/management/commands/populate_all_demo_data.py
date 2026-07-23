@@ -3380,6 +3380,7 @@ class Command(BaseCommand):
             'populate_knowledge_demo_data',
             'populate_discovery_demo_data',
             'populate_automation_demo_data',
+            'populate_ai_assistant_demo_data',
             'fix_premortem_stress_demo',
             'seed_exit_protocol_demo',
         ]
@@ -3392,7 +3393,7 @@ class Command(BaseCommand):
         # permanently null instead of re-pointing them at the fresh Task rows.
         # Forward --reset through so it recreates (and correctly re-links)
         # its events whenever the board's tasks were just rebuilt.
-        subs_needing_reset_passthrough = {'populate_calendar_demo_data'}
+        subs_needing_reset_passthrough = {'populate_calendar_demo_data', 'populate_ai_assistant_demo_data'}
         for name in subs:
             try:
                 if self.reset and name in subs_needing_reset_passthrough:

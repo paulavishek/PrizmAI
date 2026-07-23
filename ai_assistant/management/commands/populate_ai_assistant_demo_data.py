@@ -162,7 +162,15 @@ class Command(BaseCommand):
         software_board = demo_boards.filter(name__icontains='software').first()
         marketing_board = demo_boards.filter(name__icontains='marketing').first()
         bug_board = demo_boards.filter(name__icontains='bug').first()
-        
+
+        # Board-less ("general") sessions still need a workspace to be visible
+        # in the workspace-scoped analytics dashboard - fall back to any demo
+        # board's workspace (mirrors the same fallback in create_analytics()).
+        fallback_workspace = next(
+            (getattr(b, 'workspace', None) for b in demo_boards if getattr(b, 'workspace', None)),
+            None,
+        )
+
         sessions_data = self.get_sessions_data()
         
         sessions_count = 0
@@ -189,7 +197,7 @@ class Command(BaseCommand):
             # producing duplicate demo sessions on repeated runs without
             # ``--reset`` - the cause of the 6x-duplicated demo titles seen
             # in the sidebar before May 2026.
-            workspace = getattr(board, 'workspace', None) if board else None
+            workspace = getattr(board, 'workspace', None) if board else fallback_workspace
             session, created = AIAssistantSession.objects.get_or_create(
                 user=user,
                 board=board,
