@@ -232,6 +232,7 @@ def _duplicate_board(template_board, user):
             risk_likelihood=task.risk_likelihood,
             risk_impact=task.risk_impact,
             complexity_score=task.complexity_score,
+            story_points=task.story_points,
             # Clear AI and personal operational data
             ai_summary=None,
             ai_summary_generated_at=None,

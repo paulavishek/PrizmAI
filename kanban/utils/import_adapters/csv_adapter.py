@@ -306,8 +306,9 @@ class CSVAdapter(BaseImportAdapter):
             'label_names': label_names,
             'external_id': get_value('external_id'),
             'complexity_score': self._normalize_complexity(get_value('complexity')),
+            'story_points': self._snap_to_story_point(get_value('complexity')),
         }
-        
+
         return task_data
     
     def _normalize_complexity(self, value: Any) -> int:

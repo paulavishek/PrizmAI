@@ -119,6 +119,38 @@ _WORK_TYPE = {
     'B5': 'Chore', 'B6': 'Chore', 'B7': 'Chore', 'B8': 'Feature',
 }
 
+# Native Fibonacci story points keyed on a title fragment. Single source of
+# truth for the demo effort spread — applied to the native Task.story_points
+# field, which feeds burndown velocity + the capacity alert.
+# Fragments are matched case-insensitively against the seeded demo task
+# titles; keep these in sync with the titles created in _create_child_tasks.
+_STORY_POINTS_BY_TITLE = {
+    # Setup / planning / docs (low)
+    'Requirements Analysis': 3,          'Development Environment Setup': 2,
+    'API Documentation': 3,              'API Reference Documentation': 3,
+    'Health Check & Readiness': 2,       'Logging & Observability': 3,
+    'CI Test Coverage Gates': 3,
+    # Architecture / design (medium-high)
+    'System Architecture Design': 8,     'Security Architecture Patterns': 8,
+    'Database Schema Design': 5,         'Database Schema & Migrations': 5,
+    'API Gateway Configuration': 5,      'Base API Structure': 5,
+    # Auth / security (high — core + risky)
+    'Authentication System': 13,         'Google OAuth 2.0 Integration': 8,
+    'GitHub OAuth 2.0 Integration': 5,   'Social Login Integration': 8,
+    'Role-Based Access Control': 8,      'API Rate Limiting': 5,
+    'Authentication Testing Suite': 5,
+    # Features / integrations (medium-high)
+    'File Upload System': 8,             'User Registration Flow': 5,
+    'Mobile Push Notifications': 8,      'iOS APNs Integration': 5,
+    'Slack & Microsoft Teams Webhooks': 5, 'Zapier Integration': 5,
+    'Regional Pricing Tiers': 8,         'Cognitive Load & Burnout Monitoring': 8,
+    'Accessibility Compliance': 5,
+    # Testing / performance / release (medium-high)
+    'End-to-End Test Suite': 8,          'Performance Optimisation Sprint': 8,
+    'Production Deployment to Google Cloud Run': 8,
+    'Open Source Launch Preparation': 5,
+}
+
 
 class Command(BaseCommand):
     help = (
@@ -182,6 +214,10 @@ class Command(BaseCommand):
                 labels = self._create_labels(self.board)
                 epics = self._create_epics(labels)
                 tasks_by_code = self._create_child_tasks(epics, labels)
+                # Set native story points BEFORE velocity snapshots — the
+                # burndown predictor now sums Task.story_points, so points must
+                # exist first or the seeded velocity chart comes out empty.
+                self._apply_native_story_points()
                 self._link_dependencies(tasks_by_code)
                 self._create_milestones(tasks_by_code)
                 self._create_budget_and_time(tasks_by_code, epics)
@@ -3288,6 +3324,34 @@ class Command(BaseCommand):
         self.stdout.write(
             f'  [OK] Custom fields: 4 definitions + values on {updated} tasks'
         )
+
+    # ------------------------------------------------------------------
+    # Native story points
+    # ------------------------------------------------------------------
+    def _apply_native_story_points(self):
+        """Set Task.story_points on the demo board's tasks from the shared
+        title→points map. This is the effort estimate of record — it feeds
+        burndown velocity and the capacity alert. Epics aggregate their
+        children, so they stay unestimated (0)."""
+        tasks = Task.objects.filter(
+            column__board=self.board,
+            item_type='task',
+            is_seed_demo_data=True,
+        )
+        updated = 0
+        for task in tasks:
+            pts = next(
+                (v for k, v in _STORY_POINTS_BY_TITLE.items()
+                 if k.lower() in task.title.lower()),
+                None,
+            )
+            if pts is None:
+                continue
+            if task.story_points != pts:
+                task.story_points = pts
+                task.save(update_fields=['story_points'])
+            updated += 1
+        self.stdout.write(f'  [OK] Native story points set on {updated} tasks')
 
     # ------------------------------------------------------------------
     # Velocity snapshots

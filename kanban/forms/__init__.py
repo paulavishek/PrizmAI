@@ -193,7 +193,7 @@ class TaskForm(forms.ModelForm):
         fields = [
             'title', 'description', 'phase',
             'start_date', 'due_date', 'assigned_to', 'labels', 'lss_classification', 'priority', 'progress',
-            'dependencies', 'parent_task', 'complexity_score', 'required_skills', 'skill_match_score',
+            'dependencies', 'parent_task', 'complexity_score', 'story_points', 'required_skills', 'skill_match_score',
             'collaboration_required', 'workload_impact', 'related_tasks',
             'risk_likelihood', 'risk_impact', 'risk_level'
         ]
@@ -242,9 +242,14 @@ class TaskForm(forms.ModelForm):
                 'min': 1,
                 'max': 10,
                 'step': 1,
-                'title': 'Task complexity from 1 (simple) to 10 (very complex)',
+                'title': 'Task risk/complexity from 1 (low) to 10 (high)',
                 'value': 5,
                 'id': 'id_complexity_score'
+            }),
+            'story_points': forms.Select(attrs={
+                'class': 'form-select',
+                'id': 'id_story_points',
+                'title': 'Relative effort estimate (Fibonacci). Used for velocity and capacity planning.'
             }),
             'required_skills': forms.Textarea(attrs={
                 'class': 'form-control',
@@ -415,6 +420,7 @@ class TaskForm(forms.ModelForm):
         self.fields['related_tasks'].required = False
         self.fields['parent_task'].required = False
         self.fields['complexity_score'].required = False
+        self.fields['story_points'].required = False
         self.fields['progress'].required = False  # Progress defaults to 0 for new tasks
 
         # Configure phase field based on board's num_phases
@@ -442,8 +448,13 @@ class TaskForm(forms.ModelForm):
         if not self.instance.pk:
             self.fields['progress'].initial = 0
         
-        # Set help text for complexity score
-        self.fields['complexity_score'].help_text = 'Rate the task complexity from 1 (simple) to 10 (very complex). AI can suggest this value.'
+        # Set initial value for story points if editing existing task
+        if self.instance and self.instance.pk:
+            self.fields['story_points'].initial = self.instance.story_points
+
+        # Set help text for complexity score (risk/complexity, not effort)
+        self.fields['complexity_score'].help_text = 'Rate the task risk/complexity from 1 (low) to 10 (high). AI can suggest this value. Effort is estimated separately in Story Points.'
+        self.fields['story_points'].help_text = 'Relative effort estimate on the Fibonacci scale (1, 2, 3, 5, 8, 13, 21). Leave as — if not yet estimated.'
         
         # Set help text for collaboration_required
         self.fields['collaboration_required'].help_text = 'Check this if the task requires collaboration with other team members'

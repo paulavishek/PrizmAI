@@ -154,6 +154,7 @@ class PrizmAIAdapter(BaseImportAdapter):
             'due_date': self._parse_date(task.get('due_date')),
             'assigned_to_username': task.get('assigned_to'),
             'complexity_score': task.get('complexity_score', 5),
+            'story_points': task.get('story_points', 0),
             'phase': task.get('phase'),
             'label_names': [],
         }

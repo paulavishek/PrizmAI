@@ -370,7 +370,8 @@ class JiraAdapter(BaseImportAdapter):
                 'assigned_to_username': assignee,
                 'label_names': label_names,
                 'external_id': issue.get('key') or issue.get('id'),
-                'complexity_score': self._normalize_story_points(fields.get('customfield_10016')),  # Story Points
+                'complexity_score': self._normalize_story_points(fields.get('customfield_10016')),  # Risk/complexity heuristic
+                'story_points': self._snap_to_story_point(fields.get('customfield_10016')),  # Native Fibonacci estimate
                 'metadata': {
                     'jira_key': issue.get('key'),
                     'issue_type': type_name,
@@ -462,6 +463,7 @@ class JiraAdapter(BaseImportAdapter):
                 'label_names': label_names,
                 'external_id': row_lower.get('issue key') or row_lower.get('issue id'),
                 'complexity_score': self._normalize_story_points(row_lower.get('story points')),
+                'story_points': self._snap_to_story_point(row_lower.get('story points')),
             }
             
             result.tasks_data.append(task_data)

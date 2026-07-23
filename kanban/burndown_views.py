@@ -67,6 +67,37 @@ def burndown_dashboard(request, board_id):
         status__in=['active', 'acknowledged']
     ).order_by('-severity', '-created_at')
 
+    # --- Story-point capacity check (committed vs. historical velocity) ---
+    # Committed = story points on open tasks (progress < 100). Capacity =
+    # average story-points-per-week from recent velocity snapshots. This uses
+    # story points on both sides (the prediction's average_velocity is
+    # task-based, so we compute the points figure directly here).
+    from django.db.models import Sum
+    committed_points = (
+        Task.objects.filter(
+            column__board=board, item_type='task', progress__lt=100
+        ).aggregate(total=Sum('story_points'))['total'] or 0
+    )
+    _point_snaps = [
+        float(s.story_points_completed)
+        for s in velocity_snapshots if s.story_points_completed is not None
+    ]
+    avg_points_capacity = (
+        round(sum(_point_snaps) / len(_point_snaps), 1) if _point_snaps else 0
+    )
+    # Only warn when we have a real velocity baseline AND real commitments.
+    capacity_over_committed = bool(
+        avg_points_capacity > 0
+        and committed_points > 0
+        and committed_points > avg_points_capacity
+    )
+    capacity_context = {
+        'committed_points': committed_points,
+        'avg_points_capacity': avg_points_capacity,
+        'capacity_over_committed': capacity_over_committed,
+        'capacity_has_baseline': bool(_point_snaps),
+    }
+
     # Build display label for alert timestamp ("Just now" vs "X minutes ago")
     first_alert = active_alerts.first()
     if first_alert:
@@ -88,8 +119,9 @@ def burndown_dashboard(request, board_id):
         'critical_alerts': active_alerts.filter(severity='critical'),
         'warning_alerts': active_alerts.filter(severity='warning'),
         'alerts_generated_label': alerts_generated_label,
+        **capacity_context,
     }
-    
+
     return render(request, 'kanban/burndown_dashboard.html', context)
 
 

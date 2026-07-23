@@ -526,27 +526,43 @@
                                     </div>
 
                                     <hr>
-                                    
-                                    <!-- 📊 Manual Complexity Score (per-task — hidden for Epics; value preserved) -->
+
+                                    <!-- 🎯 Story Points (effort estimate; hidden for Epics — value preserved) -->
+                                    {% if task.is_epic %}
+                                    <input type="hidden" name="story_points" id="id_story_points" value="{{ task.story_points|default:0 }}">
+                                    {% else %}
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-bullseye text-primary"></i> Story Points</h6>
+                                        <div class="mb-3">
+                                            <label for="{{ form.story_points.id_for_label }}" class="form-label">Effort Estimate</label>
+                                            {{ form.story_points }}
+                                            <small class="form-text text-muted">Relative effort on the Fibonacci scale (1, 2, 3, 5, 8, 13, 21). Leave as — if not yet estimated.</small>
+                                        </div>
+                                    </div>
+
+                                    <hr>
+                                    {% endif %}
+
+                                    <!-- 📊 Manual Complexity / Risk Score (per-task — hidden for Epics; value preserved) -->
                                     {% if task.is_epic %}
                                     <input type="hidden" name="complexity_score" id="id_complexity_score" value="{{ task.complexity_score|default:5 }}">
                                     {% else %}
                                     <div class="mb-4">
-                                        <h6><i class="fas fa-chart-line text-warning"></i> Task Complexity</h6>
+                                        <h6><i class="fas fa-chart-line text-warning"></i> Risk / Complexity</h6>
                                         <div class="mb-3">
                                             <label for="{{ form.complexity_score.id_for_label }}" class="form-label d-flex justify-content-between align-items-center">
                                                 <span>Complexity Score</span>
                                                 <output id="complexity-output-detail" class="badge bg-secondary">{{ task.complexity_score|default:5 }}</output>
                                             </label>
                                             <div class="d-flex align-items-center gap-3">
-                                                <small class="text-muted">Simple (1)</small>
+                                                <small class="text-muted">Low (1)</small>
                                                 <input type="range" name="complexity_score" id="id_complexity_score"
                                                        class="form-range" min="1" max="10" step="1"
                                                        value="{{ task.complexity_score|default:5 }}"
-                                                       title="Task complexity from 1 (simple) to 10 (very complex)">
-                                                <small class="text-muted">Complex (10)</small>
+                                                       title="Task risk/complexity from 1 (low) to 10 (high)">
+                                                <small class="text-muted">High (10)</small>
                                             </div>
-                                            <small class="form-text text-muted">Rate the task complexity from 1 (simple) to 10 (very complex).</small>
+                                            <small class="form-text text-muted">Rate the task risk/complexity from 1 (low) to 10 (high). Effort is estimated separately in Story Points.</small>
                                         </div>
 
                                     </div>
@@ -1766,6 +1782,12 @@
                             <small class="text-muted fst-italic">No child complexity scores set yet.</small>
                             {% endif %}
                             {% else %}
+                            <small class="text-muted d-block mb-1">Story Points:</small>
+                            {% if task.story_points %}
+                            <span class="badge bg-primary mb-2">{{ task.story_points }} pt{{ task.story_points|pluralize }}</span>
+                            {% else %}
+                            <small class="text-muted fst-italic d-block mb-2">Unestimated. Edit task to set story points.</small>
+                            {% endif %}
                             <small class="text-muted d-block mb-1">Complexity Score:</small>
                             {% if task.complexity_score %}
                             <div class="progress" style="height: 10px;">
@@ -1774,7 +1796,7 @@
                                      style="width: {{ task.complexity_score }}0%;"></div>
                             </div>
                             <small class="text-muted">{{ task.complexity_score }}/10
-                                {% if task.complexity_score >= 8 %}(Very Complex){% elif task.complexity_score >= 5 %}(Moderate){% else %}(Simple){% endif %}
+                                {% if task.complexity_score >= 8 %}(High){% elif task.complexity_score >= 5 %}(Moderate){% else %}(Low){% endif %}
                             </small>
                             {% else %}
                             <small class="text-muted fst-italic">Not assessed. Edit task to set complexity.</small>

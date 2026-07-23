@@ -242,9 +242,9 @@ class BurndownPredictor:
             )
             
             tasks_count = completed_tasks.count()
-            story_points = sum(
-                t.complexity_score or 5 for t in completed_tasks
-            )
+            # Effort of record is Task.story_points (Fibonacci). Unestimated
+            # tasks contribute 0 — we don't award velocity for unestimated work.
+            story_points = sum(t.story_points for t in completed_tasks)
             
             # Update or create snapshot (update_or_create for current week, create for historical)
             TeamVelocitySnapshot.objects.update_or_create(
@@ -403,10 +403,10 @@ class BurndownPredictor:
         completed_tasks = all_tasks.filter(progress=100).count()
         remaining_tasks = total_tasks - completed_tasks
         
-        # Story points (using complexity_score)
-        total_story_points = sum(t.complexity_score or 5 for t in all_tasks)
+        # Story points (Fibonacci effort estimate; 0 = unestimated)
+        total_story_points = sum(t.story_points for t in all_tasks)
         completed_story_points = sum(
-            t.complexity_score or 5 for t in all_tasks.filter(progress=100)
+            t.story_points for t in all_tasks.filter(progress=100)
         )
         remaining_story_points = total_story_points - completed_story_points
         

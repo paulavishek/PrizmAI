@@ -61,6 +61,10 @@ class MondayAdapter(BaseImportAdapter):
         'label': 'labels',
         'tags': 'labels',
         'numbers': 'progress',
+        'story points': 'story_points',
+        'points': 'story_points',
+        'effort': 'story_points',
+        'estimate': 'story_points',
     }
 
     def can_handle(self, data: Any, filename: str = None) -> Tuple[bool, float]:
@@ -372,6 +376,7 @@ class MondayAdapter(BaseImportAdapter):
             'label_names': label_names,
             'external_id': None,
             'complexity_score': 5,
+            'story_points': self._snap_to_story_point(get_field('story_points')),
         }
 
         return task_data

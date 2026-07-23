@@ -1186,6 +1186,11 @@
                                 </span>
                                 {% endif %}
                                 {% endwith %}
+                                {% if task.story_points and not task.is_epic %}
+                                <span class="card-story-points" title="Story points: {{ task.story_points }}" style="font-size:.7rem;font-weight:600;color:#0d6efd;">
+                                    <i class="fas fa-bullseye" style="font-size:.6rem;"></i> {{ task.story_points }}
+                                </span>
+                                {% endif %}
                             </div>
                             {% if task.assigned_to %}
                             <span class="card-avatar" title="{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}">

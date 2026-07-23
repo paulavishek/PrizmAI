@@ -469,7 +469,33 @@
                 </div>
                 <div class="metric-subtext">{{ prediction.velocity_trend|title }}</div>
             </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Committed vs. Capacity</div>
+                <div class="metric-value {% if capacity_over_committed %}text-warning{% endif %}">
+                    {{ committed_points }}{% if capacity_has_baseline %} / {{ avg_points_capacity }}{% endif %}
+                </div>
+                <div class="metric-subtext">
+                    {% if capacity_has_baseline %}open story points vs avg pts/week{% else %}open story points (no velocity baseline yet){% endif %}
+                </div>
+            </div>
         </div>
+
+        {% if capacity_over_committed %}
+        <div class="alert-box warning mt-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <strong><i class="fas fa-exclamation-triangle text-warning"></i> Over-committed on story points</strong>
+                    <p class="mb-0">
+                        There are <strong>{{ committed_points }}</strong> open story points, but the team's recent
+                        average velocity is only <strong>{{ avg_points_capacity }}</strong> points/week. At this pace the
+                        current commitment is likely more than one iteration of work — consider deferring or splitting
+                        lower-priority tasks.
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Burndown Chart -->

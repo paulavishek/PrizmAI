@@ -1166,7 +1166,20 @@ class Task(models.Model):
         ('high', 'High'),
         ('urgent', 'Urgent'),
     ]
-    
+
+    # Fibonacci story-point scale (0 = unestimated). This is the effort estimate
+    # of record; complexity_score is a separate risk/complexity signal.
+    STORY_POINT_CHOICES = [
+        (0, '—'),
+        (1, '1'),
+        (2, '2'),
+        (3, '3'),
+        (5, '5'),
+        (8, '8'),
+        (13, '13'),
+        (21, '21'),
+    ]
+
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
     column = models.ForeignKey(Column, on_delete=models.CASCADE, related_name='tasks')
@@ -1273,11 +1286,16 @@ class Task(models.Model):
         help_text="Identified resource conflicts and scheduling issues"
     )
     
-    # Enhanced Resource Tracking    
+    # Enhanced Resource Tracking
     complexity_score = models.IntegerField(
         default=5,
         validators=[MinValueValidator(1), MaxValueValidator(10)],
-        help_text="Task complexity score (1-10)"  
+        help_text="Task risk/complexity score (1-10). Effort estimation lives in story_points."
+    )
+    story_points = models.IntegerField(
+        default=0,
+        choices=STORY_POINT_CHOICES,
+        help_text="Relative effort estimate on the Fibonacci scale. 0 = unestimated."
     )
     collaboration_required = models.BooleanField(
         default=False,

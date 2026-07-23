@@ -273,6 +273,7 @@ class AsanaAdapter(BaseImportAdapter):
                 'label_names': label_names,
                 'external_id': task.get('gid') or task.get('id'),
                 'complexity_score': self._estimate_complexity(task),
+                'story_points': self._extract_story_points(task),
             }
             
             result.tasks_data.append(task_data)
@@ -445,9 +446,23 @@ class AsanaAdapter(BaseImportAdapter):
                 complexity = 7
             elif len(subtasks) > 2:
                 complexity = 6
-        
+
         return complexity
-    
+
+    def _extract_story_points(self, task: Dict) -> int:
+        """Native Fibonacci story points from an Asana points/effort custom field.
+
+        Returns 0 (unestimated) when no explicit estimate field is present —
+        we do NOT fall back to the subtask-count complexity heuristic, which is
+        a complexity guess, not a real effort estimate.
+        """
+        for field in task.get('custom_fields', []):
+            if isinstance(field, dict):
+                field_name = field.get('name', '').lower()
+                if 'point' in field_name or 'effort' in field_name:
+                    return self._snap_to_story_point(field.get('number_value'))
+        return 0
+
     def _generate_label_color(self, index: int) -> str:
         """Generate color for a label"""
         colors = [

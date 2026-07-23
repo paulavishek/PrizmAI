@@ -354,6 +354,27 @@ class BaseImportAdapter(ABC):
         
         return result
     
+    # Allowed native story-point values (Fibonacci). Mirrors Task.STORY_POINT_CHOICES.
+    _STORY_POINT_SCALE = (1, 2, 3, 5, 8, 13, 21)
+
+    def _snap_to_story_point(self, value: Any) -> int:
+        """
+        Snap a raw external estimate to the nearest allowed Fibonacci story point.
+        Returns 0 (unestimated) when the value is missing or non-numeric.
+        Unlike the legacy _normalize_story_points (which squashed into a 1-10
+        complexity_score), this preserves the estimate at Fibonacci scale.
+        """
+        if value in (None, '', 0, '0'):
+            return 0
+        try:
+            points = float(value)
+        except (ValueError, TypeError):
+            return 0
+        if points <= 0:
+            return 0
+        # Nearest allowed point (ties round up to the larger estimate).
+        return min(self._STORY_POINT_SCALE, key=lambda p: (abs(p - points), -p))
+
     def _extract_color(self, value: str) -> str:
         """
         Extract or generate a color code from a value.

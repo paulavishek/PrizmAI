@@ -2894,7 +2894,7 @@ def task_detail(request, task_id):
         if form.is_valid():
             # --- Snapshot AI-relevant fields before save for stale detection ---
             ai_relevant_fields = ['title', 'description', 'priority', 'due_date', 'assigned_to',
-                                  'complexity_score', 'risk_level', 'start_date',
+                                  'complexity_score', 'story_points', 'risk_level', 'start_date',
                                   'workload_impact', 'lss_classification',
                                   'skill_match_score', 'collaboration_required']
             old_values = {}
@@ -5068,6 +5068,8 @@ def export_board(request, board_id):
                 'labels': labels,
                 'priority': task.priority,
                 'progress': task.progress,
+                'complexity_score': task.complexity_score,
+                'story_points': task.story_points,
             }
             column_data['tasks'].append(task_data)
         
@@ -5357,6 +5359,7 @@ def _create_board_from_import_result(result, user, organization, session):
             priority=task_data.get('priority', 'medium'),
             progress=task_data.get('progress', 0),
             complexity_score=task_data.get('complexity_score', 5),
+            story_points=task_data.get('story_points', 0),
             phase=task_data.get('phase'),
             created_by_session=created_by_session
         )
