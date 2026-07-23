@@ -785,3 +785,23 @@ body.dark-mode .ql-snow.ql-container {
 body.dark-mode .ql-editor.ql-blank::before {
     color: var(--text-secondary);
 }
+
+/* ── Deep-link row highlight (e.g. retrospective action item from dashboard) ──
+   A filled background (Bootstrap's .table-primary) reads as a near-white block
+   in dark mode. Use a left accent border + faint tinted background instead, so
+   the row still draws the eye without blowing out contrast in either theme.
+   Bootstrap tables paint background-color on the <td>/<th> cells via the
+   --bs-table-bg variable, which sits on top of and hides anything set on the
+   <tr> itself — so both the tint and the border have to target the cells. */
+.action-row-highlight > td,
+.action-row-highlight > th {
+    --bs-table-bg: rgba(13, 110, 253, 0.08);
+    background-color: var(--bs-table-bg) !important;
+}
+.action-row-highlight > td:first-child {
+    box-shadow: inset 3px 0 0 var(--link-color);
+}
+[data-bs-theme="dark"] .action-row-highlight > td,
+[data-bs-theme="dark"] .action-row-highlight > th {
+    --bs-table-bg: rgba(100, 181, 246, 0.12);
+}

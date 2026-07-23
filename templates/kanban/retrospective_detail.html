@@ -839,8 +839,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const target = document.querySelector(hash);
         if (!target) return;
         target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        target.classList.add('table-primary');
-        setTimeout(function() { target.classList.remove('table-primary'); }, 3000);
+        target.classList.add('action-row-highlight');
+        setTimeout(function() { target.classList.remove('action-row-highlight'); }, 3000);
     }
 
     // Run after page is fully rendered
