@@ -126,6 +126,11 @@ def _duplicate_board(template_board, user):
         is_official_demo_board=False,          # ← critical: not a template
         is_seed_demo_data=False,
         is_sandbox_copy=True,                    # ← tags this as a sandbox copy
+        # Preserve the template's archived state. The demo's "Legacy Bug Tracker
+        # v1" template is archived (it's a wound-down project reachable only via
+        # the Cemetery / Organ Library); its clones must stay archived so they
+        # never appear in the active board grid.
+        is_archived=template_board.is_archived,
         cloned_from=template_board,              # ← track which template it was cloned from
         # Inherit the template workspace so workspace-scoped features (custom
         # fields, etc.) resolve correctly for tasks on this sandbox board.

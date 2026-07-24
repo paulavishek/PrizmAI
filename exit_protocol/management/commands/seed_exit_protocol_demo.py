@@ -1,4 +1,18 @@
 """
+DEPRECATED as a live seeder — kept only for its data constants (``ORGANS``,
+``AI_ASSESSMENT``), which ``seed_legacy_bug_tracker_board`` imports.
+
+This command used to attach the buried ``HospiceSession`` + organs directly onto
+the *active* Software Development template board, which cross-wired an active
+board with a buried project's wind-down (the dashboard showed "18% healthy" next
+to a buried hospice session describing a different project). The demo pipeline no
+longer calls it; ``seed_legacy_bug_tracker_board`` now owns Exit Protocol demo
+seeding and gives Legacy Bug Tracker its own archived board. Running this command
+by hand would re-introduce the cross-wiring, so avoid it.
+
+---
+Historical description:
+
 Seeds the buried ``HospiceSession`` + reusable ``ProjectOrgan`` set for the
 Exit Protocol demo.
 

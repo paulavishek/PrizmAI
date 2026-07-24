@@ -31,6 +31,17 @@ from kanban.decorators import demo_write_guard, demo_ai_guard
 logger = logging.getLogger(__name__)
 
 
+def _usd(value):
+    """Format a budget figure as ``$75,000`` for the PDF export. Mirrors the
+    ``usd`` template filter so the on-screen and PDF autopsies agree."""
+    if value is None or value == '':
+        return 'N/A'
+    try:
+        return '${:,.0f}'.format(float(value))
+    except (TypeError, ValueError):
+        return str(value)
+
+
 # ──────────────────────────
 # Knowledge Preserved helpers
 # ──────────────────────────
@@ -97,23 +108,6 @@ def _reconcile_outcome_content(node, entry):
     )
 
 
-def _align_project_name(node, entry):
-    """Display the cemetery entry's project name in preserved records that still
-    refer to the source board's internal name, so the whole autopsy reads as one
-    project (e.g. a board internally named 'Software Development' archived as
-    'Legacy Bug Tracker v1'). Rewrites are in-memory only — stored data is left
-    untouched."""
-    board_name = (entry.board.name if entry.board else '') or ''
-    project_name = entry.project_name or ''
-    if not board_name or not project_name or board_name == project_name:
-        return
-    pattern = re.compile(r'\b' + re.escape(board_name) + r'\b')
-    if node.title:
-        node.title = pattern.sub(project_name, node.title)
-    if node.content:
-        node.content = pattern.sub(project_name, node.content)
-
-
 def build_preserved_knowledge(entry):
     """Ordered, de-duplicated MemoryNodes for the autopsy 'Knowledge Preserved'
     section, shared by the on-screen report and the PDF export.
@@ -122,8 +116,7 @@ def build_preserved_knowledge(entry):
     collapsed (most recent kept). Scope Autopsy summaries and scope-creep alerts
     reporting the same growth percentage collapse to one event; distinct growth
     figures and scope reductions are preserved. Project-completion figures are
-    reconciled against the entry's archived snapshot, and source-board name
-    references are shown under the entry's project name.
+    reconciled against the entry's archived snapshot.
     """
     from knowledge_graph.models import MemoryNode
 
@@ -137,7 +130,6 @@ def build_preserved_knowledge(entry):
     nodes = list(best_by_key.values())
     for node in nodes:
         _reconcile_outcome_content(node, entry)
-        _align_project_name(node, entry)
 
     nodes.sort(key=lambda n: (
         n.node_type,
@@ -373,7 +365,10 @@ def bury_project(request, board_id):
             completed_tasks=_done,
             start_date=board.created_at.date() if board.created_at else None,
             end_date=timezone.now().date(),
-            cause_of_death='zombie_death',
+            # Neutral placeholder until perform_burial's AI classifies the real
+            # cause. Deliberate wind-downs read as "natural completion" far better
+            # than the old whimsical "zombie_death" default.
+            cause_of_death='natural_completion',
             autopsy_summary=f"Archiving '{board.name}'\u2026 AI analysis in progress.",
         )
 
@@ -957,8 +952,8 @@ def export_autopsy_pdf(request, entry_id):
         ['Team Size', str(entry.team_size or 'N/A')],
         ['Duration', f"{entry.start_date or '?'} to {entry.end_date or '?'}"],
         ['Completion', f"{completion_pct}% ({entry.completed_tasks}/{entry.total_tasks})"],
-        ['Budget Allocated', str(entry.budget_allocated or 'N/A')],
-        ['Budget Spent', str(entry.budget_spent or 'N/A')],
+        ['Budget Allocated', _usd(entry.budget_allocated)],
+        ['Budget Spent', _usd(entry.budget_spent)],
     ]
     vital_table = Table(vital_data, colWidths=[2.5 * inch, 4 * inch])
     vital_table.setStyle(TableStyle([

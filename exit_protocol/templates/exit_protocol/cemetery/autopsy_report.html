@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static exit_protocol_tags %}
 
 {% block title %}Autopsy: {{ entry.project_name }} — PrizmAI{% endblock %}
 
@@ -71,11 +71,11 @@
       </div>
       <div class="vital-item">
         <div class="vital-label">Budget Allocated</div>
-        <div class="vital-value">{{ entry.budget_allocated|default:"N/A" }}</div>
+        <div class="vital-value">{{ entry.budget_allocated|usd }}</div>
       </div>
       <div class="vital-item">
         <div class="vital-label">Budget Spent</div>
-        <div class="vital-value">{{ entry.budget_spent|default:"N/A" }}</div>
+        <div class="vital-value">{{ entry.budget_spent|usd }}</div>
       </div>
     </div>
   </div>
@@ -271,6 +271,37 @@
   if (!timeline || !timeline.length) return;
 
   const ctx = document.getElementById('declineTimeline').getContext('2d');
+
+  // Highlight the point where the structured wind-down was initiated (flagged
+  // in the seeded timeline via ``is_winddown``) with a larger amber marker.
+  const windIdx = timeline.findIndex(e => e.is_winddown);
+  const pointRadius = timeline.map((e, i) => i === windIdx ? 7 : 4);
+  const pointColors = timeline.map((e, i) => i === windIdx ? '#d4a574' : '#c47e7e');
+
+  // Draws a dashed vertical line + label at the wind-down point.
+  const windDownMarker = {
+    id: 'windDownMarker',
+    afterDatasetsDraw(chart) {
+      if (windIdx < 0) return;
+      const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+      const xPos = x.getPixelForValue(windIdx);
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(212,165,116,0.7)';
+      ctx.moveTo(xPos, top);
+      ctx.lineTo(xPos, bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(212,165,116,0.95)';
+      ctx.font = '600 10px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('Wind-down initiated', xPos - 6, top + 12);
+      ctx.restore();
+    }
+  };
+
   new Chart(ctx, {
     type: 'line',
     data: {
@@ -281,12 +312,13 @@
         borderColor: '#c47e7e',
         backgroundColor: 'rgba(196,126,126,0.1)',
         borderWidth: 2,
-        pointRadius: 4,
-        pointBackgroundColor: '#c47e7e',
+        pointRadius: pointRadius,
+        pointBackgroundColor: pointColors,
         fill: true,
         tension: 0.3,
       }]
     },
+    plugins: [windDownMarker],
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -301,7 +333,11 @@
         }
       },
       scales: {
-        y: { min: 0, max: 100, ticks: { color: '#666' }, grid: { color: '#222' } },
+        y: {
+          min: 0, max: 100,
+          title: { display: true, text: 'Decline Severity (0–100)', color: '#888' },
+          ticks: { color: '#666' }, grid: { color: '#222' }
+        },
         x: { ticks: { color: '#666', maxRotation: 45 }, grid: { color: '#222' } }
       }
     }

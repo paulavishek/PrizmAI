@@ -430,7 +430,7 @@ def _refresh_memory_node_dates(base_date):
 
 # Exit Protocol wind-down anchors — how many days before "today" the demo's
 # buried hospice session sits. Kept in step with the offsets used by the
-# ``seed_exit_protocol_demo`` management command.
+# ``seed_legacy_bug_tracker_board`` management command.
 HOSPICE_INITIATED_DAYS_AGO = 90
 HOSPICE_BURIED_DAYS_AGO = 75
 ORGAN_EXTRACTED_DAYS_AGO = 77
@@ -474,14 +474,25 @@ def _refresh_exit_protocol_dates(base_date):
             extracted_at=now - timedelta(days=ORGAN_EXTRACTED_DAYS_AGO),
         )
 
-        # Health-signal history -> offset-preserving shift per board.
+        # Health-signal history -> offset-preserving shift per board. The series
+        # is anchored so its NEWEST point lands on a per-board target:
+        #   * a buried board's series ends when the project was buried
+        #     (buried_at), so the rising-into-hospice history stays consistent
+        #     with the burial date rather than creeping up to "today";
+        #   * an active board's series ends at "now" (live monitoring).
+        buried_at_by_board = dict(
+            HospiceSession.objects.filter(
+                board_id__in=demo_board_ids, status='buried', buried_at__isnull=False,
+            ).values_list('board_id', 'buried_at')
+        )
         for board_id in demo_board_ids:
             newest = ProjectHealthSignal.objects.filter(board_id=board_id).aggregate(
                 newest=Max('recorded_at')
             )['newest']
             if not newest:
                 continue
-            shift = now - newest
+            target = buried_at_by_board.get(board_id, now)
+            shift = target - newest
             if abs(shift) < timedelta(days=1):
                 continue
             total += ProjectHealthSignal.objects.filter(board_id=board_id).update(

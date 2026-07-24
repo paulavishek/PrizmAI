@@ -115,7 +115,9 @@
   .dim-bar-fill.bg-warning { background: linear-gradient(90deg, #ecc94b, #d69e2e) !important; }
   .dim-bar-fill.bg-danger { background: linear-gradient(90deg, #fc8181, #e53e3e) !important; }
   .dim-value { width: 48px; text-align: right; font-size: 0.82rem; font-weight: 600; }
-  .dim-contribution { width: 52px; text-align: right; font-size: 0.75rem; color: #a0aec0; }
+  .dim-weight { width: 52px; text-align: right; font-size: 0.75rem; color: #a0aec0; }
+  .dim-contribution { width: 60px; text-align: right; font-size: 0.75rem; color: #718096; font-weight: 600; }
+  .dim-col-head { font-size: 0.68rem; color: #a0aec0; text-transform: uppercase; letter-spacing: 0.3px; }
 
   /* ── Signal History Chart ────────────────────────────── */
   .signal-chart-container { width: 100%; height: 260px; }
@@ -233,6 +235,8 @@
   [data-bs-theme="dark"] .dim-label { color: #cbd5e0; }
   [data-bs-theme="dark"] .dim-bar { background: #2d3748; }
   [data-bs-theme="dark"] .dim-row { border-color: #2d3148; }
+  [data-bs-theme="dark"] .dim-contribution { color: #cbd5e0; }
+  [data-bs-theme="dark"] .dim-explainer { border-color: #2d3148 !important; }
   [data-bs-theme="dark"] .status-card { background: #1e2130; border-color: #2d3148; }
   [data-bs-theme="dark"] .ep-quick-link { background: #1e2130; border-color: #2d3148; color: #e2e8f0; }
   [data-bs-theme="dark"] .ep-quick-link:hover { border-color: #4a5568; color: #e2e8f0; }
@@ -430,7 +434,7 @@
               </div>
             </div>
             {% if hospice_session and score < 0.4 %}
-            <div class="gauge-hint">Low risk — safe to wind down</div>
+            <div class="gauge-hint">Healthy — no wind-down needed</div>
             {% elif score >= 0.75 %}
             <div class="gauge-hint" style="color: #e53e3e;">Critical — immediate attention needed</div>
             {% elif score >= 0.4 %}
@@ -470,6 +474,13 @@
             </div>
             <div class="ep-card-body">
               {% if score_breakdown %}
+              <div class="dim-legend d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-muted">Dimension &amp; risk level</span>
+                <div class="d-flex" style="gap: 0.5rem;">
+                  <span class="dim-col-head" style="width:52px;text-align:right;">Weight</span>
+                  <span class="dim-col-head" style="width:60px;text-align:right;">Adds to score</span>
+                </div>
+              </div>
               {% for dim in score_breakdown %}
               <div class="dim-row">
                 <span class="dim-label">{{ dim.label }}</span>
@@ -479,9 +490,21 @@
                   </div>
                 </div>
                 <span class="dim-value text-{{ dim.status }}">{{ dim.factor_pct }}%</span>
-                <span class="dim-contribution">+{{ dim.contribution_pct }}%</span>
+                <span class="dim-weight">{{ dim.weight_pct }}%</span>
+                <span class="dim-contribution" title="Contribution to the overall score (dimension risk × weight)">{{ dim.contribution_pct }}%</span>
               </div>
               {% endfor %}
+              <div class="dim-explainer small text-muted mt-2 pt-2" style="border-top:1px solid #f0f0f0;">
+                <i class="fas fa-info-circle me-1"></i>
+                Overall risk is a weighted average of these dimensions
+                (base weights: Velocity&nbsp;Trend 30% · Budget 25% · Deadlines 25% · Activity 20%,
+                re-normalised across the dimensions with data). Each row's
+                <strong>Adds to score</strong> is that dimension's contribution —
+                these contributions sum to the overall gauge percentage; they are not deltas against a baseline.
+                <br><span class="d-inline-block mt-1"><em>Velocity Trend</em> measures whether throughput is
+                <em>declining</em> against this board's own baseline — not whether it hits a fixed tasks/week
+                target (Commitment Protocol tracks that separately).</span>
+              </div>
               {% else %}
               <p class="text-muted small mb-0">No health data recorded yet. Click "Recalculate" to generate initial scores.</p>
               {% endif %}
@@ -721,6 +744,32 @@
   gradient.addColorStop(0, 'rgba(230,81,0,0.18)');
   gradient.addColorStop(1, 'rgba(230,81,0,0.02)');
 
+  // Draw the 75% hospice threshold as a dashed reference line so a rising
+  // series reads correctly at a glance (a steep climb that stays under the line
+  // is still healthy). No annotation plugin needed — this is a tiny inline one.
+  const hospiceThreshold = {
+    id: 'hospiceThreshold',
+    afterDatasetsDraw(chart) {
+      const { ctx, chartArea: { left, right }, scales: { y } } = chart;
+      const yPos = y.getPixelForValue(75);
+      if (yPos < y.top || yPos > y.bottom) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([6, 4]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(229,62,62,0.6)';
+      ctx.moveTo(left, yPos);
+      ctx.lineTo(right, yPos);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(229,62,62,0.85)';
+      ctx.font = '600 10px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('Hospice 75%', right - 4, yPos - 4);
+      ctx.restore();
+    }
+  };
+
   new Chart(ctx, {
     type: 'line',
     data: {
@@ -740,6 +789,7 @@
         pointHoverRadius: 6,
       }]
     },
+    plugins: [hospiceThreshold],
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -757,6 +807,7 @@
       scales: {
         y: {
           min: 0, max: 100,
+          title: { display: true, text: 'Hospice Risk (%)', font: { size: 11 } },
           ticks: { callback: v => v + '%', font: { size: 11 } },
           grid: { color: 'rgba(0,0,0,0.04)' }
         },

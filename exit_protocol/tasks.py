@@ -794,7 +794,9 @@ def perform_burial(session_id):
         pass
 
     # ── 2. Classify cause of death ──
-    cause = 'zombie_death'
+    # Neutral fallback when the AI can't classify — "natural completion" reads
+    # better for a deliberate wind-down than the old whimsical "zombie_death".
+    cause = 'natural_completion'
     cause_rationale = ''
     contributing_factors = []
 
@@ -865,7 +867,7 @@ def perform_burial(session_id):
 
         try:
             result = ai_utils.classify_cause_of_death(user, cod_context, board_id=board.id)
-            cause = result.get('cause', 'zombie_death')
+            cause = result.get('cause', 'natural_completion')
             cause_rationale = result.get('primary_rationale', '')
             contributing_factors = result.get('contributing_factors', [])
         except Exception as e:

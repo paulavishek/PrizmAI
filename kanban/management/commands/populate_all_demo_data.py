@@ -3604,7 +3604,12 @@ class Command(BaseCommand):
             'populate_automation_demo_data',
             'populate_ai_assistant_demo_data',
             'fix_premortem_stress_demo',
-            'seed_exit_protocol_demo',
+            # Exit Protocol: seed the archived "Legacy Bug Tracker v1" board with
+            # its OWN hospice session / organs / cemetery / memories, and detach
+            # those wind-down artifacts from the live Software Development board.
+            # (Replaces the old seed_exit_protocol_demo, which pinned a buried
+            # session onto the active board — see seed_legacy_bug_tracker_board.)
+            'seed_legacy_bug_tracker_board',
         ]
         # populate_calendar_demo_data links some events to Task rows by title
         # (linked_task). _reset_demo_data() above deletes and recreates every

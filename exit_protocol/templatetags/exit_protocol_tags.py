@@ -15,6 +15,19 @@ def humanize_key(value):
     return value.replace('_', ' ').title()
 
 
+@register.filter(name='usd')
+def usd(value):
+    """Format a numeric budget as ``$1,234,567`` (no decimals, thousands
+    separators). Returns 'N/A' for blank/None. The demo cemetery snapshots are
+    USD; this keeps the autopsy's money figures readable instead of ``75000.00``."""
+    if value is None or value == '':
+        return 'N/A'
+    try:
+        return '${:,.0f}'.format(float(value))
+    except (TypeError, ValueError):
+        return value
+
+
 @register.filter(name='dict_get')
 def dict_get(mapping, key):
     """Look up ``mapping[key]`` from a template (dicts can't be indexed by a

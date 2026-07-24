@@ -45,6 +45,7 @@ ALLOWLIST = {
     'ai_assistant.OrganizationAISettings': 'Org AI config; not demo-seeded (0 rows).',
     'kanban.ResourceLevelingSuggestion': 'Not demo-seeded (0 rows); would be board-derived if ever seeded.',
     'wiki.WikiMeetingAnalysis': 'Child of WikiPage (which is sandbox_owner-isolated); not demo-seeded (0 rows).',
+    'wiki.WikiDocumentationAnalysis': 'Child of WikiPage (which is sandbox_owner-isolated); not demo-seeded (0 rows).',
     # ── Membership / invitation infrastructure (not tenant content) ──
     'kanban.WorkspaceMembership': 'Membership infra (who belongs to a workspace), user-keyed; not demo-seeded.',
     'kanban.WorkspaceInvitation': 'Invitation infra, not tenant content; not demo-seeded.',

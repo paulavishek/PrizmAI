@@ -268,7 +268,7 @@ Every project that goes through Exit Protocol gets a permanent entry in the **Pr
 
 Each entry is a full autopsy report:
 - **Vital Statistics** — Team size, tasks completed vs planned, budget used
-- **Cause of Death** — AI classifies the project's closure into one of eight named categories: *Scope Cancer, Velocity Collapse, Budget Bleed, Zombie Death, Resource Exodus, Market Shift, Strategic Pivot*, or *Natural Completion* — and explains its reasoning
+- **Cause of Death** — AI classifies the project's closure into one of eight named categories: *Natural Completion, Budget Exhaustion, Deadline Collapse, Scope Creep Spiral, Team Dissolution, Strategic Pivot,* or *Merger / Absorbed* — and explains its reasoning
 - **Timeline of Decline** — A chart showing how the health score declined over the project's lifetime
 - **Lessons Learned** — Organised into three buckets: things to repeat on future projects, things to avoid, and open questions that were never resolved
 - **Organ Transplant Record** — Which reusable components were extracted from this project and where they went
@@ -291,7 +291,7 @@ PrizmAI calculates a **Hospice Risk Score** from 0–100% every night for every 
 
 | Dimension | What it measures | Weight |
 |---|---|---|
-| **Velocity** | Has the team's work rate been falling? | 30% |
+| **Velocity Trend** | Is the team's work rate *falling* against this board's own baseline? (Hitting a fixed tasks/week target is tracked separately by Commitment Protocol.) | 30% |
 | **Budget** | Is money being spent faster than work is being completed? | 25% |
 | **Deadlines** | How many tasks were due in the last 30 days and missed? | 25% |
 | **Activity** | How long since anyone last touched this project? | 20% |

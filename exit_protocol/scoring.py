@@ -19,8 +19,14 @@ WEIGHTS = {
 }
 
 # Human-facing labels for each dimension (keeps the view dumb).
+# "Velocity Trend" (not just "Velocity") is deliberate: this dimension measures
+# whether throughput is *declining* (recent sprints vs the board's own baseline),
+# NOT whether the team is hitting a fixed tasks/week target. Commitment Protocol /
+# Organizational Memory track target attainment separately, so a board can be
+# steady-but-below-target (low Velocity-Trend risk here, flagged there) without
+# the two systems contradicting each other.
 DIM_LABELS = {
-    'velocity': 'Velocity',
+    'velocity': 'Velocity Trend',
     'budget': 'Budget',
     'deadlines': 'Deadlines',
     'activity': 'Activity',
@@ -101,8 +107,16 @@ def score_and_breakdown(signal):
         adjusted_weight = WEIGHTS[dim] / total_weight
         breakdown.append({
             'label': DIM_LABELS.get(dim, dim.title()),
+            # This dimension's own risk level (0–100%).
             'factor_pct': round(factor * 100),
+            # The share of the overall score this dimension contributes, after
+            # re-normalising weights across the dimensions that had data. Summed
+            # across rows this equals the overall score — it is NOT a delta vs a
+            # baseline.
             'contribution_pct': round(factor * adjusted_weight * 100),
+            # The (re-normalised) weight this dimension carries, so the panel can
+            # show its work: base weight × (1 / total available weight).
+            'weight_pct': round(adjusted_weight * 100),
             'status': _status_for(factor),
         })
     return overall, breakdown

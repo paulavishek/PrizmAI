@@ -266,6 +266,11 @@ def dashboard(request):
         from kanban.utils.demo_protection import get_user_boards as _get_user_boards
         boards = _get_user_boards(request.user)
     
+    # Archived boards (e.g. the demo's wound-down "Legacy Bug Tracker v1") are a
+    # deliberate dead end reachable only through the Cemetery / Organ Library —
+    # they must never surface in the active board grid or the headline metrics.
+    boards = boards.filter(is_archived=False)
+
     # Annotate task counts so the template can display them efficiently
     # (Task has no direct FK to Board — it goes through Column)
     _now = timezone.now()
@@ -2161,6 +2166,7 @@ def board_list(request):
         sandbox_boards = Board.objects.filter(
             owner=request.user,
             is_sandbox_copy=True,
+            is_archived=False,  # hide the wound-down Legacy Bug Tracker clone
         )
         from accounts.models import Organization as _Org
         from kanban.models import Workspace
