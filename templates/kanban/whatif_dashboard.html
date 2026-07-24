@@ -473,8 +473,20 @@
                         <i class="fas fa-circle-info me-1"></i>
                         Derived from the projected scenario, not just the sliders: how far <strong>delay probability</strong>,
                         <strong>team utilization</strong>, and <strong>budget overrun</strong> exceed safe limits, minus a
-                        penalty for each detected conflict below. Team utilization is remaining tasks divided across the
-                        (changed) team size, so adding tasks or removing members both push it — and the score — down.
+                        penalty for each detected conflict below.
+                        <strong>Team utilization = remaining tasks &divide; team size &divide; 8</strong> &mdash; one member
+                        holding 8 open tasks is exactly 100% utilized &mdash; so adding tasks or removing members both push
+                        it, and the score, down. Scores band as
+                        <strong>High &ge;85</strong>, <strong>Medium 60&ndash;84</strong>, <strong>Low &lt;60</strong>.
+                    </p>
+                    <p class="small text-muted mb-0 mt-2">
+                        <i class="fas fa-user-clock me-1"></i>
+                        Utilization above 100% means the team cannot absorb the remaining work, so it
+                        <strong>caps</strong> feasibility below the High band no matter how much schedule or budget slack
+                        the plan has &mdash; a plan can't be highly deliverable while it over-allocates the people who have
+                        to deliver it. This workload measure (open tasks per person) is a different question from the
+                        calendar-capacity percentages shown in Skill Gap, AI Coach and member profiles, which compare
+                        booked hours against available hours.
                     </p>
                     <p class="small text-muted mb-0 mt-2">
                         <i class="fas fa-triangle-exclamation me-1"></i>
@@ -565,13 +577,27 @@
                             <small class="text-muted ms-2">{{ s.created_at|date:"M d, Y H:i" }}</small>
                             <br>
                             <small class="text-muted">
+                                {# Always show all three levers, including the zeros.  Showing
+                                   only the non-zero ones made "Reduce Team by 1 Member" (team -1
+                                   alone) look directly comparable to a scenario that also added
+                                   scope and extended the deadline, so its lower score read as
+                                   incoherent rather than as a different plan. #}
                                 {% with p=s.input_parameters %}
-                                    {% if p.tasks_added %}Tasks: {{ p.tasks_added|stringformat:"+d" }}{% endif %}
-                                    {% if p.team_size_delta %} Team: {{ p.team_size_delta|stringformat:"+d" }}{% endif %}
-                                    {% if p.deadline_shift_days %} Deadline: {{ p.deadline_shift_days|stringformat:"+d" }}d{% endif %}
+                                    Tasks: {{ p.tasks_added|default:0|stringformat:"+d" }}
+                                    &middot; Team: {{ p.team_size_delta|default:0|stringformat:"+d" }}
+                                    &middot; Deadline: {{ p.deadline_shift_days|default:0|stringformat:"+d" }}d
                                 {% endwith %}
                                 {% with r=s.impact_results %}
-                                    {% if r.feasibility_score %} → Feasibility: {% widthratio r.feasibility_score 1 100 %}%{% endif %}
+                                    {% if r.feasibility_score %}
+                                        {# Stale scores are greyed out and explicitly date-stamped:
+                                           each was computed against the board as it stood on its
+                                           save date, so they are NOT comparable to each other or
+                                           to a fresh run.  Load the scenario to re-score it. #}
+                                        <span class="ms-1 {% if s.is_score_stale %}text-body-tertiary fst-italic{% endif %}"
+                                              {% if s.is_score_stale %}title="Scored against the board as it stood on {{ s.created_at|date:'M d, Y' }} — not comparable to today's numbers. Click Load to re-score against the current board."{% endif %}>
+                                            &rarr; Feasibility: {% widthratio r.feasibility_score 1 100 %}%{% if s.is_score_stale %} (as of {{ s.created_at|date:"M d" }}){% endif %}
+                                        </span>
+                                    {% endif %}
                                 {% endwith %}
                             </small>
                         </div>

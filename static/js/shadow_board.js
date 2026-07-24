@@ -8,6 +8,12 @@
  * - Modal interactions
  */
 
+// Feasibility tier boundaries.  MUST stay in sync with
+// FEASIBILITY_HIGH_BAND / FEASIBILITY_MEDIUM_BAND in kanban/utils/whatif_engine.py —
+// that module is the single source of truth for what counts as High/Medium/Low.
+const FEASIBILITY_HIGH_BAND = 85;
+const FEASIBILITY_MEDIUM_BAND = 60;
+
 document.addEventListener('DOMContentLoaded', function() {
     // Mini sparklines on cards were removed — a single-snapshot branch
     // rendered as a flat line that misleadingly implied long-term
@@ -112,8 +118,8 @@ function pollBranchScoresForSettle() {
                         badge.textContent = shown;
                         badge.classList.remove('score-high', 'score-medium', 'score-low');
                         badge.classList.add(
-                            score >= 70 ? 'score-high'
-                            : score >= 50 ? 'score-medium'
+                            score >= FEASIBILITY_HIGH_BAND ? 'score-high'
+                            : score >= FEASIBILITY_MEDIUM_BAND ? 'score-medium'
                             : 'score-low'
                         );
                         const updated = badge.parentElement
@@ -203,10 +209,17 @@ function initCompareMode() {
 }
 
 /**
- * Show compare checkboxes on branch cards
+ * Show compare checkboxes on branch cards.
+ *
+ * Scoped to #branchGrid (the ACTIVE grid) on purpose: archived branches are
+ * frozen — they stop being recalculated — so their scores were captured at
+ * different board states and comparing them side-by-side with live branches
+ * would be an apples-to-oranges diff.  The selection handler is delegated on
+ * #branchGrid too, so an archived checkbox would have been inert anyway;
+ * scoping here stops us rendering a checkbox that silently does nothing.
  */
 function showCompareCheckboxes() {
-    document.querySelectorAll('.branch-checkbox').forEach(cb => {
+    document.querySelectorAll('#branchGrid .branch-checkbox').forEach(cb => {
         cb.style.display = 'block';
     });
 }
@@ -215,7 +228,7 @@ function showCompareCheckboxes() {
  * Hide compare checkboxes
  */
 function hideCompareCheckboxes() {
-    document.querySelectorAll('.branch-checkbox').forEach(cb => {
+    document.querySelectorAll('#branchGrid .branch-checkbox').forEach(cb => {
         cb.style.display = 'none';
     });
 }

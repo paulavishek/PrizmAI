@@ -89,11 +89,22 @@ class ShadowBoardListView(ListView):
         context = super().get_context_data(**kwargs)
         context['board'] = board
         context['predefined_colors'] = BRANCH_COLOR_PALETTE
-        context['has_archived_branches'] = any(
-            b.status == 'archived' for b in context['branches']
-        )
+        # Split the card grid by status.  Archived branches are intentionally
+        # frozen — they stop being recalculated, so their score and projected
+        # date sit still while active branches move on every real board event.
+        # Rendering them inside a section headed "Active Branches" made that
+        # correct behaviour read as "the recalculation is broken", so they now
+        # get their own clearly-labelled, collapsed section.
+        all_branches = list(context['branches'])
+        context['live_branches'] = [
+            b for b in all_branches if b.status in ('active', 'committed')
+        ]
+        context['archived_branches'] = [
+            b for b in all_branches if b.status == 'archived'
+        ]
+        context['has_archived_branches'] = bool(context['archived_branches'])
         context['has_active_branches'] = any(
-            b.status == 'active' for b in context['branches']
+            b.status == 'active' for b in all_branches
         )
 
         # --- Quantum Standup Data ---

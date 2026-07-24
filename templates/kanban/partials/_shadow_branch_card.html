@@ -1,0 +1,94 @@
+                <div class="card branch-card{% if branch.status == 'archived' %} branch-card-archived{% endif %}" data-branch-id="{{ branch.id }}" {% if branch.snapshots.all|length == 0 %}data-pending="true"{% endif %} style="--branch-color: {{ branch.branch_color }};">
+                    <div class="card-body d-flex flex-column">
+                        <!-- Checkbox for compare mode -->
+                        <input type="checkbox" class="branch-checkbox" style="display: none;" data-branch-id="{{ branch.id }}">
+                        
+                        <!-- Branch name & color -->
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h6 class="card-title mb-1">
+                                    {% if branch.is_starred %}
+                                    <i class="fas fa-star text-warning me-1"></i>
+                                    {% endif %}
+                                    {{ branch.name }}
+                                </h6>
+                                <small class="text-muted">Created {{ branch.created_at|date:"M d, Y" }}</small>
+                            </div>
+                            <span class="badge {% if branch.status == 'committed' %}bg-success{% elif branch.status == 'archived' %}bg-secondary{% else %}bg-primary{% endif %}">
+                                {{ branch.get_status_display }}
+                            </span>
+                        </div>
+
+                        <!-- Latest snapshot data -->
+                        {% if branch.cached_latest_snapshot %}
+                            {% with latest=branch.cached_latest_snapshot %}
+                            <!-- Feasibility Score -->
+                            <div class="mb-3">
+                                <small class="text-muted d-block">Feasibility Score</small>
+                                <div class="feasibility-badge {% if latest.feasibility_score >= 85 %}score-high{% elif latest.feasibility_score >= 60 %}score-medium{% else %}score-low{% endif %}"
+                                     data-score-badge="{{ branch.id }}">
+                                    {{ latest.feasibility_score|floatformat:0 }}%
+                                </div>
+                                <small class="text-muted d-block mt-1" title="Scores update live as the real board changes">
+                                    <i class="fas fa-clock me-1"></i>Updated {{ latest.captured_at|timesince }} ago
+                                </small>
+                            </div>
+
+                            <!-- Projected Completion -->
+                            {% if latest.projected_completion_date %}
+                            <div class="mb-3">
+                                <small class="text-muted d-block">Projected Completion</small>
+                                <strong>{{ latest.projected_completion_date|date:"M d, Y" }}</strong>
+                            </div>
+                            {% endif %}
+
+                            <!-- Mini sparkline removed: a brand-new branch has a
+                                 single data point that previously stretched as
+                                 a flat horizontal line across the card, falsely
+                                 implying "score has been stable for a long
+                                 time" when reality was just one snapshot.  Open
+                                 the branch detail page for the full trend
+                                 chart, which renders single-point branches as
+                                 a labelled dot.  Spacer keeps card heights
+                                 visually consistent. -->
+                            <div style="height: 24px;"></div>
+
+                            <!-- Actions -->
+                            <div class="btn-group btn-group-sm w-100 mt-auto" role="group">
+                                <a href="{% url 'shadow_branch_detail' board.id branch.id %}" class="btn btn-outline-primary" title="View details" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <button class="btn btn-outline-secondary btn-star{% if branch.is_starred %} text-warning{% endif %}" data-branch-id="{{ branch.id }}" title="Star/unstar" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="{% if branch.is_starred %}fas{% else %}far{% endif %} fa-star"></i>
+                                </button>
+                                {% if branch.status == 'active' %}
+                                <button class="btn btn-outline-success btn-commit" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Commit this branch as chosen direction" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                {% endif %}
+                                {% if branch.status == 'archived' %}
+                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore this branch to active" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch permanently" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                            {% endwith %}
+                        {% else %}
+                            <!-- Branch still calculating — show restore/delete even without snapshots -->
+                            <p class="text-muted text-center my-3"><small>Calculating first snapshot...</small></p>
+                            <div class="btn-group btn-group-sm w-100 mt-auto" role="group">
+                                {% if branch.status == 'archived' %}
+                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore this branch to active" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="fas fa-undo me-1"></i>Restore
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch permanently" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>

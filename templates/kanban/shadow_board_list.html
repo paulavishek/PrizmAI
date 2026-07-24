@@ -375,9 +375,11 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>Branch</th>
-                                    <th class="text-center">Feasibility Before</th>
-                                    <th class="text-center">After</th>
-                                    <th class="text-center">Change</th>
+                                    <th class="text-center">Feasibility at start of day</th>
+                                    <th class="text-center">Now</th>
+                                    <th class="text-center" title="Total movement since the start of today across all of today's completions — not the effect of the most recent task alone.">
+                                        Change today (cumulative)
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -385,7 +387,7 @@
                                 <tr class="{% if log.score_delta > 0 %}table-success{% elif log.score_delta < 0 %}table-warning{% endif %}">
                                     <td><small><strong>{{ log.branch.name }}</strong></small></td>
                                     <td class="text-center"><small><span class="badge bg-secondary">{{ log.old_score|floatformat:0 }}</span></small></td>
-                                    <td class="text-center"><small><span class="badge {% if log.new_score >= 70 %}bg-success{% elif log.new_score >= 50 %}bg-warning{% else %}bg-danger{% endif %}">{{ log.new_score|floatformat:0 }}</span></small></td>
+                                    <td class="text-center"><small><span class="badge {% if log.new_score >= 85 %}bg-success{% elif log.new_score >= 60 %}bg-warning{% else %}bg-danger{% endif %}">{{ log.new_score|floatformat:0 }}</span></small></td>
                                     <td class="text-center"><small>
                                         {% if log.score_delta > 0 %}
                                             <span class="text-success"><i class="fas fa-arrow-up me-1"></i>+{{ log.score_delta|floatformat:1 }}</span>
@@ -421,6 +423,10 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
                 <h5 class="mb-0"><i class="fas fa-object-group me-2"></i>Active Branches</h5>
+                <small class="text-muted">
+                    Each score is recalculated against today's board, so it can differ from the
+                    figure the scenario showed when you saved it.
+                </small>
             </div>
             <div class="d-flex align-items-center gap-3 flex-wrap">
                 <button class="btn btn-sm btn-primary" id="refreshScoresBtn" title="Recalculate all branches against the current board state">
@@ -441,101 +447,8 @@
         </div>
 
         <div class="branch-grid" id="branchGrid">
-            {% for branch in branches %}
-                <div class="card branch-card{% if branch.status == 'archived' %} branch-card-archived{% endif %}" data-branch-id="{{ branch.id }}" {% if branch.snapshots.all|length == 0 %}data-pending="true"{% endif %} style="--branch-color: {{ branch.branch_color }};">
-                    <div class="card-body d-flex flex-column">
-                        <!-- Checkbox for compare mode -->
-                        <input type="checkbox" class="branch-checkbox" style="display: none;" data-branch-id="{{ branch.id }}">
-                        
-                        <!-- Branch name & color -->
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <div>
-                                <h6 class="card-title mb-1">
-                                    {% if branch.is_starred %}
-                                    <i class="fas fa-star text-warning me-1"></i>
-                                    {% endif %}
-                                    {{ branch.name }}
-                                </h6>
-                                <small class="text-muted">Created {{ branch.created_at|date:"M d, Y" }}</small>
-                            </div>
-                            <span class="badge {% if branch.status == 'committed' %}bg-success{% elif branch.status == 'archived' %}bg-secondary{% else %}bg-primary{% endif %}">
-                                {{ branch.get_status_display }}
-                            </span>
-                        </div>
-
-                        <!-- Latest snapshot data -->
-                        {% if branch.cached_latest_snapshot %}
-                            {% with latest=branch.cached_latest_snapshot %}
-                            <!-- Feasibility Score -->
-                            <div class="mb-3">
-                                <small class="text-muted d-block">Feasibility Score</small>
-                                <div class="feasibility-badge {% if latest.feasibility_score >= 70 %}score-high{% elif latest.feasibility_score >= 50 %}score-medium{% else %}score-low{% endif %}"
-                                     data-score-badge="{{ branch.id }}">
-                                    {{ latest.feasibility_score|floatformat:0 }}%
-                                </div>
-                                <small class="text-muted d-block mt-1" title="Scores update live as the real board changes">
-                                    <i class="fas fa-clock me-1"></i>Updated {{ latest.captured_at|timesince }} ago
-                                </small>
-                            </div>
-
-                            <!-- Projected Completion -->
-                            {% if latest.projected_completion_date %}
-                            <div class="mb-3">
-                                <small class="text-muted d-block">Projected Completion</small>
-                                <strong>{{ latest.projected_completion_date|date:"M d, Y" }}</strong>
-                            </div>
-                            {% endif %}
-
-                            <!-- Mini sparkline removed: a brand-new branch has a
-                                 single data point that previously stretched as
-                                 a flat horizontal line across the card, falsely
-                                 implying "score has been stable for a long
-                                 time" when reality was just one snapshot.  Open
-                                 the branch detail page for the full trend
-                                 chart, which renders single-point branches as
-                                 a labelled dot.  Spacer keeps card heights
-                                 visually consistent. -->
-                            <div style="height: 24px;"></div>
-
-                            <!-- Actions -->
-                            <div class="btn-group btn-group-sm w-100 mt-auto" role="group">
-                                <a href="{% url 'shadow_branch_detail' board.id branch.id %}" class="btn btn-outline-primary" title="View details" data-bs-toggle="tooltip" data-bs-placement="bottom">
-                                    <i class="fas fa-eye"></i>
-                                </a>
-                                <button class="btn btn-outline-secondary btn-star{% if branch.is_starred %} text-warning{% endif %}" data-branch-id="{{ branch.id }}" title="Star/unstar" data-bs-toggle="tooltip" data-bs-placement="bottom">
-                                    <i class="{% if branch.is_starred %}fas{% else %}far{% endif %} fa-star"></i>
-                                </button>
-                                {% if branch.status == 'active' %}
-                                <button class="btn btn-outline-success btn-commit" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Commit this branch as chosen direction" data-bs-toggle="tooltip" data-bs-placement="bottom">
-                                    <i class="fas fa-check"></i>
-                                </button>
-                                {% endif %}
-                                {% if branch.status == 'archived' %}
-                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore this branch to active" data-bs-toggle="tooltip" data-bs-placement="bottom">
-                                    <i class="fas fa-undo"></i>
-                                </button>
-                                {% endif %}
-                                <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch permanently" data-bs-toggle="tooltip" data-bs-placement="bottom">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                            {% endwith %}
-                        {% else %}
-                            <!-- Branch still calculating — show restore/delete even without snapshots -->
-                            <p class="text-muted text-center my-3"><small>Calculating first snapshot...</small></p>
-                            <div class="btn-group btn-group-sm w-100 mt-auto" role="group">
-                                {% if branch.status == 'archived' %}
-                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore this branch to active" data-bs-toggle="tooltip" data-bs-placement="bottom">
-                                    <i class="fas fa-undo me-1"></i>Restore
-                                </button>
-                                {% endif %}
-                                <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch permanently" data-bs-toggle="tooltip" data-bs-placement="bottom">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
+            {% for branch in live_branches %}
+                {% include 'kanban/partials/_shadow_branch_card.html' %}
             {% empty %}
             <div class="col-12">
                 <div class="alert alert-info text-center">
@@ -548,6 +461,32 @@
             {% endfor %}
         </div>
     </div>
+
+    {% if archived_branches %}
+    <!-- Archived branches live in their own section.  They are deliberately
+         frozen: archiving stops recalculation, so their score and projected
+         date stay put while active branches move.  Mixing them into the
+         "Active Branches" grid made that look like a recalculation bug. -->
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h5 class="mb-0">
+                    <i class="fas fa-box-archive me-2 text-secondary"></i>Archived Branches
+                    <span class="badge bg-secondary ms-1">{{ archived_branches|length }}</span>
+                </h5>
+                <small class="text-muted">
+                    Frozen at their last recalculation &mdash; these scores no longer update as the
+                    board changes. Restore a branch to resume tracking it.
+                </small>
+            </div>
+        </div>
+        <div class="branch-grid" id="archivedBranchGrid">
+            {% for branch in archived_branches %}
+                {% include 'kanban/partials/_shadow_branch_card.html' %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Compare Mode Diff Table (hidden by default).
          The <thead> is rebuilt by renderComparisonTable() so the number of

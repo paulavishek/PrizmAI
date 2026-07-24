@@ -11,6 +11,7 @@ from datetime import date as date_type
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
 from kanban.models import Board
@@ -34,9 +35,20 @@ def whatif_dashboard(request, board_id):
     engine = WhatIfEngine(board)
     baseline = engine._capture_baseline()
 
-    saved_scenarios = WhatIfScenario.objects.filter(
-        board=board,
-    ).order_by('-is_starred', '-created_at')[:10]
+    saved_scenarios = list(
+        WhatIfScenario.objects.filter(
+            board=board,
+        ).order_by('-is_starred', '-created_at')[:10]
+    )
+
+    # Flag scenarios whose stored feasibility was computed against an older
+    # board state.  The panel copy already warns that scores across save dates
+    # aren't comparable, but the list still showed them as plain equal-weight
+    # numbers side by side — inviting exactly the comparison the text forbids.
+    # Anything not saved today is greyed out and date-stamped in the template.
+    today = timezone.localdate()
+    for scenario in saved_scenarios:
+        scenario.is_score_stale = timezone.localtime(scenario.created_at).date() != today
 
     predicted_date_obj = None
     if baseline.get('predicted_date'):

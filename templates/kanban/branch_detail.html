@@ -412,6 +412,12 @@
 <script src="{% static 'vendor/chart.min.3.9.1.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script src="{% static 'vendor/chartjs-adapter-date-fns.bundle.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
+    // Feasibility tier boundaries.  MUST stay in sync with
+    // FEASIBILITY_HIGH_BAND / FEASIBILITY_MEDIUM_BAND in
+    // kanban/utils/whatif_engine.py — the single source of truth.
+    const FEASIBILITY_HIGH_BAND = 85;
+    const FEASIBILITY_MEDIUM_BAND = 60;
+
     // Feasibility Trend Chart
     const ctx = document.getElementById('feasibilityChart');
     if (ctx) {
@@ -488,9 +494,9 @@
         // than a flat horizontal line stretched across the window.
 
         const latestScore = points.length ? points[points.length - 1].y : 0;
-        const tierColor = latestScore >= 70
+        const tierColor = latestScore >= FEASIBILITY_HIGH_BAND
             ? { border: '#198754', fill: 'rgba(25, 135, 84, 0.15)' }
-            : latestScore >= 50
+            : latestScore >= FEASIBILITY_MEDIUM_BAND
                 ? { border: '#fd7e14', fill: 'rgba(253, 126, 20, 0.15)' }
                 : { border: '#dc3545', fill: 'rgba(220, 53, 69, 0.15)' };
 
@@ -514,8 +520,8 @@
                     fill: !isSinglePoint,
                     pointBackgroundColor: function(context) {
                         const score = context.raw && context.raw.y;
-                        if (score >= 70) return '#198754';
-                        if (score >= 50) return '#fd7e14';
+                        if (score >= FEASIBILITY_HIGH_BAND) return '#198754';
+                        if (score >= FEASIBILITY_MEDIUM_BAND) return '#fd7e14';
                         return '#dc3545';
                     }
                 }]

@@ -10,6 +10,12 @@
     const CFG = window.WHATIF_CONFIG;
     if (!CFG) return;
 
+    // Feasibility tier boundaries.  MUST stay in sync with
+    // FEASIBILITY_HIGH_BAND / FEASIBILITY_MEDIUM_BAND in
+    // kanban/utils/whatif_engine.py — the single source of truth for tiers.
+    const FEASIBILITY_HIGH_BAND = 85;
+    const FEASIBILITY_MEDIUM_BAND = 60;
+
     const BL = CFG.baseline;   // baseline snapshot from server
     let lastResults = null;     // most recent simulation results
     let lastParams = null;      // most recent input params
@@ -271,9 +277,17 @@
             fill.style.width = pct + '%';
             fill.style.background = '';
             fill.style.minWidth = '';
-            label.textContent = pct + '%';
-            if (pct >= 70) label.className = 'fs-4 fw-bold text-success';
-            else if (pct >= 40) label.className = 'fs-4 fw-bold text-warning';
+            // Show the tier alongside the number.  The AI card below states a
+            // tier ("Feasibility: High"), so the gauge showing a bare number
+            // left the two verdicts unreconciled on the same screen; and the
+            // warning boundary here (40) didn't even match the tier bands used
+            // to label the AI response.  Both now read from the same constants.
+            const tier = pct >= FEASIBILITY_HIGH_BAND ? 'High'
+                : pct >= FEASIBILITY_MEDIUM_BAND ? 'Medium'
+                : 'Low';
+            label.textContent = pct + '% · ' + tier;
+            if (pct >= FEASIBILITY_HIGH_BAND) label.className = 'fs-4 fw-bold text-success';
+            else if (pct >= FEASIBILITY_MEDIUM_BAND) label.className = 'fs-4 fw-bold text-warning';
             else label.className = 'fs-4 fw-bold text-danger';
         }
     }

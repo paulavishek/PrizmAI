@@ -25,6 +25,67 @@ logger = logging.getLogger(__name__)
 # Brooks's Law exponent: adding people has diminishing returns on velocity
 TEAM_SCALING_EXPONENT = 0.7
 
+# ---------------------------------------------------------------------------
+# Single published definition of TEAM UTILIZATION.
+#
+# utilization% = remaining_tasks / team_size / TASKS_PER_MEMBER_AT_FULL_LOAD * 100
+#
+# i.e. one member carrying TASKS_PER_MEMBER_AT_FULL_LOAD open tasks is exactly
+# 100% utilized.  Every What-If / Shadow Board surface reads this one formula
+# (see `compute_utilization_pct`) so the number can't drift between panels.
+# Note this is a *workload* measure (open tasks per head), NOT the calendar
+# capacity measure used by Skill Gap / AI Coach / profiles — those answer a
+# different question (booked hours vs available hours) and are labelled
+# differently in the UI.
+TASKS_PER_MEMBER_AT_FULL_LOAD = 8
+
+# Displayed utilization saturates here; `utilization_raw` keeps the unclamped
+# value as an ordering signal for deeply over-allocated scenarios.
+UTILIZATION_DISPLAY_CAP = 200
+
+# Feasibility tier bands (percent).  Raised from 70/50 so a plan the engine
+# itself flags as over-allocated can no longer be labelled "High".
+FEASIBILITY_HIGH_BAND = 85
+FEASIBILITY_MEDIUM_BAND = 60
+
+# Hard ceiling applied to any scenario whose team utilization exceeds 100%.
+# A plan that over-allocates the team is, by definition, not a "High
+# feasibility" plan — no amount of schedule buffer or budget slack should let
+# it read as one.  Anchored just under the top of the Medium band so a plan
+# that only just crosses 100% reads Medium (matching its own Medium risk
+# level and Medium conflict), then scales down into Low as overload deepens.
+OVERALLOCATION_CEILING = (FEASIBILITY_HIGH_BAND - 1) / 100.0   # 0.84
+# Total ceiling drop across the 100%→200% utilization range.  At 200%+ the
+# ceiling lands at 0.44, i.e. firmly Low.
+OVERALLOCATION_CEILING_DROP = 0.40
+
+
+def compute_utilization_pct(remaining_tasks, team_size):
+    """
+    The single canonical team-utilization formula (see the constant block above).
+
+    Returns (display_pct, raw_pct):
+      * display_pct is clamped to UTILIZATION_DISPLAY_CAP for presentation
+      * raw_pct is unclamped, used only as an ordering/severity signal
+
+    Every caller in What-If and Shadow Board must go through this helper —
+    utilization previously appeared with three subtly different derivations,
+    which is how the same scenario could show two different percentages.
+    """
+    team_size = team_size or 1
+    per_member = remaining_tasks / team_size
+    raw = round(per_member / TASKS_PER_MEMBER_AT_FULL_LOAD * 100, 1)
+    return min(raw, UTILIZATION_DISPLAY_CAP), raw
+
+
+def feasibility_tier(score_pct):
+    """Map a 0-100 feasibility score onto its High/Medium/Low label."""
+    if score_pct >= FEASIBILITY_HIGH_BAND:
+        return 'High'
+    if score_pct >= FEASIBILITY_MEDIUM_BAND:
+        return 'Medium'
+    return 'Low'
+
 
 class WhatIfEngine:
     """Runs what-if scenario simulations against a real board's current state."""
@@ -193,9 +254,8 @@ class WhatIfEngine:
         # Team
         team_size = board.memberships.count() or 1
 
-        # Resource utilization estimate
-        active_per_member = remaining / team_size if team_size else remaining
-        utilization_pct = min(round(active_per_member / 8 * 100, 1), 200)  # 8 tasks = 100%
+        # Resource utilization estimate (canonical formula — see module header)
+        utilization_pct, _ = compute_utilization_pct(remaining, team_size)
 
         # Effective deadline
         effective_deadline = self._get_effective_deadline(prediction)
@@ -296,12 +356,11 @@ class WhatIfEngine:
         )
 
         # --- Utilization ---
-        # `utilization_raw` is the UNCLAMPED value (can exceed 200); kept as a
-        # severity signal so over-allocated scenarios stay ordered after the
-        # displayed `utilization_pct` saturates at 200.
-        active_per_member = new_remaining / new_team if new_team else new_remaining
-        utilization_raw = round(active_per_member / 8 * 100, 1)
-        new_utilization = min(utilization_raw, 200)
+        # `utilization_raw` is the UNCLAMPED value (can exceed the display cap);
+        # kept as a severity signal so over-allocated scenarios stay ordered
+        # after the displayed `utilization_pct` saturates.  Both come from the
+        # single canonical formula (see module header).
+        new_utilization, utilization_raw = compute_utilization_pct(new_remaining, new_team)
 
         # --- Risk level ---
         # Delay probability sets the baseline band, but a scenario can be
@@ -472,12 +531,22 @@ class WhatIfEngine:
         elif bu > 100:
             score -= (bu - 100) / 20 * 0.10
 
-        # --- Conflicts (kept as discrete since each conflict is a discrete event) ---
+        # --- Conflicts ---
+        # Computed here but APPLIED AFTER the headroom ceiling clamp (see below),
+        # for the same reason the descope penalty is: for a mostly-healthy plan
+        # the headroom ceiling is the binding constraint, so a penalty applied
+        # to `score` here would be clamped away and cost nothing.  A detected
+        # conflict — the thing the UI is showing the user in a warning banner —
+        # must always move the number.  `medium` used to be worth exactly zero
+        # even before the clamp interaction; every severity now subtracts.
+        conflict_penalty = 0.0
         for c in conflicts:
             if c['severity'] == 'critical':
-                score -= 0.1
+                conflict_penalty += 0.1
             elif c['severity'] == 'high':
-                score -= 0.05
+                conflict_penalty += 0.05
+            elif c['severity'] == 'medium':
+                conflict_penalty += 0.03
 
         # --- Velocity health adjustment (live recalc path only) ---
         # velocity_health = actual_recent_velocity / branch_baseline_velocity.
@@ -539,7 +608,14 @@ class WhatIfEngine:
         schedule_slack = _slack(projected.get('buffer_days'), full_credit_at=90, floor_at=0)
         utilization_slack = 1 - _slack(util, full_credit_at=100, floor_at=0)
         budget_slack = 1 - _slack(bu, full_credit_at=100, floor_at=0)
-        headroom = 0.30 * schedule_slack + 0.50 * utilization_slack + 0.20 * budget_slack
+        # Schedule now carries as much weight as utilization.  Previously
+        # utilization was weighted 0.50 against schedule's 0.30, so the score
+        # was dominated by the resourcing term and barely responded to the
+        # schedule: completing four tasks pulled projected completion 18 days
+        # earlier and moved feasibility only ~2 points, which reads to a PM as
+        # "the score doesn't reward progress".  Equal weighting makes real
+        # schedule improvement register while keeping utilization decisive.
+        headroom = 0.40 * schedule_slack + 0.40 * utilization_slack + 0.20 * budget_slack
 
         # Soft ceiling: real projects never have *zero* residual risk —
         # unforeseen scope creep, illness, dependencies — so the maximum
@@ -557,7 +633,32 @@ class WhatIfEngine:
         HEADROOM_FLOOR = 0.68
         HEADROOM_SPAN = 0.30
         ceiling = min(0.98, HEADROOM_FLOOR + HEADROOM_SPAN * headroom)
+
+        # --- Over-allocation hard ceiling ---
+        # The penalty bands alone were far too weak to stop an over-allocated
+        # plan reading as "High": at 125% utilization the utilization band
+        # subtracted only ~0.13 and the medium conflict subtracted nothing, so
+        # a plan whose own AI narrative called it "burnout-inducing" landed at
+        # 74% and got the High label.  Utilization above 100% means the team
+        # cannot absorb the remaining work — that is a deliverability fact, not
+        # a matter of degree to be averaged against schedule buffer.  So any
+        # such scenario is capped below the High band outright, and the cap
+        # tightens as the overload deepens (100% → 0.60, 200%+ → 0.40).
+        if util > 100:
+            overload_fraction = min((util - 100) / 100.0, 1.0)
+            ceiling = min(
+                ceiling,
+                OVERALLOCATION_CEILING - OVERALLOCATION_CEILING_DROP * overload_fraction,
+            )
+
         final = max(0.0, min(score, ceiling))
+
+        # --- Conflict penalty (applied AFTER the ceiling clamp) ---
+        # See the note where conflict_penalty is accumulated: a detected
+        # conflict must always cost the score, even for a plan whose headroom
+        # ceiling would otherwise clamp the penalty away to nothing.
+        if conflict_penalty:
+            final = max(0.0, final - conflict_penalty)
 
         # --- Descope / value penalty (applied AFTER the ceiling clamp) ---
         # Every other term here is deliverability-only: it rewards a plan for
@@ -727,12 +828,7 @@ class WhatIfEngine:
         # locking the tier and explicitly telling the model not to argue with
         # the inputs eliminated that whole class of incoherent recommendations.
         feasibility_pct = round(feasibility * 100, 1)
-        if feasibility_pct >= 70:
-            forced_tier = 'High'
-        elif feasibility_pct >= 50:
-            forced_tier = 'Medium'
-        else:
-            forced_tier = 'Low'
+        forced_tier = feasibility_tier(feasibility_pct)
 
         return f"""You are a senior program manager and strategic advisor. A project manager is
 considering the following hypothetical changes to their project and needs your
@@ -745,8 +841,12 @@ GROUND RULES (do not violate):
   "mathematically impossible", or "implausible" — they are the engine's
   ground truth.  Your job is to interpret and advise, not to audit the math.
 - Your "feasibility_assessment" field MUST be exactly "{forced_tier}" because
-  the computed feasibility is {feasibility_pct:.1f}% (High ≥70, Medium 50-69,
-  Low <50).  Do not pick a different tier.
+  the computed feasibility is {feasibility_pct:.1f}% (High >={FEASIBILITY_HIGH_BAND},
+  Medium {FEASIBILITY_MEDIUM_BAND}-{FEASIBILITY_HIGH_BAND - 1}, Low <{FEASIBILITY_MEDIUM_BAND}).
+  Do not pick a different tier.
+- Team utilization above 100% means the team cannot absorb the remaining work.
+  When that is the case your risk_summary MUST lead with it, and you must not
+  describe the plan as comfortable, safe, or low-risk anywhere in your response.
 - Mitigations and trade-offs must be consistent with the sign of each delta
   (e.g., if tasks_added is negative, that's a scope REDUCTION, not an
   expansion; if deadline_shift_days is negative, the deadline got TIGHTER).
