@@ -31,7 +31,12 @@ class AICoachService:
         self.router = AIRouter()
         self.user = user
         self.gemini_available = True  # AIRouter handles availability internally
-        
+        # Model actually used by the last completion. Set from the router's
+        # response rather than hardcoded: the coach requests complexity='complex',
+        # and under BYOK the provider may not be Gemini at all, so a literal
+        # model string here would be a false disclosure on the suggestion card.
+        self.last_model_used = None
+
         # Initialize AI cache manager
         try:
             from kanban_board.ai_cache import ai_cache_manager
@@ -61,17 +66,23 @@ class AICoachService:
         if style_directive:
             prompt = style_directive + "\n\n" + prompt
 
-        # Try cache first
+        # Try cache first. Cached entries carry the model that produced them, so
+        # a cache hit still reports the truthful model on the card. Legacy plain
+        # -string entries (pre-dating this) fall back to an unknown model.
         if self.ai_cache:
             cached = self.ai_cache.get(prompt, operation, context_id)
             if cached:
                 logger.debug(f"AI Coach cache HIT for operation: {operation}")
+                if isinstance(cached, dict):
+                    self.last_model_used = cached.get('model')
+                    return cached.get('text')
+                self.last_model_used = None
                 return cached
-        
+
         # Generate new response
         if not self.gemini_available:
             return None
-            
+
         try:
             result = self.router.complete(
                 prompt=prompt,
@@ -79,11 +90,16 @@ class AICoachService:
                 complexity='complex',
             )
             response_text = result.get('text', '').strip()
+            self.last_model_used = result.get('model')
 
             if response_text:
                 # Cache the result
                 if self.ai_cache and response_text:
-                    self.ai_cache.set(prompt, response_text, operation, context_id)
+                    self.ai_cache.set(
+                        prompt,
+                        {'text': response_text, 'model': self.last_model_used},
+                        operation, context_id,
+                    )
                     logger.debug(f"AI Coach response cached for operation: {operation}")
                 return response_text
             return None
@@ -160,8 +176,10 @@ class AICoachService:
                     ai_insights.get('impact', suggestion_data.get('expected_impact', ''))
                 )
                 
-                # Add explainability fields
-                suggestion_data['ai_model_used'] = 'gemini-2.5-flash'
+                # Add explainability fields. Report the model the router actually
+                # used — never a hardcoded name (BYOK may route to OpenAI or
+                # Anthropic, and the tier ladder can change under us).
+                suggestion_data['ai_model_used'] = self.last_model_used or 'unknown'
                 suggestion_data['generation_method'] = 'hybrid'
                 suggestion_data['confidence_score'] = max(
                     suggestion_data['confidence_score'],
@@ -232,24 +250,66 @@ class AICoachService:
 
                 lines.append(
                     f"  - {display} ({user.username}): {profile.current_active_tasks} active tasks, "
-                    f"{profile.utilization_percentage:.0f}% capacity utilized, "
+                    f"{profile.utilization_percentage:.0f}% load, "
                     f"skills: {skills_text}"
                 )
 
             if not lines:
                 return ''
 
+            # "Load %" is the product-wide workload vocabulary: higher = busier,
+            # 100% = at capacity. The prompt must not offer the model the word
+            # "capacity" as a synonym — when it had both, it produced "lowest
+            # capacity (67%)" and "has 75% capacity" in adjacent sentences of the
+            # same card, using the term in opposite directions.
             return (
                 "\n## Team Workload & Skills (live data — use this, not assumptions):\n"
                 + "\n".join(lines)
-                + "\nWhen recommending a specific person to take on work, only name someone "
-                "from this list, and prefer people with LOWER capacity utilization and "
-                "relevant skills. Do NOT recommend giving work to someone already at or "
-                "above 90% capacity utilization unless no one else is qualified.\n"
+                + "\nLoad % means how busy someone is: HIGHER load = BUSIER = less "
+                "available. 100% load means at recommended capacity. Always use the "
+                "phrase \"X% load\" — never \"X% capacity\", which reads backwards.\n"
+                "When recommending a specific person to take on work, only name someone "
+                "from this list, and prefer people with LOWER load and relevant skills. "
+                "Do NOT recommend giving work to someone at or above 90% load unless no "
+                "one else is qualified.\n"
             )
         except Exception as e:
             logger.warning(f"Failed to build team roster block for AI coach prompt: {e}")
             return ''
+
+    def _build_coordination_block(self, suggestion: Dict) -> str:
+        """Render the cross-suggestion constraints for this generation run.
+
+        Each card is enhanced by a separate LLM call, so without this the coach
+        contradicts itself across cards: one card names a person as the relief
+        valve for an overloaded teammate while the next card assigns that same
+        person extra deep-dive work. CoachingRuleEngine._reconcile_suggestions
+        stamps every suggestion with who is already over capacity and who was
+        proposed as relief; this turns that into a hard prompt constraint.
+        """
+        coordination = (suggestion.get('metrics_snapshot') or {}).get('coordination') or {}
+        overloaded = coordination.get('overloaded_members') or []
+        relief = coordination.get('relief_members') or []
+        if not overloaded and not relief:
+            return ''
+
+        lines = ["\n## Coordination With Other Suggestions (this same run):"]
+        if overloaded:
+            lines.append(
+                f"- Already flagged as OVERLOADED on another card: {', '.join(overloaded)}. "
+                "Do NOT recommend giving any of them additional work, reviews or meetings."
+            )
+        if relief:
+            lines.append(
+                f"- Already proposed as the relief valve on another card: {', '.join(relief)}. "
+                "They are absorbing reassigned work, so do NOT also load them with new "
+                "deep-dives or audits here — that would cancel out the other recommendation."
+            )
+        lines.append(
+            "These cards are read together by one PM. Your advice must be consistent with "
+            "them, not just correct in isolation."
+        )
+        return "\n".join(lines) + "\n"
 
     def _build_enhancement_prompt(self, suggestion: Dict, context: Dict) -> str:
         """Build prompt for AI enhancement with full explainability"""
@@ -275,6 +335,7 @@ class AICoachService:
             )
 
         team_roster_block = self._build_team_roster_block(context)
+        coordination_block = self._build_coordination_block(suggestion)
 
         return f"""You are an experienced project management coach helping a PM improve their project.
 Your advice must be transparent, actionable, and concise.
@@ -293,6 +354,7 @@ Your advice must be transparent, actionable, and concise.
 - Current Velocity: {context.get('velocity', 'N/A')} tasks/week
 {custom_fields_block}
 {team_roster_block}
+{coordination_block}
 
 ## Metrics:
 {json.dumps(suggestion.get('metrics_snapshot', {}), indent=2)}

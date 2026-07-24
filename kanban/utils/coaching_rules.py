@@ -40,7 +40,7 @@ class CoachingRuleEngine:
             List of suggestion dictionaries ready to create CoachingSuggestion objects
         """
         self.suggestions = []
-        
+
         # Run all detection rules
         self._check_velocity_drop()
         self._check_resource_overload()
@@ -52,9 +52,56 @@ class CoachingRuleEngine:
         self._check_quality_issues()
         self._check_dependency_blockers()
         self._check_communication_gaps()
-        
+
+        # Reconcile the set against itself before returning. Individually each
+        # rule is correct; together they used to contradict — e.g. one card
+        # named Marcus as the relief valve for an overloaded Priya while the
+        # next card assigned Marcus a deep-dive review. The coach has to read
+        # its own suggestions.
+        self._reconcile_suggestions()
+
         logger.info(f"Generated {len(self.suggestions)} suggestions for board {self.board.name}")
         return self.suggestions
+
+    def overloaded_usernames(self) -> List[str]:
+        """Usernames this run flagged as overloaded (relief must not land here)."""
+        return [
+            s['metrics_snapshot']['username']
+            for s in self.suggestions
+            if s['suggestion_type'] == 'resource_overload'
+            and s.get('metrics_snapshot', {}).get('username')
+        ]
+
+    def relief_usernames(self) -> List[str]:
+        """Usernames this run proposed as relief valves for overloaded members."""
+        names = set()
+        for s in self.suggestions:
+            if s['suggestion_type'] != 'resource_overload':
+                continue
+            for name in s.get('metrics_snapshot', {}).get('relief_candidates', []):
+                names.add(name)
+        return sorted(names)
+
+    def _reconcile_suggestions(self):
+        """Annotate suggestions with board-wide context so downstream consumers
+        (the AI enhancement prompt, the card renderer) can avoid contradicting
+        each other.
+
+        Each suggestion gains a ``coordination`` block naming who is already
+        over capacity and who this run has proposed as relief, so no card
+        recommends piling work onto someone another card is trying to unload.
+        """
+        overloaded = self.overloaded_usernames()
+        relief = self.relief_usernames()
+        if not overloaded and not relief:
+            return
+        for s in self.suggestions:
+            snapshot = dict(s.get('metrics_snapshot') or {})
+            snapshot['coordination'] = {
+                'overloaded_members': overloaded,
+                'relief_members': relief,
+            }
+            s['metrics_snapshot'] = snapshot
     
     def _add_suggestion(self, suggestion_type: str, severity: str, title: str, 
                        message: str, reasoning: str, recommended_actions: List[str],
@@ -160,10 +207,35 @@ class CoachingRuleEngine:
                 confidence_score=0.75
             )
     
+    # Concurrent-task count that counts as 100% Load. Load % is the one
+    # workload figure the coach reports, and higher always means busier — see
+    # the note on _load_percent() below.
+    RECOMMENDED_MAX_TASKS = 10
+
+    @classmethod
+    def _load_percent(cls, active_tasks):
+        """Load % for a member — higher = busier, 100% = at recommended capacity.
+
+        One definition, used everywhere the coach talks about workload. The
+        coach previously mixed "capacity" (higher = more room) and "load"
+        (higher = busier) in adjacent sentences of the same card, which made
+        "lowest capacity (67%)" unreadable — it could mean most or least
+        available. Load % removes the ambiguity: 120% is overloaded, 40% has
+        room.
+        """
+        return int(round((active_tasks / cls.RECOMMENDED_MAX_TASKS) * 100))
+
     def _check_resource_overload(self):
         """Detect team members with excessive workload"""
         from kanban.models import Task
-        
+
+        # Overdue work per member, via the single source of truth for "overdue"
+        # so this card can never disagree with Focus Today or the conflict cards.
+        overdue_by_user = {}
+        for t in Task.overdue_for_boards([self.board.id]):
+            if t.assigned_to_id:
+                overdue_by_user.setdefault(t.assigned_to_id, []).append(t)
+
         # Get active tasks per team member
         team_workload = Task.objects.filter(
             column__board=self.board,
@@ -173,25 +245,52 @@ class CoachingRuleEngine:
             active_tasks=Count('id'),
             high_priority_tasks=Count('id', filter=Q(priority='high'))
         ).filter(assigned_to__isnull=False)
-        
+
+        # Load % for every member, so relief candidates can be named from data
+        # rather than left to the AI to guess (it guessed people who were
+        # themselves overloaded).
+        load_by_username = {
+            m['assigned_to__username']: self._load_percent(m['active_tasks'])
+            for m in team_workload
+        }
+
         for member in team_workload:
             active = member['active_tasks']
             high_priority = member['high_priority_tasks']
-            
-            if active > 10 or high_priority > 5:
+            username = member['assigned_to__username']
+            overdue = overdue_by_user.get(member['assigned_to__id'], [])
+            load = self._load_percent(active)
+
+            # Members with genuine headroom, least-loaded first.
+            relief_candidates = sorted(
+                (n for n, l in load_by_username.items()
+                 if n != username and l < 100),
+                key=lambda n: load_by_username[n],
+            )[:3]
+
+            if active > self.RECOMMENDED_MAX_TASKS or high_priority > 5:
                 severity = 'high' if active > 15 or high_priority > 7 else 'medium'
-                
+
+                overdue_clause = ''
+                if overdue:
+                    worst = max(t.days_overdue for t in overdue)
+                    overdue_clause = (
+                        f" {len(overdue)} of these {'is' if len(overdue) == 1 else 'are'} "
+                        f"overdue (worst: {worst} days past due)."
+                    )
+
                 self._add_suggestion(
                     suggestion_type='resource_overload',
                     severity=severity,
-                    title=f"{member['assigned_to__username']} is overloaded",
-                    message=f"{member['assigned_to__username']} has {active} active tasks "
-                           f"(including {high_priority} high priority). This may lead to burnout "
-                           f"and reduced quality.",
-                    reasoning=f"Team member has {active} concurrent tasks, exceeding recommended "
-                             f"limit of 8-10 tasks for optimal focus and quality.",
+                    title=f"{username} is overloaded — {load}% load",
+                    message=f"{username} has {active} active tasks "
+                           f"(including {high_priority} high priority), a load of {load}% against "
+                           f"a recommended maximum of {self.RECOMMENDED_MAX_TASKS}.{overdue_clause} "
+                           f"This may lead to burnout and reduced quality.",
+                    reasoning=f"Team member has {active} concurrent tasks, exceeding the recommended "
+                             f"limit of {self.RECOMMENDED_MAX_TASKS} tasks for optimal focus and quality.",
                     recommended_actions=[
-                        f"Meet with {member['assigned_to__username']} to prioritize work",
+                        f"Meet with {username} to prioritize work",
                         "Redistribute lower-priority tasks to other team members",
                         "Consider extending deadlines for non-critical items",
                         "Identify tasks that can be deferred or delegated",
@@ -200,10 +299,14 @@ class CoachingRuleEngine:
                     expected_impact="Reducing overload improves quality, reduces burnout risk, "
                                   "and helps team members focus on high-impact work.",
                     metrics_snapshot={
-                        'username': member['assigned_to__username'],
+                        'username': username,
                         'active_tasks': active,
                         'high_priority_tasks': high_priority,
-                        'recommended_max': 10
+                        'load_percent': load,
+                        'overdue_tasks': len(overdue),
+                        'recommended_max': self.RECOMMENDED_MAX_TASKS,
+                        'relief_candidates': relief_candidates,
+                        'team_load_percent': load_by_username,
                     },
                     confidence_score=0.90
                 )
@@ -523,31 +626,35 @@ class CoachingRuleEngine:
             )
     
     def _check_dependency_blockers(self):
-        """Detect tasks blocked by dependencies"""
+        """Detect tasks stalled in their current column.
+
+        Uses ``Task.stalled_for_boards`` — the single source of truth for
+        "stalled" (column dwell time, mirroring the aging badge on the card).
+        This deliberately does NOT key off ``updated_at``: that is an
+        ``auto_now`` field bumped by any edit, so a task could be renamed and
+        instantly look "unstalled" while sitting in the same column for weeks,
+        and the count would disagree with the board badges, Focus Today and the
+        Decision Center, which all read column dwell.
+        """
         from kanban.models import Task
-        
-        # Find tasks that have been in same status for > 5 days with dependencies
-        stale_threshold = timezone.now() - timedelta(days=5)
-        
-        potentially_blocked = Task.objects.filter(
-            column__board=self.board,
-            progress__isnull=False,
-            progress__lt=100,
-            progress__gt=0,  # Started but not finished
-            updated_at__lt=stale_threshold
-        ).select_related('column')
-        
-        if potentially_blocked.count() >= 3:
-            task_list = list(potentially_blocked[:5])
-            
+
+        stalled = Task.stalled_for_boards([self.board.id], tier='warning')
+
+        if len(stalled) >= 3:
+            task_list = stalled[:5]
+            longest = task_list[0].days_in_column
+
             self._add_suggestion(
                 suggestion_type='dependency_blocker',
                 severity='medium',
-                title=f"{potentially_blocked.count()} tasks appear stalled",
-                message=f"You have {potentially_blocked.count()} tasks that haven't progressed in 5+ days. "
-                       f"These may be blocked by dependencies or waiting on external inputs.",
-                reasoning=f"Tasks with no recent updates often indicate blocked work that's consuming "
-                         f"team capacity without producing value.",
+                title=f"{len(stalled)} tasks have sat in their current column 5+ days",
+                message=(
+                    f"{len(stalled)} tasks have not moved column in 5+ days "
+                    f"(longest: {longest} days). These may be blocked by dependencies "
+                    f"or waiting on external inputs."
+                ),
+                reasoning="Tasks that stop moving between columns often indicate blocked work "
+                          "that is consuming team capacity without producing value.",
                 recommended_actions=[
                     "Review stalled tasks in daily standup",
                     "Identify and resolve blocking dependencies",
@@ -558,9 +665,13 @@ class CoachingRuleEngine:
                 expected_impact="Unblocking tasks improves flow, reduces idle time, and helps "
                               "team maintain momentum.",
                 metrics_snapshot={
-                    'stalled_task_count': potentially_blocked.count(),
-                    'sample_tasks': [{'title': t.title, 'days_stalled': (timezone.now() - t.updated_at).days} 
-                                    for t in task_list]
+                    'stalled_task_count': len(stalled),
+                    'signal': 'column_dwell',
+                    'sample_tasks': [
+                        {'title': t.title, 'days_in_column': t.days_in_column,
+                         'column': t.column.name}
+                        for t in task_list
+                    ],
                 },
                 confidence_score=0.70
             )

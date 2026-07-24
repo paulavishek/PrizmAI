@@ -86,7 +86,25 @@ class AICoachTeamRosterTestCase(TestCase):
         block = service._build_team_roster_block({'board_id': self.board.id})
 
         self.assertIn('90%', block)
-        self.assertIn('LOWER capacity utilization', block)
+        self.assertIn('LOWER load', block)
+
+    def test_roster_uses_load_vocabulary_not_capacity(self):
+        """Workload is stated as "X% load" only.
+
+        The prompt previously said "capacity utilized", and the model then wrote
+        "lowest capacity (67%)" and "has 75% capacity" in adjacent sentences of
+        one card — using the word in opposite directions, so the reader could not
+        tell whether a high number meant busy or free. "Load" only ever means
+        busier-is-higher.
+        """
+        service = AICoachService()
+        block = service._build_team_roster_block({'board_id': self.board.id})
+
+        self.assertIn('105% load', block)
+        self.assertIn('67% load', block)
+        self.assertNotIn('capacity utiliz', block)
+        # The one legitimate use of the word explains the scale, not a person.
+        self.assertIn('100% load means at recommended capacity', block)
 
     def test_roster_empty_without_board_id(self):
         service = AICoachService()

@@ -20,7 +20,12 @@ class FeedbackLearningSystem:
     Learns from user feedback to improve coaching quality
     Implements basic reinforcement learning for suggestion optimization
     """
-    
+
+    # Minimum ratings before a percentage is worth displaying. Below this the
+    # dashboard suppresses the number instead of publishing a rate derived from
+    # one or two data points.
+    MIN_RATINGS_FOR_RATE = 5
+
     def __init__(self):
         """Initialize feedback learning system"""
         self.confidence_adjustment_rate = 0.1  # How much to adjust confidence based on feedback
@@ -674,6 +679,11 @@ class FeedbackLearningSystem:
                 'dismissal_rate': 0,
                 'avg_relevance': 0,
                 'avg_confidence': 0,
+                'min_ratings': self.MIN_RATINGS_FOR_RATE,
+                'helpful_rate_reliable': False,
+                'action_rate_reliable': False,
+                'effectiveness_reliable': False,
+                'ratings_needed': self.MIN_RATINGS_FOR_RATE,
                 'message': 'No suggestions generated yet'
             }
         
@@ -714,7 +724,16 @@ class FeedbackLearningSystem:
             (action_rate * 0.4) +
             (avg_relevance / 5 * 100 * 0.2)
         )
-        
+
+        # Sample-size gate. Helpful Rate divides by feedback_count, so a single
+        # thumbs-up produced "100% helpful" and moved Coaching Effectiveness 56
+        # points in one click — a percentage with n=1 behind it is noise
+        # presented as a measurement. Below the threshold the view shows a dash
+        # plus "needs N ratings" rather than a number that will swing wildly.
+        helpful_rate_reliable = feedback_count >= self.MIN_RATINGS_FOR_RATE
+        action_rate_reliable = total_suggestions >= self.MIN_RATINGS_FOR_RATE
+        effectiveness_reliable = helpful_rate_reliable and action_rate_reliable
+
         return {
             'total_suggestions': total_suggestions,
             'feedback_count': feedback_count,
@@ -728,6 +747,12 @@ class FeedbackLearningSystem:
             'avg_confidence': round(float(avg_confidence), 2),
             'effectiveness_score': round(effectiveness_score, 1),
             'overall_score': round(effectiveness_score, 1),  # Alias for template compatibility
+            # Sample-size flags consumed by the dashboard/analytics templates.
+            'min_ratings': self.MIN_RATINGS_FOR_RATE,
+            'helpful_rate_reliable': helpful_rate_reliable,
+            'action_rate_reliable': action_rate_reliable,
+            'effectiveness_reliable': effectiveness_reliable,
+            'ratings_needed': max(self.MIN_RATINGS_FOR_RATE - feedback_count, 0),
             'message': self._generate_effectiveness_message(effectiveness_score)
         }
     

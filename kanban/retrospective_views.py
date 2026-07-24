@@ -162,7 +162,27 @@ def retrospective_detail(request, board_id, retro_id):
         'total_tasks': total_tasks,
         'completion_rate': completion_rate,
     }
-    
+
+    # Scope label for the stat tiles. A milestone/sprint retrospective reports on
+    # its own period, not the whole board — without this, "8 tasks / 100%
+    # complete" reads as a claim about a board the Burndown page says is 36%
+    # done, and the two features look like they disagree.
+    scope_label = (snapshot.get('phase_tag')
+                   or retrospective.get_retrospective_type_display())
+
+    # Velocity is stored as tasks-completed-per-period (see
+    # _refresh_retrospective_metrics), so express the period alongside it rather
+    # than leaving a bare "8.00 tasks" to be read as a weekly rate.
+    period_weeks = None
+    velocity_per_week = None
+    if retrospective.period_start and retrospective.period_end:
+        period_days = (retrospective.period_end - retrospective.period_start).days
+        if period_days > 0:
+            period_weeks = period_days / 7
+            velocity = snapshot.get('velocity')
+            if velocity:
+                velocity_per_week = velocity / period_weeks
+
     context = {
         'board': board,
         'retrospective': retrospective,
@@ -170,6 +190,9 @@ def retrospective_detail(request, board_id, retro_id):
         'action_items': action_items,
         'metrics': metrics,
         'stats': stats,
+        'scope_label': scope_label,
+        'period_weeks': period_weeks,
+        'velocity_per_week': velocity_per_week,
         'is_demo_mode': False,
         'is_demo_board': False,
         'is_favorited': _is_fav(request.user, 'retrospective', retrospective.pk),
@@ -314,10 +337,21 @@ def retrospective_dashboard(request, board_id):
     all_lessons = LessonLearned.objects.filter(board=board)
     all_actions = RetrospectiveActionItem.objects.filter(board=board)
     
-    recurring_lessons = all_lessons.filter(is_recurring_issue=True).order_by('-recurrence_count', '-priority')
+    total_retrospectives = ProjectRetrospective.objects.filter(board=board).count()
+
+    # "Recurring" means the same issue surfaced in 2+ retrospectives, so the
+    # claim is only supportable once the board has 2+ retrospectives to compare.
+    # With a single retro the panel was asserting a recurrence its own data
+    # could not evidence (a "2x" badge with nothing to recur against).
+    if total_retrospectives >= 2:
+        recurring_lessons = all_lessons.filter(
+            is_recurring_issue=True
+        ).order_by('-recurrence_count', '-priority')
+    else:
+        recurring_lessons = all_lessons.none()
 
     stats = {
-        'total_retrospectives': ProjectRetrospective.objects.filter(board=board).count(),
+        'total_retrospectives': total_retrospectives,
         'total_lessons': all_lessons.count(),
         'lessons_implemented': all_lessons.filter(status__in=['implemented', 'validated']).count(),
         'implementation_rate': 0,
@@ -346,11 +380,30 @@ def retrospective_dashboard(request, board_id):
         count=Count('id')
     ).order_by('-count')[:5]
     
-    # Get pending high-priority actions
+    # Get urgent actions — overdue, or due within 48 hours.
+    #
+    # This used to filter on priority alone, so a high-priority item due in 8
+    # days appeared under "Urgent" on a board that also had genuinely overdue
+    # work. Urgency is a function of the clock, not the priority label: an
+    # untouched critical item due next month is important, not urgent.
+    # Items with no target date can never be overdue, so they are excluded.
+    _today = timezone.now().date()
+    _imminent_cutoff = _today + timedelta(days=2)
     urgent_actions = all_actions.filter(
         status__in=['pending', 'in_progress'],
-        priority__in=['high', 'critical']
-    ).order_by('-priority', 'target_completion_date')[:10]
+        target_completion_date__isnull=False,
+        target_completion_date__lte=_imminent_cutoff,
+    ).order_by('target_completion_date', '-priority')[:10]
+
+    # Everything else still worth surfacing: high/critical work that is not yet
+    # urgent. Keeps the important-but-not-urgent items visible without
+    # mislabelling them.
+    upcoming_actions = all_actions.filter(
+        status__in=['pending', 'in_progress'],
+        priority__in=['high', 'critical'],
+    ).exclude(
+        id__in=urgent_actions.values_list('id', flat=True)
+    ).order_by('target_completion_date', '-priority')[:5]
     
     # Calculate trend
     trend = None
@@ -371,6 +424,7 @@ def retrospective_dashboard(request, board_id):
         'metrics_data': metrics_data,
         'lessons_by_category': lessons_by_category,
         'urgent_actions': urgent_actions,
+        'upcoming_actions': upcoming_actions,
         'trend': trend,
         'recurring_lessons': recurring_lessons,
         'is_demo_mode': False,

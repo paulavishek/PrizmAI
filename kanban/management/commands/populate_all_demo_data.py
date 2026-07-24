@@ -973,8 +973,9 @@ class Command(BaseCommand):
 
         # ===================== IN REVIEW (2) =====================
         # R1 - OVERDUE SCENARIO: code review running 4 days past deadline.
-        # The daily refresh pins this task to always appear 4 days past-due
-        # (see _OVERDUE_PINS in demo_date_refresh.py).
+        # Seed offsets match OVERDUE_PINS in demo_date_refresh.py, which re-pins
+        # this task to the same 4-days-past-due on every refresh. Keep the two in
+        # sync — narrative text baked at seed time depends on them agreeing.
         out['R1'] = self._make_task(
             code='R1', title='Authentication System',
             description=('Implement the complete user authentication system: email/password '
@@ -985,7 +986,7 @@ class Command(BaseCommand):
                          'before this PR can be merged to main — the review was requested 4 days ago '
                          'and remains outstanding.'),
             column=col['In Review'], phase=PHASE_CORE, parent=epics['auth'],
-            priority='urgent', start_offset=-26, due_offset=-20, progress=90,
+            priority='urgent', start_offset=-10, due_offset=-4, progress=90,
             complexity=8, risk_l='low', risk_i='high', risk_level='medium',
             lss=LSS_VA, workload='high', collab=False,
             est_cost=5200, est_hours=60, hourly=87.5, actual_cost=4980,
@@ -1050,8 +1051,7 @@ class Command(BaseCommand):
             ],
         )
         # P2 - OVERDUE SCENARIO: rollback complexity caused 3-day slip.
-        # The daily refresh pins this task to always appear 3 days past-due
-        # (see _OVERDUE_PINS in demo_date_refresh.py).
+        # Seed offsets match OVERDUE_PINS in demo_date_refresh.py (3 days past due).
         out['P2'] = self._make_task(
             code='P2', title='Database Schema & Migrations',
             description=('Implement the full production database schema: write all Django '
@@ -1064,7 +1064,7 @@ class Command(BaseCommand):
                          'to a circular reference between Board and Organization that complicates '
                          'the rollback procedures.'),
             column=col['In Progress'], phase=PHASE_CORE, parent=epics['api'],
-            priority='high', start_offset=-31, due_offset=-19, progress=55,
+            priority='high', start_offset=-15, due_offset=-3, progress=55,
             complexity=7, risk_l='medium', risk_i='high', risk_level='high',
             lss=LSS_VA, workload='high', collab=False,
             est_cost=3800, est_hours=44, hourly=87.5, actual_cost=2090,
@@ -1079,9 +1079,8 @@ class Command(BaseCommand):
                 (self.priya, 'Migrations for all core tables are done. Currently working on the rollback procedures - they are more complex than estimated because of the circular reference between Board and Organization. May need 2 extra days.', 1),
             ],
         )
-        # P3 - OVERDUE SCENARIO: seed values are deeply negative so the task is
-        # overdue right after population. The daily refresh pins this task to
-        # always appear 8 days past-due (see _OVERDUE_PINS in demo_date_refresh.py).
+        # P3 - OVERDUE SCENARIO: overdue right after population.
+        # Seed offsets match OVERDUE_PINS in demo_date_refresh.py (8 days past due).
         out['P3'] = self._make_task(
             code='P3', title='Social Login Integration',
             description=('Implement OAuth 2.0 social login for Google and GitHub providers using '
@@ -1093,7 +1092,7 @@ class Command(BaseCommand):
                          'email first then try to login with social, manage token storage, implement '
                          'the consent screen flows, and add social login buttons to the authentication UI.'),
             column=col['In Progress'], phase=PHASE_CORE, parent=epics['auth'],
-            priority='high', start_offset=-26, due_offset=-24, progress=45,
+            priority='high', start_offset=-12, due_offset=-8, progress=45,
             complexity=6, risk_l='high', risk_i='medium', risk_level='high',
             lss=LSS_VA, workload='medium', collab=False,
             est_cost=3000, est_hours=34, hourly=87.5, actual_cost=1350,
@@ -2440,6 +2439,185 @@ class Command(BaseCommand):
             '(4 lessons, 5 action items, 3 improvement metrics)'
         )
 
+        self._create_phase2_retrospective(retrospective, lesson_estimation, demo_ai_model)
+
+    def _create_phase2_retrospective(self, phase1, phase1_estimation_lesson, demo_ai_model):
+        """Seed the Phase 2 mid-phase retrospective.
+
+        A second retrospective is required for the Improvement Dashboard to mean
+        anything: implementation rate, action completion and above all "Recurring
+        Themes — issues seen 2+ times" are cross-retrospective measures. With a
+        single retrospective the dashboard was asserting a recurrence its own
+        data could not evidence (a 2x badge with nothing to recur against), and
+        every percentage was an n=1 statistic.
+
+        The estimation lesson deliberately recurs here — it is the same
+        underlying issue Phase 1 identified, resurfacing because the planning
+        -poker action item is still pending. That makes recurrence_count=2 a
+        fact the user can verify by opening both retrospectives, and it lines up
+        with the AI Coach's "Mid-Phase retrospective recommended" card.
+        """
+        retro2 = ProjectRetrospective.objects.create(
+            board=self.board,
+            title='Phase 2 Core Development Mid-Phase Retrospective',
+            retrospective_type='milestone',
+            status='finalized',
+            period_start=(self.NOW - timedelta(days=20)).date(),
+            period_end=(self.NOW - timedelta(days=3)).date(),
+            metrics_snapshot={
+                'phase_tag': PHASE_CORE,
+                'total_tasks': 12, 'completed_tasks': 5, 'completion_rate': 41.7,
+                'velocity': 5, 'avg_completion_time': 9.2,
+                'quality_score': 8.4, 'budget_variance': 4.1,
+            },
+            what_went_well=(
+                'The ADR-first workflow adopted after Phase 1 held — no architecture '
+                'decision was reversed mid-implementation this phase. RBAC shipped with '
+                'the security review run at the start of the window rather than the end, '
+                'so the two findings were remediated with a week of slack. The Docker '
+                'onboarding guide let a new contributor open their first PR on day one.'
+            ),
+            what_needs_improvement=(
+                'Estimation on complex tasks is still the weak point: Social Login '
+                'Integration and Database Schema & Migrations both ran past their due '
+                'dates, and neither had acceptance criteria detailed enough to size '
+                'confidently — the same failure Phase 1 identified. The planning-poker '
+                'action item from Phase 1 is still pending, so nothing has actually '
+                'changed about how these tasks get estimated. Work is also concentrating '
+                'on one assignee, leaving the phase exposed to a single point of failure.'
+            ),
+            key_achievements=[
+                'ADR-first workflow adopted with zero mid-implementation reversals',
+                'RBAC delivered with the security review front-loaded, not retrofitted',
+                'Docker onboarding guide cut new-contributor ramp to under a day',
+            ],
+            lessons_learned=[
+                {'lesson': 'Tasks with hidden complexity need detailed acceptance criteria before estimation',
+                 'priority': 'high', 'category': 'planning'},
+                {'lesson': 'Concentrating a phase on one assignee creates a single point of failure',
+                 'priority': 'high', 'category': 'process'},
+            ],
+            improvement_recommendations=[],
+            overall_sentiment_score=Decimal('0.71'),
+            team_morale_indicator='moderate',
+            performance_trend='stable',
+            previous_retrospective=phase1,
+            ai_generated_at=self.NOW - timedelta(days=3),
+            ai_confidence_score=Decimal('0.86'),
+            ai_model_used=demo_ai_model,
+            created_by=self.priya,
+            finalized_by=self.priya,
+            finalized_at=self.NOW - timedelta(days=3),
+        )
+
+        # The Phase 1 estimation lesson is now genuinely evidenced as recurring:
+        # it is the second retrospective in a row to raise it.
+        recurrence = LessonLearned.objects.create(
+            retrospective=retro2, board=self.board,
+            title='Tasks with hidden complexity need detailed acceptance criteria before estimation',
+            description=('Social Login Integration and Database Schema & Migrations both '
+                         'overran. Neither had acceptance criteria specific enough to size, '
+                         'which is the same root cause Phase 1 recorded — the planning-poker '
+                         'action item from that retrospective has not been actioned yet.'),
+            category='planning', priority='high',
+            trigger_event='Two Phase 2 tasks passed their due dates with the same estimation failure as Phase 1.',
+            impact_description='Phase 2 completion slipped and the Core Authentication milestone is now at risk.',
+            recommended_action='Action the pending planning-poker item before estimating the remaining Phase 2 work.',
+            action_owner=self.priya, status='identified',
+            is_recurring_issue=True, recurrence_count=2,
+            expected_benefit='Reliable estimates on the remaining complex work.',
+            ai_suggested=True, ai_confidence=Decimal('0.87'),
+        )
+        recurrence.related_lessons.add(phase1_estimation_lesson)
+        # Mirror the link on the Phase 1 lesson so the recurrence reads from
+        # either end, and keep both counts consistent at 2.
+        phase1_estimation_lesson.recurrence_count = 2
+        phase1_estimation_lesson.save(update_fields=['recurrence_count'])
+
+        LessonLearned.objects.create(
+            retrospective=retro2, board=self.board,
+            title='Concentrating a phase on one assignee creates a single point of failure',
+            description=('Most of the in-flight Phase 2 work sits with one assignee, so every '
+                         'overdue item traces back to the same person and no amount of '
+                         'reprioritisation inside their queue recovers the milestone.'),
+            category='process', priority='high',
+            trigger_event='All overdue Phase 2 work resolved to a single assignee.',
+            impact_description='No slack in the schedule: one person’s week determines the milestone date.',
+            recommended_action='Spread the remaining Phase 2 critical path across at least two assignees.',
+            action_owner=self.priya, status='in_progress',
+            expected_benefit='Milestone stops depending on one person’s availability.',
+            ai_suggested=True, ai_confidence=Decimal('0.83'),
+        )
+
+        action_specs2 = [
+            dict(title='Run planning poker on the remaining Phase 2 estimates',
+                 description=('Apply the Phase 1 planning-poker action to the unstarted Phase 2 '
+                              'work before committing to dates, starting with the tasks that '
+                              'have the thinnest acceptance criteria.'),
+                 action_type='process_change', priority='critical',
+                 expected_impact='Estimates on remaining complex work stop being guesses.',
+                 owner=self.priya, status='pending', progress=0,
+                 target=(self.NOW + timedelta(days=1)).date()),
+            dict(title='Redistribute the Phase 2 critical path across two assignees',
+                 description=('Move at least one in-flight critical-path task to a second '
+                              'assignee so the milestone is not gated on one person.'),
+                 action_type='process_change', priority='high',
+                 expected_impact='Milestone risk no longer concentrated on a single assignee.',
+                 owner=self.marcus, status='in_progress', progress=40,
+                 target=(self.NOW + timedelta(days=5)).date()),
+            dict(title='Backfill acceptance criteria on in-flight Phase 2 tasks',
+                 description=('Use the Phase 1 acceptance-criteria template on the Phase 2 tasks '
+                              'already in progress, so re-estimation has something to work from.'),
+                 action_type='documentation', priority='medium',
+                 expected_impact='Fewer revision rounds on the remaining Phase 2 work.',
+                 owner=self.elena, status='completed', progress=100,
+                 actual=(self.NOW - timedelta(days=2)).date(),
+                 actual_impact='Acceptance criteria added to all in-flight Phase 2 tasks.'),
+        ]
+        for spec in action_specs2:
+            RetrospectiveActionItem.objects.create(
+                retrospective=retro2, board=self.board,
+                title=spec['title'], description=spec['description'],
+                action_type=spec['action_type'], priority=spec['priority'],
+                expected_impact=spec['expected_impact'],
+                status=spec['status'], progress_percentage=spec['progress'],
+                assigned_to=spec['owner'],
+                target_completion_date=spec.get('target'),
+                actual_completion_date=spec.get('actual'),
+                actual_impact=spec.get('actual_impact', ''),
+                ai_suggested=True, ai_confidence=Decimal('0.84'),
+            )
+
+        # previous_value lets the dashboard show a real phase-over-phase delta
+        # instead of a bare number with no baseline.
+        metric_specs2 = [
+            ('velocity', 'Team Velocity', Decimal('5'), Decimal('8'), 'tasks', True),
+            ('quality', 'Completion Rate', Decimal('41.7'), Decimal('100'), 'percentage', True),
+            ('cycle_time', 'Average Completion Time', Decimal('9.2'), Decimal('7.6'), 'days', False),
+        ]
+        for mtype, mname, value, prev, unit, higher_better in metric_specs2:
+            change = value - prev
+            change_pct = (change / prev * 100) if prev else Decimal('0')
+            if change == 0:
+                trend = 'stable'
+            elif (change > 0) == higher_better:
+                trend = 'improving'
+            else:
+                trend = 'declining'
+            ImprovementMetric.objects.create(
+                board=self.board, retrospective=retro2,
+                metric_type=mtype, metric_name=mname, metric_value=value,
+                previous_value=prev, change_amount=change,
+                change_percentage=round(change_pct, 2), trend=trend,
+                unit_of_measure=unit, higher_is_better=higher_better,
+                measured_at=retro2.period_end,
+            )
+
+        self.stdout.write(
+            '  [OK] Phase 2 retrospective created '
+            '(2 lessons incl. 1 recurring, 3 action items, 3 improvement metrics)'
+        )
+
     # ------------------------------------------------------------------
     # Chat rooms
     # ------------------------------------------------------------------
@@ -2512,15 +2690,43 @@ class Command(BaseCommand):
         ).count()
         _scope_baseline = max(_scope_current - _scope_added, 1)
         _scope_pct = round((_scope_added / _scope_baseline) * 100, 1)
+
+        # Derive the overload card from the live board via the single source of
+        # truth for "overdue" (Task.overdue_for_boards), exactly as the
+        # scope-creep card derives its figures. The card used to hard-code a
+        # "3 overdue tasks" narrative naming Database Schema & Migrations and
+        # Authentication System — both of which are seeded into Done, so a user
+        # counting the board found one overdue task, not three, and the count
+        # also contradicted Focus Today and the conflict cards.
+        _overdue = Task.overdue_for_boards([self.board.id])
+        _priya_overdue = [t for t in _overdue if t.assigned_to_id == self.priya.id]
+        _n = len(_priya_overdue)
+        if _priya_overdue:
+            _detail = ', '.join(
+                f'{t.title} ({t.progress}% complete, {t.days_overdue} days past due)'
+                for t in _priya_overdue
+            )
+            _overload_title = (
+                f'Priya Sharma has {_n} overdue task{"s" if _n != 1 else ""} '
+                f'blocking the phase milestone'
+            )
+            _overload_message = (
+                f'Priya is the assignee on {_n} overdue '
+                f'task{"s" if _n != 1 else ""}: {_detail}. '
+                f'Redistribution is recommended to unblock the phase milestone.'
+            )
+        else:
+            _overload_title = 'Priya Sharma is carrying the critical path'
+            _overload_message = (
+                'Priya is the assignee on the tasks gating the phase milestone. '
+                'Redistribution is recommended to protect the milestone date.'
+            )
+
         items = [
             dict(
                 suggestion_type='resource_overload', severity='critical', status='active',
-                title='Priya Sharma is critically overloaded — 3 overdue tasks',
-                message=('Priya is the assignee on three overdue tasks simultaneously: '
-                         'Social Login Integration (P3, 45%, 8 days past due), '
-                         'Database Schema & Migrations (P2, 55%, 3 days past due), and '
-                         'Authentication System (R1, 90%, 4 days past due in code review). '
-                         'Immediate redistribution is recommended to unblock the phase milestone.'),
+                title=_overload_title,
+                message=_overload_message,
                 recommended_actions=[
                     {'action': 'Reassign Social Login Integration (P3) to Marcus Chen'},
                     {'action': 'Pair Marcus with Priya on the GitHub OAuth scope workaround'},
@@ -2564,6 +2770,18 @@ class Command(BaseCommand):
                 task=None, days_ago=4,
             ),
         ]
+        # Reflect the configured provider's 'complex' tier — the same tier
+        # AICoachService actually requests — instead of hardcoding a model
+        # string, which made the demo claim a model it may never have called
+        # (and disagreed with the retrospective's model on the same board).
+        from ai_assistant.utils.ai_router import AIRouter
+        from ai_assistant.models import OrganizationAISettings
+        try:
+            _provider = self.board.workspace.ai_settings.provider or 'gemini'
+        except (OrganizationAISettings.DoesNotExist, AttributeError):
+            _provider = 'gemini'
+        _coach_model = AIRouter.get_model_name(_provider, 'complex')
+
         for it in items:
             days_ago = it.pop('days_ago')
             ack_user = self.priya if it['status'] == 'acknowledged' else None
@@ -2573,7 +2791,7 @@ class Command(BaseCommand):
                 acknowledged_by=ack_user,
                 acknowledged_at=ack_at,
                 generation_method='hybrid',
-                ai_model_used='gemini-2.5-flash',
+                ai_model_used=_coach_model,
                 confidence_score=Decimal('0.82'),
                 **it,
             )

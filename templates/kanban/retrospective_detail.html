@@ -51,15 +51,19 @@
             <div class="card text-center">
                 <div class="card-body">
                     <h4>{{ stats.total_tasks|default:0 }}</h4>
+                    {# Scope-qualified: these tiles describe this retrospective's
+                       period only, not the whole board. #}
                     <p class="text-muted mb-0">Total Tasks</p>
+                    {% if scope_label %}<small class="text-muted">{{ scope_label }} scope</small>{% endif %}
                 </div>
             </div>
         </div>
         <div class="col-md-3">
             <div class="card text-center">
                 <div class="card-body">
-                    <h4>{{ stats.completion_rate|floatformat:1|default:0 }}%</h4>
+                    <h4>{{ stats.completion_rate|floatformat:0|default:0 }}%</h4>
                     <p class="text-muted mb-0">Completion Rate</p>
+                    {% if scope_label %}<small class="text-muted">{{ scope_label }} scope</small>{% endif %}
                 </div>
             </div>
         </div>
@@ -251,7 +255,25 @@
                     <div class="card">
                         <div class="card-body">
                             <h6 class="text-muted">{{ metric.metric_name }}</h6>
-                            <h3>{{ metric.metric_value }} <small class="text-muted">{{ metric.unit_of_measure }}</small></h3>
+                            {# Units were rendering raw as "100.00 percentage" / "8.00 tasks"
+                               with no period. Format per unit, and qualify velocity with the
+                               period it was measured over. #}
+                            <h3>
+                                {% if metric.unit_of_measure == 'percentage' %}
+                                    {{ metric.metric_value|floatformat:0 }}<small class="text-muted">%</small>
+                                {% elif metric.unit_of_measure == 'days' %}
+                                    {{ metric.metric_value|floatformat:1 }} <small class="text-muted">days</small>
+                                {% elif metric.unit_of_measure == 'tasks' %}
+                                    {{ metric.metric_value|floatformat:0 }} <small class="text-muted">tasks</small>
+                                {% else %}
+                                    {{ metric.metric_value|floatformat:2 }} <small class="text-muted">{{ metric.unit_of_measure }}</small>
+                                {% endif %}
+                            </h3>
+                            {% if metric.metric_type == 'velocity' and period_weeks %}
+                            <small class="text-muted d-block mb-1">
+                                over {{ period_weeks|floatformat:1 }} weeks ({{ velocity_per_week|floatformat:1 }}/week)
+                            </small>
+                            {% endif %}
                             {% if metric.change_percentage %}
                             <span class="badge bg-{% if metric.trend == 'improving' %}success{% elif metric.trend == 'declining' %}danger{% else %}secondary{% endif %}"
                                   title="Sprint-over-sprint change" data-bs-toggle="tooltip">

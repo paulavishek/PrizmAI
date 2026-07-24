@@ -72,8 +72,15 @@
         <div class="col-md-3">
             <div class="card border-warning">
                 <div class="card-body text-center">
+                    {% if effectiveness.effectiveness_reliable %}
                     <h3 class="mb-0 text-warning">{{ effectiveness.overall_score|floatformat:0 }}%</h3>
+                    {% else %}
+                    <h3 class="mb-0 text-muted">—</h3>
+                    {% endif %}
                     <p class="text-muted mb-0">Effectiveness Score</p>
+                    {% if not effectiveness.effectiveness_reliable %}
+                    <small class="text-muted">needs {{ effectiveness.min_ratings }}+ ratings</small>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -179,16 +186,24 @@
                     <div class="row">
                         <div class="col-md-3">
                             <div class="text-center p-3 border rounded">
+                                {% if effectiveness.action_rate_reliable %}
                                 <h4 class="mb-0 text-primary">{{ effectiveness.action_rate|floatformat:0 }}%</h4>
+                                {% else %}
+                                <h4 class="mb-0 text-muted">—</h4>
+                                {% endif %}
                                 <p class="text-muted mb-0 small">Action Rate</p>
-                                <small class="text-muted">Suggestions acted upon</small>
+                                <small class="text-muted">{% if effectiveness.action_rate_reliable %}{{ effectiveness.acted_on }} of {{ effectiveness.total_suggestions }} acted upon{% else %}needs {{ effectiveness.min_ratings }}+ suggestions{% endif %}</small>
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="text-center p-3 border rounded">
+                                {% if effectiveness.helpful_rate_reliable %}
                                 <h4 class="mb-0 text-success">{{ effectiveness.helpful_rate|floatformat:0 }}%</h4>
+                                {% else %}
+                                <h4 class="mb-0 text-muted">—</h4>
+                                {% endif %}
                                 <p class="text-muted mb-0 small">Helpful Rate</p>
-                                <small class="text-muted">Marked as helpful</small>
+                                <small class="text-muted">{% if effectiveness.helpful_rate_reliable %}{{ effectiveness.helpful_count }} of {{ effectiveness.feedback_count }} marked helpful{% else %}needs {{ effectiveness.ratings_needed }} more rating{{ effectiveness.ratings_needed|pluralize }}{% endif %}</small>
                             </div>
                         </div>
                         <div class="col-md-3">

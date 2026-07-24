@@ -280,6 +280,32 @@ Example Learning:
 - Best practice recommendations
 - Process improvements
 
+### How the Numbers Are Defined
+
+Every PrizmAI panel that reports these signals reads the same definition, so the
+AI Coach, Focus Today, the conflict cards and the board badges never quote
+different figures for the same board.
+
+| Term | Definition | Source of truth |
+|------|-----------|-----------------|
+| **Overdue** | Due date has passed **and** the work is not finished (progress < 100 *and* not in a done-type column). Epics excluded — their due date mirrors their children, so counting them double-counts the same slip. | `Task.overdue_for_boards()` |
+| **Stalled** | Days the card has sat in its **current column** — the same measure as the aging badge on the card. Deliberately *not* last-edit time: `updated_at` is bumped by any edit, so renaming a card would make it look unstalled. | `Task.stalled_for_boards()` |
+| **Load %** | How busy someone is against a recommended maximum of 10 concurrent tasks. **Higher = busier.** 100% = at capacity, 120% = overloaded, 40% = has room. Never phrased as "capacity", which reads backwards. | `CoachingRuleEngine._load_percent()` |
+
+**Coaching Effectiveness** = 40% Helpful Rate + 40% Action Rate + 20% average
+relevance rating (1–5, scaled to 100). All three percentages are **suppressed
+below 5 ratings** and shown as "—" instead: a rate computed from a single
+thumbs-up is noise, not a measurement.
+
+**Cross-suggestion consistency.** Suggestions are reconciled against each other
+before display, so the coach never recommends loading work onto someone another
+card has just named as the relief valve for an overloaded teammate.
+
+**Model disclosure.** Each suggestion reports its `Generation Method`
+(Rule / AI / Hybrid), its confidence score, and the model that actually produced
+it. PrizmAI routes by task complexity, so different features may legitimately
+show different model names — the tier is labelled alongside.
+
 ### Benefits
 
 ✅ **Proactive Management** - Catch issues before they become problems  
@@ -289,6 +315,7 @@ Example Learning:
 ✅ **Risk Mitigation** - Early warning for project threats  
 ✅ **Time Saving** - No need to constantly analyze project metrics  
 ✅ **Transparent Reasoning** - Understand why each suggestion is made  
+✅ **Consistent Numbers** - Every panel reads one shared definition  
 ✅ **Scalable Mentoring** - Works as your team and projects grow  
 
 ---

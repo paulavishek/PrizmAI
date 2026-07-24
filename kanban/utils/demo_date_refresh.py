@@ -527,6 +527,24 @@ def _is_seed_demo_data(obj):
 # deadlines they're written to overlap (e.g. "Marcus Chen - PTO" and
 # "Focus Block: File Upload Review" both pin to the same day-offset as the
 # "File Upload System" task's due date).
+# Known overdue scenarios, pinned to fixed day-offsets from "today" so the demo
+# always shows the same realistic deadline slippage no matter how many refreshes
+# have elapsed. days_started / days_overdue = days before today each date lands.
+#
+# days_started must keep each task starting AFTER its predecessor finishes
+# (Security Architecture Patterns lands at today-12 after the uniform shift), so
+# the Gantt never shows a task beginning before the work it depends on.
+#
+# Module-level and public because populate_all_demo_data imports it: the seeder
+# and the refresher must produce the SAME days-overdue, or narrative text baked
+# at seed time (the AI Coach overload card) contradicts the board after the first
+# refresh. One definition, both paths.
+OVERDUE_PINS = {
+    'Social Login Integration':     {'days_started': 12, 'days_overdue': 8},
+    'Authentication System':        {'days_started': 10, 'days_overdue': 4},
+    'Database Schema & Migrations': {'days_started': 15, 'days_overdue': 3},
+}
+
 _CALENDAR_EVENT_PINS = {
     'Daily Standup':                       {'day_offset': 0,  'time': (9, 0),  'duration_min': 15},
     'Sprint 3 Planning':                   {'day_offset': 2,  'time': (10, 0), 'duration_min': 90},
@@ -706,26 +724,37 @@ def _refresh_task_dates(now, base_date):
         # After the uniform shift, pin known overdue scenarios to fixed offsets
         # from today so the demo always shows realistic deadline slippage
         # regardless of how many daily refreshes have elapsed.
-        # days_started / days_overdue = how many days before today each date lands.
-        # days_started must keep each task starting AFTER its predecessor
-        # finishes (Security Architecture Patterns lands at today-12 after the
-        # uniform shift), so the Gantt never shows a task beginning before the
-        # work it depends on.
-        _OVERDUE_PINS = {
-            'Social Login Integration':     {'days_started': 12, 'days_overdue': 8},
-            'Authentication System':        {'days_started': 10, 'days_overdue': 4},
-            'Database Schema & Migrations': {'days_started': 15, 'days_overdue': 3},
-        }
-        for task in tasks_to_update:
-            pin = _OVERDUE_PINS.get(task.title)
-            if pin and getattr(task, 'progress', 100) < 100:
-                task.start_date = base_date - timedelta(days=pin['days_started'])
-                task.due_date = timezone.make_aware(
-                    _dt.datetime.combine(
-                        base_date - timedelta(days=pin['days_overdue']),
-                        _dt.time(12, 0),
-                    )
+        # Pin over ALL demo tasks, not just the ones the uniform shift touched.
+        # The shift loop `continue`s a board whose dates are already current
+        # (shift == 0), which left tasks_to_update empty — so on any board that
+        # had already been refreshed, the pins silently never applied and the
+        # overdue scenarios drifted with real time (observed: 25/21/20 days past
+        # due instead of the intended 8/4/3). That drift is what made the AI
+        # Coach card, the conflict cards and Focus Today each quote a different
+        # number of days overdue for the same three tasks.
+        _pinned_dirty = []
+        for task in tasks:
+            pin = OVERDUE_PINS.get(task.title)
+            if not pin:
+                continue
+            # A task that has been completed is no longer an overdue scenario —
+            # pinning it would resurrect a deadline the board has moved past.
+            if (getattr(task, 'progress', 0) or 0) >= 100:
+                continue
+            task.start_date = base_date - timedelta(days=pin['days_started'])
+            task.due_date = timezone.make_aware(
+                _dt.datetime.combine(
+                    base_date - timedelta(days=pin['days_overdue']),
+                    _dt.time(12, 0),
                 )
+            )
+            _pinned_dirty.append(task)
+
+        # Merge pinned tasks into the update set without duplicating rows.
+        _update_ids = {id(t) for t in tasks_to_update}
+        for task in _pinned_dirty:
+            if id(task) not in _update_ids:
+                tasks_to_update.append(task)
 
         if tasks_to_update:
             Task.objects.bulk_update(
@@ -1117,6 +1146,7 @@ def _refresh_retrospective_metrics():
     only avg_completion_time genuinely varies run to run.
     """
     try:
+        from decimal import Decimal
         from kanban.models import Task
         from kanban.retrospective_models import ProjectRetrospective, ImprovementMetric
 
@@ -1172,6 +1202,23 @@ def _refresh_retrospective_metrics():
 
             for metric in retro.metrics.filter(metric_type__in=metric_values.keys()):
                 metric.metric_value = metric_values[metric.metric_type]
+                # Recompute the delta fields alongside the value. Updating
+                # metric_value alone left change_amount / change_percentage /
+                # trend describing the PREVIOUS value, so a cycle time that had
+                # fallen (an improvement) could still render a red "declining"
+                # badge next to its new, better number.
+                if metric.previous_value:
+                    prev = Decimal(str(metric.previous_value))
+                    new = Decimal(str(metric.metric_value))
+                    change = new - prev
+                    metric.change_amount = change
+                    metric.change_percentage = round((change / prev) * 100, 2)
+                    if change == 0:
+                        metric.trend = 'stable'
+                    elif (change > 0) == bool(metric.higher_is_better):
+                        metric.trend = 'improving'
+                    else:
+                        metric.trend = 'declining'
                 metrics_to_update.append(metric)
 
         if retrospectives_to_update:
@@ -1180,7 +1227,9 @@ def _refresh_retrospective_metrics():
             )
         if metrics_to_update:
             ImprovementMetric.objects.bulk_update(
-                metrics_to_update, ['metric_value'], batch_size=100
+                metrics_to_update,
+                ['metric_value', 'change_amount', 'change_percentage', 'trend'],
+                batch_size=100,
             )
 
         return len(retrospectives_to_update)

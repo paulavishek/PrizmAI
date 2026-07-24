@@ -592,10 +592,20 @@
     <!-- Effectiveness Stats -->
     {% if effectiveness.effectiveness_score or effectiveness.action_rate or effectiveness.helpful_rate or total_active %}
     <div class="stats-row">
+        {# Percentages are suppressed below effectiveness.min_ratings ratings — a
+           rate computed from one thumbs-up is noise, and used to swing this row
+           from 0% to 100% on a single click. #}
         <div class="stat-card">
             <i class="fas fa-trophy" style="color: #fbbf24; font-size: 24px; margin-bottom: 10px;"></i>
+            {% if effectiveness.effectiveness_reliable %}
             <span class="stat-value">{{ effectiveness.effectiveness_score|default:0|floatformat:0 }}%</span>
-            <div class="stat-label">Coaching Effectiveness <span data-bs-toggle="tooltip" data-bs-placement="top" title="Coaching Effectiveness is calculated based on your action rate, helpful ratings, and suggestion resolution. Higher engagement with suggestions improves this score." style="cursor:help; color:#9ca3af; font-size:13px;">ℹ</span></div>
+            {% else %}
+            <span class="stat-value text-muted">—</span>
+            {% endif %}
+            <div class="stat-label">Coaching Effectiveness <span data-bs-toggle="tooltip" data-bs-placement="top" title="Weighted score: 40% Helpful Rate + 40% Action Rate + 20% average relevance rating (1-5, scaled). Shown only once there are at least {{ effectiveness.min_ratings }} ratings, so a single rating can't swing it." style="cursor:help; color:#9ca3af; font-size:13px;">ℹ</span></div>
+            {% if not effectiveness.effectiveness_reliable %}
+            <div class="stat-label text-muted mt-1" style="text-transform:none; font-weight:400;">needs {{ effectiveness.min_ratings }}+ ratings</div>
+            {% endif %}
         </div>
         <div class="stat-card">
             <i class="fas fa-lightbulb" style="color: #667eea; font-size: 24px; margin-bottom: 10px;"></i>
@@ -604,13 +614,31 @@
         </div>
         <div class="stat-card">
             <i class="fas fa-check-circle" style="color: #10b981; font-size: 24px; margin-bottom: 10px;"></i>
+            {% if effectiveness.action_rate_reliable %}
             <span class="stat-value">{{ effectiveness.action_rate|default:0|floatformat:0 }}%</span>
+            {% else %}
+            <span class="stat-value text-muted">—</span>
+            {% endif %}
             <div class="stat-label">Action Rate</div>
+            {% if effectiveness.action_rate_reliable %}
+            <div class="stat-label text-muted mt-1" style="text-transform:none; font-weight:400;">{{ effectiveness.acted_on }} of {{ effectiveness.total_suggestions }} acted on</div>
+            {% else %}
+            <div class="stat-label text-muted mt-1" style="text-transform:none; font-weight:400;">needs {{ effectiveness.min_ratings }}+ suggestions</div>
+            {% endif %}
         </div>
         <div class="stat-card">
             <i class="fas fa-thumbs-up" style="color: #3b82f6; font-size: 24px; margin-bottom: 10px;"></i>
+            {% if effectiveness.helpful_rate_reliable %}
             <span class="stat-value">{{ effectiveness.helpful_rate|default:0|floatformat:0 }}%</span>
+            {% else %}
+            <span class="stat-value text-muted">—</span>
+            {% endif %}
             <div class="stat-label">Helpful Rate</div>
+            {% if effectiveness.helpful_rate_reliable %}
+            <div class="stat-label text-muted mt-1" style="text-transform:none; font-weight:400;">{{ effectiveness.helpful_count }} of {{ effectiveness.feedback_count }} rated helpful</div>
+            {% else %}
+            <div class="stat-label text-muted mt-1" style="text-transform:none; font-weight:400;">needs {{ effectiveness.ratings_needed }} more rating{{ effectiveness.ratings_needed|pluralize }}</div>
+            {% endif %}
         </div>
     </div>
     {% else %}

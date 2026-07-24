@@ -1615,6 +1615,56 @@ class Task(models.Model):
         out.sort(key=lambda t: t.days_in_column, reverse=True)
         return out
 
+    # ------------------------------------------------------------------
+    # Overdue — SINGLE SOURCE OF TRUTH
+    # ------------------------------------------------------------------
+    # overdue_for_boards() is the one server-side definition of "overdue".
+    # Four surfaces used to each roll their own (Focus Today, AI Coach, the
+    # conflict cards and the briefing), producing four different counts for the
+    # same board. The rule, once, is:
+    #
+    #   due_date has passed  AND  the work is not finished
+    #
+    # "not finished" means progress < 100 *and* the task is not sitting in a
+    # done-type column (a card can be dragged to Done without its progress
+    # field being touched, and a 100%-progress card can sit outside Done).
+    # Epics are excluded: they are roll-up containers whose due date mirrors
+    # their children, so counting them double-counts the same slip.
+    #
+    # Do NOT re-derive "overdue" from due_date alone in any consumer.
+    @classmethod
+    def overdue_for_boards(cls, board_ids, now=None, include_milestones=False):
+        """Return not-finished tasks whose due date has passed, each annotated
+        with a ``days_overdue`` attribute, ordered most-overdue first.
+
+        ``include_milestones`` adds item_type='milestone' rows; off by default
+        because a milestone is a marker for work counted elsewhere.
+        """
+        from kanban.column_semantics import is_done_column
+
+        if now is None:
+            now = timezone.now()
+        today = timezone.localdate()
+
+        types = ['task', 'milestone'] if include_milestones else ['task']
+        qs = (
+            cls.objects
+            .filter(column__board_id__in=board_ids, item_type__in=types,
+                    due_date__isnull=False, due_date__lt=now)
+            .select_related('column__board', 'assigned_to')
+        )
+        out = []
+        for task in qs:
+            if (task.progress or 0) >= 100:
+                continue
+            if is_done_column(task.column):
+                continue
+            due_local = timezone.localtime(task.due_date).date()
+            task.days_overdue = (today - due_local).days
+            out.append(task)
+        out.sort(key=lambda t: t.days_overdue, reverse=True)
+        return out
+
     @staticmethod
     def compute_progress_status(progress, due_date, start_date, now=None):
         """Pure computation of the schedule-status badge from raw field values.

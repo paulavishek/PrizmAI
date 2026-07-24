@@ -7,7 +7,9 @@
             </span>
             <span class="badge bg-secondary ms-2">{{ suggestion.get_suggestion_type_display }}</span>
             <span class="days-active">
-                <i class="far fa-clock me-1"></i>{{ suggestion.days_active }} day{{ suggestion.days_active|pluralize }} ago
+                {# timesince gives "2 hours"/"3 days" — days_active floors to whole
+                   days, so a suggestion generated this morning read "0 days ago". #}
+                <i class="far fa-clock me-1"></i>{{ suggestion.created_at|timesince }} ago
             </span>
         </div>
         <div class="d-flex align-items-center gap-2">
@@ -166,14 +168,20 @@
         </span>
         {% endif %}
         
-        <button onclick="provideFeedback({{ suggestion.id }})" class="btn-feedback">
+        <button onclick="provideFeedback({{ suggestion.id }})" class="btn-feedback"
+                title="Rate this suggestion. Comments you leave are visible to your team.">
             <i class="fas fa-comment me-2"></i>Provide Feedback
         </button>
-        
+
         <button onclick="dismissSuggestion({{ suggestion.id }})" class="btn-dismiss">
             <i class="fas fa-times me-2"></i>Dismiss
         </button>
     </div>
+    {# Surfaced on the card, not just inside the feedback form — that comments are
+       team-visible is a reason to leave one, so it belongs where the decision is made. #}
+    <small class="text-muted d-block mt-2">
+        <i class="fas fa-users me-1"></i>Feedback comments are visible to your team.
+    </small>
 
 
 </div>

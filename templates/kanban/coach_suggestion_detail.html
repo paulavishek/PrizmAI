@@ -426,7 +426,14 @@
             </div>
             <div class="col-md-6">
                 <p class="mb-1"><strong>Generation Method:</strong> {{ suggestion.get_generation_method_display }}</p>
-                <p class="mb-0"><strong>AI Model:</strong> {{ suggestion.ai_model_used }}</p>
+                <p class="mb-1"><strong>AI Model:</strong> {{ suggestion.ai_model_used }}
+                    <span class="badge bg-secondary ms-1">complex tier</span>
+                </p>
+                <p class="mb-0 small text-muted">
+                    <i class="fas fa-info-circle me-1"></i>PrizmAI routes each request to a
+                    model tier by task complexity, so different features can legitimately
+                    show different model names.
+                </p>
             </div>
         </div>
     </div>
