@@ -72,9 +72,17 @@ def _collect_board_snapshot(board):
 
     # "Done" columns heuristic
     done_q = Q(column__name__icontains='done') | Q(column__name__icontains='complete')
-    overdue_count = tasks.filter(
-        due_date__lt=now
-    ).exclude(done_q).count()
+    overdue_qs = tasks.filter(due_date__lt=now).exclude(done_q)
+    overdue_count = overdue_qs.count()
+    # Concrete overdue task detail (title + assignee) so the AI reasons about the
+    # REAL overdue items instead of treating "overdue" as an abstract count. This
+    # is what stops it saying "the single overdue task" when there are three.
+    overdue_detail = []
+    for t in overdue_qs.select_related('assigned_to')[:8]:
+        assignee = (
+            t.assigned_to.get_full_name() or t.assigned_to.username
+        ) if t.assigned_to else 'Unassigned'
+        overdue_detail.append({'title': t.title, 'assignee': assignee})
 
     unassigned_count = tasks.filter(assigned_to__isnull=True).count()
     no_deadline_count = tasks.filter(due_date__isnull=False).count()
@@ -88,6 +96,28 @@ def _collect_board_snapshot(board):
         .distinct()
     )
     team_size = len(member_ids | assignee_ids)
+
+    # Per-assignee task breakdown + real member names so the AI can name the
+    # actual single-point-of-failure person (matching Stress Test / AI Coach)
+    # instead of inventing or guessing at a persona.
+    assignee_counts = (
+        tasks.exclude(assigned_to=None)
+        .values(
+            'assigned_to__username',
+            'assigned_to__first_name',
+            'assigned_to__last_name',
+        )
+        .annotate(n=Count('id'))
+        .order_by('-n')
+    )
+    assignee_breakdown = {}
+    for row in assignee_counts:
+        name = (
+            f"{row['assigned_to__first_name']} {row['assigned_to__last_name']}".strip()
+            or row['assigned_to__username']
+        )
+        assignee_breakdown[name] = row['n']
+    member_names = list(assignee_breakdown.keys())
 
     # Timeline
     project_deadline = board.project_deadline  # may be None
@@ -135,9 +165,12 @@ def _collect_board_snapshot(board):
         'task_count': task_count,
         'high_priority_count': high_priority_count,
         'overdue_count': overdue_count,
+        'overdue_detail': overdue_detail,
         'unassigned_count': unassigned_count,
         'no_deadline_count': no_deadline_count,
         'team_size': team_size,
+        'member_names': member_names,
+        'assignee_breakdown': assignee_breakdown,
         'start_date': str(start_date),
         'project_deadline': str(project_deadline) if project_deadline else None,
         'days_available': days_available,
@@ -162,7 +195,23 @@ def _build_gemini_prompt(snapshot):
         "- Be specific to THIS project's actual data. Use the real numbers provided.\n"
         "- Do NOT give generic project management advice.\n"
         "- Do NOT be reassuring or diplomatic. Be direct about risks.\n"
-        "- Each failure scenario must be distinct — no overlapping causes.\n"
+        "- Each failure scenario must be distinct — no overlapping causes. In "
+        "particular, do NOT produce two scenarios that are really the same "
+        "problem described from different angles (e.g. one 'dependency conflict' "
+        "scenario and one 'resource conflict' scenario that both prescribe "
+        "re-ordering/re-balancing the same blocked tasks). If the board only has "
+        "a few distinct failure modes, cover different ones (schedule, budget, "
+        "team/key-person, scope, external dependency) rather than repeating one.\n"
+        "- When you cite a person (e.g. a single point of failure or an "
+        "overloaded owner), use ONLY the real names from the TASK BREAKDOWN BY "
+        "ASSIGNEE below. Never invent a team member.\n"
+        "- Severity must follow the evidence. A scenario whose early-warning "
+        "trigger condition is ALREADY TRUE in the data (e.g. tasks are already "
+        "overdue, a conflict already exists) MUST NOT be rated 'Low' — it is at "
+        "least 'Medium', and 'High' if the triggered condition is severe. Reserve "
+        "'Low' for failures that are plausible but not yet showing any signal.\n"
+        "- Reference exact counts from the data. If the data lists 3 overdue "
+        "tasks, never describe 'the single overdue task'.\n"
         "- Think like a skeptic, not a cheerleader.\n"
         "- Only state an assumption in confidence_note about data that is genuinely "
         "absent from PROJECT DATA below. Never guess at, or contradict, a fact that "
@@ -186,6 +235,25 @@ def _build_gemini_prompt(snapshot):
     else:
         conflicts_str = str(snapshot['conflict_count'])
 
+    # Per-assignee workload — lets the AI name the real single-point-of-failure
+    # person instead of inventing one.
+    assignee_breakdown = snapshot.get('assignee_breakdown') or {}
+    if assignee_breakdown:
+        assignee_str = "\n".join(
+            f"  {name}: {count} tasks" for name, count in assignee_breakdown.items()
+        )
+    else:
+        assignee_str = "  No assignee breakdown available."
+
+    # Concrete overdue items so the AI states the real count and owners.
+    overdue_detail = snapshot.get('overdue_detail') or []
+    if overdue_detail:
+        overdue_str = "\n".join(
+            f"  - '{o['title']}' ({o['assignee']})" for o in overdue_detail
+        )
+    else:
+        overdue_str = "  None."
+
     user_prompt = (
         "Analyze this project and generate a Pre-Mortem analysis.\n\n"
         "PROJECT DATA:\n"
@@ -197,10 +265,16 @@ def _build_gemini_prompt(snapshot):
         f"- Tasks with no assignee: {snapshot['unassigned_count']}\n"
         f"- Tasks with no due date: {snapshot['no_deadline_count']}\n"
         f"- Team size: {snapshot['team_size']} people\n"
+        f"- Team members: {', '.join(snapshot.get('member_names', [])) or 'None assigned'}\n"
         f"- Timeline: {timeline_str}\n"
         f"- Budget: {snapshot['budget_info'] or 'Not set'} (single point-in-time snapshot — "
         "no spend-over-time history is available, so do not assume a burn-rate trend)\n"
         f"- Existing conflicts detected: {conflicts_str}\n\n"
+        "TASK BREAKDOWN BY ASSIGNEE (use these real names — do not invent people):\n"
+        f"{assignee_str}\n\n"
+        "OVERDUE TASKS (these trigger conditions are ALREADY TRUE — rate related "
+        "scenarios accordingly, never as 'Low'):\n"
+        f"{overdue_str}\n\n"
         'Return this exact JSON structure:\n'
         '{\n'
         '  "failure_scenarios": [\n'

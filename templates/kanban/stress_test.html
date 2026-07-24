@@ -177,12 +177,34 @@
 
     <!-- Pre-Mortem Cross-link Banner -->
     {% if premortem_count > 0 %}
-    <div class="alert alert-info d-flex align-items-center mb-4">
-        <i class="fas fa-shield-alt me-2"></i>
-        <span>Pre-Mortem identified <strong>{{ premortem_count }}</strong> risk scenarios</span>
-        <a href="{% url 'premortem_dashboard' board.id %}" class="btn btn-outline-info btn-sm ms-3">
-            View Pre-Mortem
-        </a>
+    <div class="alert alert-info mb-4">
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <i class="fas fa-shield-alt me-1"></i>
+            <span>Pre-Mortem identified <strong>{{ premortem_count }}</strong> risk scenarios</span>
+            {% if premortem_risk %}
+            <span class="badge
+                {% if premortem_risk == 'high' %}bg-danger{% elif premortem_risk == 'medium' %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                Pre-Mortem verdict: {{ premortem_risk|upper }} risk
+            </span>
+            {% endif %}
+            {% if session.immunity_score %}
+            <span class="badge" style="background-color:{{ session.immunity_score.get_band_colour }};color:#fff;">
+                Stress Test: {{ session.immunity_score.get_band }} ({{ session.immunity_score.overall }}/100)
+            </span>
+            {% endif %}
+            <a href="{% url 'premortem_dashboard' board.id %}" class="btn btn-outline-info btn-sm ms-auto">
+                View Pre-Mortem
+            </a>
+        </div>
+        {% if premortem_risk and session.immunity_score %}
+        <small class="text-muted d-block mt-2">
+            These measure different things: Pre-Mortem rates how <em>likely</em> each failure
+            mode is <em>before</em> work starts; the Stress Test rates how much punishment the
+            <em>current</em> plan can absorb. A HIGH-risk pre-mortem alongside a MODERATE
+            immunity score means the risks are real but the plan has some resilience &mdash;
+            apply vaccines and address scenarios to close the gap.
+        </small>
+        {% endif %}
     </div>
     {% endif %}
 
@@ -306,6 +328,24 @@
                     </div>
                     {% if session.score_rationale %}
                     <p class="text-muted small mt-2 mb-0">{{ session.score_rationale }}</p>
+                    {% endif %}
+                    {% if score_math %}
+                    <div class="mt-2 mx-auto" style="max-width:320px;">
+                        <div class="d-inline-flex flex-wrap justify-content-center align-items-baseline gap-1 small"
+                             style="font-size:0.78rem;"
+                             data-bs-toggle="tooltip" data-bs-placement="top"
+                             title="How this run's score was built: the previous session score, plus the guaranteed credit from vaccines you'd applied, plus or minus the new vulnerabilities the Red Team found this run.">
+                            <span class="text-muted">{{ score_math.baseline }} baseline</span>
+                            <span class="text-success fw-semibold">+ {{ score_math.vaccine_credit }} vaccine credit</span>
+                            {% if score_math.new_findings < 0 %}
+                            <span class="text-danger fw-semibold">− {{ score_math.new_findings_abs }} new findings</span>
+                            {% elif score_math.new_findings > 0 %}
+                            <span class="text-success fw-semibold">+ {{ score_math.new_findings }} improved</span>
+                            {% endif %}
+                            <span class="text-muted">=</span>
+                            <strong>{{ score_math.current }}</strong>
+                        </div>
+                    </div>
                     {% endif %}
                     <p class="text-muted" style="font-size:0.7rem; margin-top:4px; margin-bottom:0;">
                         <i class="fas fa-info-circle me-1"></i>Score reflects last run · Re-run to update
@@ -610,9 +650,10 @@
                     </div>
                     <small class="text-muted d-block mt-1" id="pending-vaccines-count"></small>
                     <small class="text-muted d-block mt-1">
-                        Upper bound only &mdash; actual score depends on the new vulnerabilities
-                        Red Team AI finds in the next run.  The applied vaccine credit is
-                        guaranteed to count for at least 60% of its stated value.
+                        Realistic upper bound &mdash; pending vaccines are credited at the
+                        60% the score floor guarantees, and a single round of fixes recovers
+                        at most part of the gap to 100.  The actual next score still depends
+                        on the new vulnerabilities the Red Team AI finds.
                     </small>
                 </div>
             </div>
@@ -988,11 +1029,25 @@ function updateProjectedScore() {
         }
     });
 
-    // Estimated ceiling shows the max-potential value (applied + pending) so
-    // users see what the score *could* reach if they apply everything.  The
-    // wording around the figure ("Estimated ceiling") makes the upper-bound
-    // nature explicit.
-    const ceiling = Math.min(100, currentScore + appliedImprovement + pendingImprovement);
+    // Estimated ceiling = realistic upper bound, NOT a naive sum of every
+    // vaccine value.  Only 60% of a vaccine's projected improvement is
+    // guaranteed by the server-side score floor (each re-run the Red Team AI
+    // finds fresh vulnerabilities that eat into the rest), so we credit pending
+    // vaccines at that guaranteed rate.  We also cap the reachable ceiling
+    // relative to the current score: a genuinely fragile plan can't jump to a
+    // perfect 100 just by ticking checkboxes.  ANTIFRAGILE (90+) stays reserved
+    // for plans that are already strong.
+    const GUARANTEED_RATE = 0.6;
+    const guaranteedGain = Math.round(
+        appliedImprovement + pendingImprovement * GUARANTEED_RATE
+    );
+    // Headroom cap: you can realistically recover about 70% of the gap to 100
+    // in a single round of structural fixes — never the whole thing at once.
+    const headroomCap = currentScore + Math.round((100 - currentScore) * 0.7);
+    const ceiling = Math.max(
+        currentScore,
+        Math.min(100, headroomCap, currentScore + guaranteedGain)
+    );
     projectedEl.textContent = ceiling + ' / 100';
     if (pendingEl) {
         const cumulative = {{ vaccines_applied|default:"0" }};

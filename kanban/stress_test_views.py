@@ -185,14 +185,19 @@ def stress_test_dashboard(request, board_id):
     vaccines_applied_total = Vaccine.objects.filter(board=board, is_applied=True).count()
     vaccines_total = Vaccine.objects.filter(board=board).count()
 
-    # Pre-mortem count for cross-link
+    # Pre-mortem count + verdict for the cross-link banner. Surfacing the
+    # Pre-Mortem's own risk level here lets the two linked features reconcile:
+    # the user can see "Pre-Mortem: HIGH risk" next to the Stress Test's band
+    # instead of the two pages silently disagreeing.
     premortem_count = 0
+    premortem_risk = None
     try:
         latest_premortem = board.pre_mortems.first()
         if latest_premortem and latest_premortem.analysis_json:
             premortem_count = len(
                 latest_premortem.analysis_json.get('failure_scenarios', [])
             )
+            premortem_risk = latest_premortem.overall_risk_level
     except Exception:
         pass
 
@@ -210,6 +215,39 @@ def stress_test_dashboard(request, board_id):
                 delta = None
         sessions_with_delta.append((s, delta))
 
+    # Immunity arithmetic for the latest session — surfaces WHY the score moved
+    # so users can see it is baseline + vaccine credit ± new findings, not noise.
+    # Reconstructed from the two most recent sessions: the previous session's
+    # score is the baseline, and the applied-vaccine credit is the portion of
+    # the move guaranteed by the score floor (60% of pending credit at run time).
+    score_math = None
+    if latest_session and latest_session.immunity_score and len(sessions_list) >= 2:
+        prev_session = sessions_list[-2]
+        if prev_session.immunity_score:
+            baseline = prev_session.immunity_score.overall
+            current = latest_session.immunity_score.overall
+            # Credit the vaccines that were already applied when this run kicked
+            # off (their projected improvement), matching the floor formula used
+            # at run time in run_stress_test.
+            applied_before_run = Vaccine.objects.filter(
+                board=board, is_applied=True,
+                applied_at__lt=latest_session.created_at,
+            )
+            vaccine_credit = sum(
+                v.projected_score_improvement or 0 for v in applied_before_run
+            )
+            # New findings = whatever remains after baseline + credit is
+            # reconciled against the actual score (can be negative = fresh
+            # vulnerabilities the Red Team found ate into the credit).
+            new_findings = current - baseline - vaccine_credit
+            score_math = {
+                'baseline': baseline,
+                'vaccine_credit': vaccine_credit,
+                'new_findings': new_findings,
+                'new_findings_abs': abs(new_findings),
+                'current': current,
+            }
+
     # AI quota availability for the "Run" button
     has_quota = True
     if request.user.is_authenticated:
@@ -220,6 +258,7 @@ def stress_test_dashboard(request, board_id):
         'session': latest_session,
         'all_sessions': sessions,
         'sessions_with_delta': sessions_with_delta,
+        'score_math': score_math,
         'immunity_history': json.dumps(immunity_history),
         'total_scenarios': total_scenarios,
         'scenarios_addressed': scenarios_addressed,
@@ -227,6 +266,7 @@ def stress_test_dashboard(request, board_id):
         'vaccines_applied_session': vaccines_applied_session,
         'vaccines_total': vaccines_total,
         'premortem_count': premortem_count,
+        'premortem_risk': premortem_risk,
         'has_quota': has_quota,
         'session_count': sessions.count(),
     }
