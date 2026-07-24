@@ -32,7 +32,7 @@
 
     <!-- Coverage Summary -->
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
+        <div class="col-md-2 col-6">
             <div class="card text-center">
                 <div class="card-body py-2">
                     <div class="fs-5 fw-bold text-primary">{{ requirements|length }}</div>
@@ -40,7 +40,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2 col-6">
             <div class="card text-center">
                 <div class="card-body py-2">
                     <div class="fs-5 fw-bold text-success">{{ covered_count }}</div>
@@ -48,7 +48,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2 col-6">
             <div class="card text-center">
                 <div class="card-body py-2">
                     <div class="fs-5 fw-bold text-warning">{{ uncovered_count }}</div>
@@ -56,11 +56,27 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card text-center">
+        <div class="col-md-2 col-6">
+            <div class="card text-center" title="% of requirements that have at least one linked task">
                 <div class="card-body py-2">
                     <div class="fs-5 fw-bold">{{ coverage_pct }}%</div>
-                    <small class="text-muted">Coverage</small>
+                    <small class="text-muted">Requirement Coverage</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <div class="fs-5 fw-bold text-danger">{{ orphaned_task_count }}</div>
+                    <small class="text-muted">Orphaned Tasks</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card text-center" title="% of this board's {{ task_total }} task(s) that are linked to a requirement">
+                <div class="card-body py-2">
+                    <div class="fs-5 fw-bold">{{ task_coverage_pct }}%</div>
+                    <small class="text-muted">Task Coverage</small>
                 </div>
             </div>
         </div>

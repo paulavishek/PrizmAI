@@ -101,6 +101,7 @@ class Command(BaseCommand):
         t_idea2 = now - timedelta(days=4, hours=1)    # AI Localisation (under_review)
         t_idea4 = now - timedelta(days=2, hours=4)    # Offline Mode (new)
         t_idea5 = now - timedelta(days=1, hours=5)    # Dashboard Export (new)
+        t_idea9 = now - timedelta(days=6, hours=4)    # Empty-state Illustrations (under_review, Fill-in)
         t_idea8 = now - timedelta(hours=3)            # Update FAQ (new)
 
         # ── Idea 1: Mobile App for Asian Markets (under_review, scored) ─
@@ -293,6 +294,35 @@ class Command(BaseCommand):
             ),
         )
 
+        # ── Idea 9: Empty-state Illustrations (under_review, Fill-in) ──
+        # Deliberately scored low-impact + low-effort so the Impact/Effort
+        # matrix has a chip in the Fill-in quadrant — otherwise that quadrant
+        # renders empty and a reviewer sees "No ideas here yet" for it.
+        idea9 = DiscoveryIdea.objects.create(
+            organization=demo_org,
+            workspace=demo_ws,
+            title='Empty-state Illustrations & Copy',
+            description=(
+                'Add friendly illustrations and helpful copy to empty states '
+                '(empty boards, no search results, zero notifications) instead of '
+                'blank panels. Small polish that makes the product feel more finished.'
+            ),
+            source='internal_team',
+            stage='under_review',
+            submitted_by=sam,
+            ai_score_impact=28,
+            ai_score_effort=22,
+            ai_score_confidence=74,
+            ai_score_recommendation='Fill-in - low effort, low impact. Batch with other UI polish when there is spare capacity.',
+            ai_score_reasoning=(
+                'Nice-to-have visual polish with no revenue or retention driver behind it. '
+                'Effort is minimal (design assets + a handful of template tweaks), so it is '
+                'a reasonable filler task between higher-priority work, not a headline item.'
+            ),
+            ai_scored_at=t_idea9 + timedelta(hours=18),
+            is_demo=True,
+        )
+
         # ── Idea 7: Regional Pricing Tiers (approved + promoted) ──────
         idea7 = DiscoveryIdea.objects.create(
             organization=demo_org,
@@ -456,6 +486,7 @@ class Command(BaseCommand):
             (idea6, t_idea6),
             (idea7, t_idea7),
             (idea8, t_idea8),
+            (idea9, t_idea9),
         ):
             DiscoveryIdea.objects.filter(pk=idea.pk).update(created_at=created)
 

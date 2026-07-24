@@ -1,9 +1,9 @@
 import logging
+import re
 
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
-from django.db.models import Max
 from django.urls import reverse
 
 logger = logging.getLogger(__name__)
@@ -155,14 +155,17 @@ class Requirement(models.Model):
         if len(self.title) > 200:
             self.title = self.title[:200]
 
-        # Auto-generate identifier
+        # Auto-generate identifier — a per-board sequence parsed from existing
+        # identifiers (NOT the global auto-increment id, which is shared across
+        # every board and produces mismatched numbering like REQ-001 followed
+        # by REQ-18910 once other boards have created many requirements).
         if not self.identifier:
-            last = (
-                Requirement.objects
-                .filter(board=self.board)
-                .aggregate(max_num=Max('id'))
-            )
-            next_num = (last['max_num'] or 0) + 1
+            existing_nums = [
+                int(m.group(1)) for ident in
+                Requirement.objects.filter(board=self.board).values_list('identifier', flat=True)
+                for m in [re.match(r'^REQ-(\d+)$', ident)] if m
+            ]
+            next_num = max(existing_nums, default=0) + 1
             self.identifier = f"REQ-{next_num:03d}"
 
         # Track old status for history

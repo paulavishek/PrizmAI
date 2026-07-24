@@ -231,12 +231,27 @@ def idea_detail(request, idea_id):
     import json
     from kanban.models import Column
     org_boards = list(org_boards)
+    board_ids = [b['id'] for b in org_boards]
     board_columns = {}
     for col in (
-        Column.objects.filter(board_id__in=[b['id'] for b in org_boards])
+        Column.objects.filter(board_id__in=board_ids)
         .order_by('position').values('id', 'name', 'board_id')
     ):
         board_columns.setdefault(col['board_id'], []).append([col['id'], col['name']])
+
+    # Requirements per board for the promote form's optional "Link to requirement"
+    # dropdown — lets an admin attach the new task to an existing requirement so a
+    # promoted idea doesn't land on the board as an orphaned (requirement-less)
+    # task, which is exactly what the Gap Analysis flags.
+    from requirements.models import Requirement
+    board_requirements = {}
+    for req in (
+        Requirement.objects.filter(board_id__in=board_ids)
+        .order_by('identifier').values('id', 'identifier', 'title', 'board_id')
+    ):
+        board_requirements.setdefault(req['board_id'], []).append(
+            [req['id'], f"{req['identifier']} — {req['title']}"]
+        )
 
     return render(request, 'kanban/idea_detail.html', {
         'idea': idea,
@@ -248,6 +263,7 @@ def idea_detail(request, idea_id):
         'org': org,
         'org_boards': org_boards,
         'board_columns_json': json.dumps(board_columns),
+        'board_requirements_json': json.dumps(board_requirements),
     })
 
 
@@ -516,11 +532,27 @@ def idea_promote(request, idea_id):
         except Exception as e:
             logger.warning('Could not create task for promoted idea %s: %s', idea.pk, e)
 
+    # Optionally link the new task to an existing requirement so it doesn't
+    # become an orphaned (requirement-less) task. Only accept a requirement that
+    # actually belongs to the target board — never trust the posted id blindly.
+    linked_requirement = None
+    requirement_id = (request.POST.get('requirement_id') or '').strip()
+    if requirement_id and task and board:
+        try:
+            from requirements.models import Requirement
+            req = Requirement.objects.filter(pk=requirement_id, board=board).first()
+            if req:
+                req.linked_tasks.add(task)
+                linked_requirement = req.identifier
+        except Exception as e:
+            logger.warning('Could not link requirement %s to promoted task: %s', requirement_id, e)
+
     return JsonResponse({
         'ok': True,
         'promotion_id': promotion.pk,
         'board_name': board.name if board else None,
         'task_id': task.pk if task else None,
+        'linked_requirement': linked_requirement,
     })
 
 

@@ -372,6 +372,8 @@ var csrfToken = '{{ csrf_token }}';
 var qualityUrl = '{% url "requirements:ai_quality_check" board.id requirement.pk %}';
 var criteriaUrl = '{% url "requirements:ai_generate_criteria" board.id requirement.pk %}';
 var impactUrl = '{% url "requirements:ai_impact_analysis" board.id requirement.pk %}';
+var reqStatus = '{{ requirement.status }}';
+var reqStatusLabel = '{{ requirement.get_status_display }}';
 
 /* Persisted AI results from the database — restored on page load */
 var aiCacheData = {
@@ -445,6 +447,30 @@ function _riskBadge(level) {
     return '<span class="badge ' + (map[level]||'bg-secondary') + '">' + _esc(level) + '</span>';
 }
 
+function _taskCountLabel(d) {
+    var count = d.linked_tasks_count || 0;
+    if (d.done_task_count != null && count > 0) {
+        return count + ' task(s) (' + d.done_task_count + ' done)';
+    }
+    return count + ' task(s)';
+}
+
+/* Cross-reference: a low quality score on a requirement whose status implies
+   it was already reviewed/built/tested (Approved, Implemented, Verified) is
+   the sharpest contradiction this page can surface — call it out explicitly
+   instead of leaving three AI panels to disagree silently. */
+var LATE_STAGE_STATUSES = ['approved', 'implemented', 'verified'];
+function _qualityStatusWarning(qualityScore) {
+    if (qualityScore == null || LATE_STAGE_STATUSES.indexOf(reqStatus) === -1 || qualityScore >= 60) {
+        return '';
+    }
+    return '<div class="alert alert-warning py-2 px-3 mb-2 small">' +
+        '<i class="fas fa-triangle-exclamation me-1"></i>' +
+        '<strong>' + _esc(reqStatusLabel) + '</strong> but scores ' + _esc(String(qualityScore)) + '/100 on quality — ' +
+        'review may have been informal, or the requirement has drifted since it was ' + _esc(reqStatusLabel.toLowerCase()) + '.' +
+        '</div>';
+}
+
 function runAiQualityCheck() {
     var box = document.getElementById('aiQualityResult');
     var content = document.getElementById('aiQualityContent');
@@ -452,7 +478,8 @@ function runAiQualityCheck() {
     _startLoadingMessages(content, 'quality');
     _post(qualityUrl).then(function(d) {
         _stopLoadingMessages('quality');
-        var html = '<div class="d-flex align-items-center gap-3 mb-2">' +
+        var html = _qualityStatusWarning(d.quality_score);
+        html += '<div class="d-flex align-items-center gap-3 mb-2">' +
             '<span class="fw-bold">Overall Quality:</span> ' + _scoreBadge(d.quality_score) + '</div>';
         if (d.dimensions) {
             html += '<div class="row g-2 mb-2">';
@@ -516,7 +543,7 @@ function runAiImpactAnalysis() {
         _stopLoadingMessages('impact');
         var html = '<div class="d-flex align-items-center gap-3 mb-2">' +
             '<span class="fw-bold">Risk Level:</span> ' + _riskBadge(d.risk_level) +
-            '<span class="small text-muted ms-2">' + (d.linked_tasks_count||0) + ' task(s), ' +
+            '<span class="small text-muted ms-2">' + _taskCountLabel(d) + ', ' +
             (d.children_count||0) + ' child req(s), ' + (d.goals_count ?? d.objectives_count ?? 0) + ' goal(s)</span></div>';
         if (d.impact_summary) {
             html += '<p class="small mb-2">' + _esc(d.impact_summary) + '</p>';
@@ -547,7 +574,8 @@ document.addEventListener('DOMContentLoaded', function () {
             var d = aiCacheData.quality;
             var box = document.getElementById('aiQualityResult');
             var content = document.getElementById('aiQualityContent');
-            var html = '<div class="d-flex align-items-center gap-3 mb-2">' +
+            var html = _qualityStatusWarning(d.quality_score);
+            html += '<div class="d-flex align-items-center gap-3 mb-2">' +
                 '<span class="fw-bold">Overall Quality:</span> ' + _scoreBadge(d.quality_score) + '</div>';
             if (d.dimensions) {
                 html += '<div class="row g-2 mb-2">';
@@ -604,7 +632,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var content = document.getElementById('aiImpactContent');
             var html = '<div class="d-flex align-items-center gap-3 mb-2">' +
                 '<span class="fw-bold">Risk Level:</span> ' + _riskBadge(d.risk_level) +
-                '<span class="small text-muted ms-2">' + (d.linked_tasks_count||0) + ' task(s), ' +
+                '<span class="small text-muted ms-2">' + _taskCountLabel(d) + ', ' +
                 (d.children_count||0) + ' child req(s), ' + (d.goals_count ?? d.objectives_count ?? 0) + ' goal(s)</span></div>';
             if (d.impact_summary) {
                 html += '<p class="small mb-2">' + _esc(d.impact_summary) + '</p>';

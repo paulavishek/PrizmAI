@@ -201,7 +201,12 @@
         <a href="{% url 'idea_detail' idea_id=idea.pk %}" class="idea-card">
             <div class="d-flex align-items-start justify-content-between gap-2">
                 <div class="idea-card-title">{{ idea.title }}</div>
-                <span class="badge badge-stage-{{ idea.stage }} flex-shrink-0">{{ idea.get_stage_display }}</span>
+                <div class="d-flex gap-1 flex-shrink-0">
+                    <span class="badge badge-stage-{{ idea.stage }}">{{ idea.get_stage_display }}</span>
+                    {% if not idea.is_scored %}
+                    <span class="badge" style="background:var(--bg-tertiary);color:var(--text-muted);">Unscored</span>
+                    {% endif %}
+                </div>
             </div>
             <div class="idea-card-meta">
                 <span><i class="fas fa-tag me-1"></i>{{ idea.get_source_display|humanize_slug }}</span>

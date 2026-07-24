@@ -105,9 +105,22 @@ def requirements_dashboard(request, board_id):
     )
     categories = RequirementCategory.objects.filter(board=board)
 
-    # Coverage: requirements with at least one linked task
+    # Requirement coverage: % of requirements with at least one linked task
     linked_count = Requirement.objects.filter(board=board, linked_tasks__isnull=False).distinct().count()
     coverage_pct = round((linked_count / total) * 100) if total > 0 else 0
+
+    # Task coverage: % of the board's tasks that are linked to a requirement
+    # (the inverse direction from requirement coverage — a board can have
+    # every requirement covered by SOME task while most tasks still have no
+    # requirement, so the two percentages are deliberately kept separate
+    # rather than collapsed into one ambiguous "coverage" number).
+    all_task_ids = set(Task.objects.filter(column__board=board).values_list('id', flat=True))
+    task_total = len(all_task_ids)
+    linked_task_ids = set(
+        Requirement.objects.filter(board=board).values_list('linked_tasks__id', flat=True)
+    )
+    linked_task_ids.discard(None)
+    task_coverage_pct = round((len(linked_task_ids) / task_total) * 100) if task_total > 0 else 0
 
     role = _get_user_role(membership, board, request.user)
     can_edit = role.lower() in ('owner', 'admin', 'member')
@@ -120,6 +133,8 @@ def requirements_dashboard(request, board_id):
         'categories': categories,
         'coverage_pct': coverage_pct,
         'linked_count': linked_count,
+        'task_coverage_pct': task_coverage_pct,
+        'task_total': task_total,
         'can_edit': can_edit,
         'status_filter': status_filter,
         'type_filter': type_filter,
@@ -416,6 +431,18 @@ def traceability_matrix(request, board_id):
     uncovered_count = total - covered_count
     coverage_pct = round((covered_count / total) * 100) if total > 0 else 0
 
+    # Task-side coverage (inverse direction) — how many of the board's tasks
+    # are linked to ANY requirement. Deliberately shown alongside requirement
+    # coverage rather than as a single "Coverage" number, since the two can
+    # diverge sharply (e.g. every requirement covered by some task, while
+    # most tasks still have no requirement).
+    linked_task_ids = set()
+    for req in requirements:
+        linked_task_ids.update(req.linked_tasks.values_list('id', flat=True))
+    task_total = len(all_tasks)
+    task_coverage_pct = round((len(linked_task_ids) / task_total) * 100) if task_total > 0 else 0
+    orphaned_task_count = task_total - len(linked_task_ids)
+
     role = _get_user_role(membership, board, request.user)
     can_edit = role.lower() in ('owner', 'admin', 'member')
 
@@ -433,6 +460,9 @@ def traceability_matrix(request, board_id):
         'covered_count': covered_count,
         'uncovered_count': uncovered_count,
         'coverage_pct': coverage_pct,
+        'task_total': task_total,
+        'task_coverage_pct': task_coverage_pct,
+        'orphaned_task_count': orphaned_task_count,
         'can_edit': can_edit,
     }
     return render(request, 'requirements/traceability_matrix.html', context)

@@ -209,6 +209,13 @@
                         </select>
                         <div class="form-text">Place the task in a phase so it appears under that phase on the Gantt chart.</div>
                     </div>
+                    <div class="mb-3 d-none" id="requirementField">
+                        <label for="requirementSelect" class="fw-semibold" style="font-size:0.82rem;">Link to Requirement <span class="text-muted">(optional)</span></label>
+                        <select id="requirementSelect" name="requirement_id" class="form-select form-select-sm mt-1">
+                            <option value="">— None —</option>
+                        </select>
+                        <div class="form-text">Attach the new task to a requirement so it doesn't become an orphaned task.</div>
+                    </div>
                     <button type="submit" class="btn btn-success btn-sm" id="promoteBtn">
                         <i class="fas fa-arrow-up me-1"></i>Promote &amp; Create Task
                     </button>
@@ -358,6 +365,7 @@
 const IDEA_ID = {{ idea.pk }};
 const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
 const BOARD_COLUMNS = {{ board_columns_json|default:"{}"|safe }};
+const BOARD_REQUIREMENTS = {{ board_requirements_json|default:"{}"|safe }};
 
 // Rebuild the phase dropdown whenever the target board changes. Boards with no
 // phases (num_phases == 0) hide the field entirely.
@@ -382,6 +390,23 @@ function onBoardChange() {
         colField.classList.remove('d-none');
     } else {
         colField.classList.add('d-none');
+    }
+
+    // Populate the optional requirement dropdown for the selected board.
+    const reqField = document.getElementById('requirementField');
+    const reqSel = document.getElementById('requirementSelect');
+    const reqs = (boardSel.value && BOARD_REQUIREMENTS[boardSel.value]) || [];
+    reqSel.innerHTML = '<option value="">— None —</option>';
+    if (reqs.length) {
+        reqs.forEach(function(r) {
+            const o = document.createElement('option');
+            o.value = r[0];
+            o.textContent = r[1];
+            reqSel.appendChild(o);
+        });
+        reqField.classList.remove('d-none');
+    } else {
+        reqField.classList.add('d-none');
     }
 
     const n = opt ? parseInt(opt.getAttribute('data-num-phases') || '0', 10) : 0;
@@ -409,6 +434,7 @@ function submitPromote(e) {
     fd.append('board_id', boardId);
     fd.append('column_id', document.getElementById('columnSelect').value);
     fd.append('phase', document.getElementById('phaseSelect').value);
+    fd.append('requirement_id', document.getElementById('requirementSelect').value);
     fd.append('csrfmiddlewaretoken', CSRF);
     fetch(`/discovery/${IDEA_ID}/promote/`, { method: 'POST', body: fd })
     .then(r => r.json())

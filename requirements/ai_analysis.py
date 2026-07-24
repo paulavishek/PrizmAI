@@ -133,12 +133,18 @@ class RequirementsAIAnalyzer:
         Analyze downstream impact of a requirement: linked tasks,
         dependent requirements, affected objectives.
         """
+        from kanban.column_semantics import is_done_column
+
         linked_tasks = list(requirement.linked_tasks.select_related('column', 'assigned_to').all())
         children = list(requirement.children.all())
         related = list(requirement.related_requirements.all())
         linked_goals = list(requirement.linked_goals.all())
+        done_task_count = sum(1 for t in linked_tasks if is_done_column(t.column))
+        all_tasks_done = bool(linked_tasks) and done_task_count == len(linked_tasks)
 
-        prompt = self._build_impact_prompt(requirement, linked_tasks, children, related, linked_goals)
+        prompt = self._build_impact_prompt(
+            requirement, linked_tasks, children, related, linked_goals, done_task_count,
+        )
         ai_response = self._call_gemini(
             prompt,
             cache_operation='requirement_impact',
@@ -150,9 +156,12 @@ class RequirementsAIAnalyzer:
                 parsed['children_count'] = len(children)
                 parsed['related_count'] = len(related)
                 parsed['goals_count'] = len(linked_goals)
+                parsed['done_task_count'] = done_task_count
                 return parsed
 
-        return self._fallback_impact_analysis(requirement, linked_tasks, children, related, linked_goals)
+        return self._fallback_impact_analysis(
+            requirement, linked_tasks, children, related, linked_goals, done_task_count, all_tasks_done,
+        )
 
     def suggest_priority(self, requirement) -> Dict:
         """
@@ -237,6 +246,11 @@ Identify:
 2. Imbalanced coverage — areas with too many or too few requirements
 3. Recommended new requirements to fill gaps
 
+Do NOT invent or assign a requirement identifier (e.g. "REQ-123") for any
+recommended requirement — identifiers are assigned by the system only when a
+requirement is actually created. Describe recommended requirements by name/
+description only, never with a made-up ID.
+
 Return ONLY valid JSON (no markdown fences):
 {{
   "gaps": [
@@ -296,11 +310,16 @@ Return ONLY valid JSON (no markdown fences):
   "notes": "any additional notes about edge cases or considerations"
 }}"""
 
-    def _build_impact_prompt(self, req, linked_tasks, children, related, linked_goals) -> str:
-        tasks_info = ', '.join(t.title for t in linked_tasks[:10]) or 'none'
+    def _build_impact_prompt(self, req, linked_tasks, children, related, linked_goals, done_task_count=0) -> str:
+        from kanban.column_semantics import is_done_column
+        tasks_info = ', '.join(
+            f"{t.title} [{'DONE' if is_done_column(t.column) else (t.column.name if t.column else 'no column')}]"
+            for t in linked_tasks[:10]
+        ) or 'none'
         children_info = ', '.join(f"{c.identifier}: {c.title}" for c in children[:10]) or 'none'
         related_info = ', '.join(f"{r.identifier}: {r.title}" for r in related[:10]) or 'none'
         goals_info = ', '.join(g.name for g in linked_goals[:10]) or 'none'
+        total_tasks = len(linked_tasks)
 
         return f"""Analyze the downstream impact of changes to this requirement.
 
@@ -309,7 +328,7 @@ REQUIREMENT:
 - Title: {req.title}
 - Status: {req.get_status_display()}
 - Priority: {req.get_priority_display()}
-- Linked Tasks: {tasks_info}
+- Linked Tasks ({done_task_count} of {total_tasks} already DONE): {tasks_info}
 - Child Requirements: {children_info}
 - Related Requirements: {related_info}
 - Linked Goals: {goals_info}
@@ -318,6 +337,11 @@ Assess:
 1. What would happen if this requirement's status changed (e.g., approved → rejected)?
 2. What is the cascading impact on linked tasks and child requirements?
 3. How critical is this requirement to the goals it supports?
+
+Important: if the linked tasks are already DONE, the underlying work is
+already built — treat this as a lower-risk "rework already-shipped work"
+scenario, not as a future-tense "would halt development" scenario. Calibrate
+risk_level and severity down accordingly when most/all linked tasks are done.
 
 Return ONLY valid JSON (no markdown fences):
 {{
@@ -446,12 +470,28 @@ Return ONLY valid JSON (no markdown fences):
             'analyzed_at': timezone.now().isoformat(),
         }
 
+    # Matches plausible-looking-but-never-created requirement IDs the model
+    # sometimes invents in free text despite the prompt instruction not to
+    # (e.g. "REQ-18924"). Stripped defensively so the UI never shows an ID
+    # a user could search for and find nothing.
+    _FAKE_REQ_ID_RE = re.compile(r'\bREQ-\d+\b:?\s*')
+
+    def _strip_invented_ids(self, gaps: List[Dict]) -> List[Dict]:
+        cleaned = []
+        for g in gaps:
+            g = dict(g)
+            for key in ('area', 'recommendation'):
+                if isinstance(g.get(key), str):
+                    g[key] = self._FAKE_REQ_ID_RE.sub('', g[key]).strip()
+            cleaned.append(g)
+        return cleaned
+
     def _parse_gap_response(self, response: str) -> Optional[Dict]:
         data = self._extract_json(response)
         if not data:
             return None
         return {
-            'gaps': data.get('gaps', []),
+            'gaps': self._strip_invented_ids(data.get('gaps', [])),
             'summary': data.get('summary', ''),
             'severity': data.get('severity', 'info'),
             'coverage_assessment': data.get('coverage_assessment', ''),
@@ -670,7 +710,10 @@ Return ONLY valid JSON (no markdown fences):
             'generated_at': timezone.now().isoformat(),
         }
 
-    def _fallback_impact_analysis(self, req, linked_tasks, children, related, linked_goals) -> Dict:
+    def _fallback_impact_analysis(
+        self, req, linked_tasks, children, related, linked_goals,
+        done_task_count=0, all_tasks_done=False,
+    ) -> Dict:
         risk_level = 'low'
         areas = []
         change_risks = []
@@ -693,7 +736,18 @@ Return ONLY valid JSON (no markdown fences):
                 'severity': 'high',
             })
 
-        if linked_tasks:
+        # Work already shipped is lower-risk to revisit than work not yet
+        # started — pull the calibrated risk down a notch instead of leaving
+        # it at "critical" purely because of priority/link counts.
+        if all_tasks_done:
+            risk_level = {'critical': 'high', 'high': 'medium', 'medium': 'low'}.get(risk_level, risk_level)
+            for cr in change_risks:
+                cr['severity'] = {'high': 'medium', 'critical': 'high'}.get(cr['severity'], cr['severity'])
+            recommendations.append(
+                f'All {done_task_count} linked task(s) are already Done — changes here mean reworking shipped '
+                'functionality, not blocking work in progress.'
+            )
+        elif linked_tasks:
             recommendations.append('Review linked tasks before changing requirement status.')
         if children:
             recommendations.append('Update child requirements if parent scope changes.')
@@ -708,6 +762,7 @@ Return ONLY valid JSON (no markdown fences):
             'children_count': len(children),
             'related_count': len(related),
             'goals_count': len(linked_goals),
+            'done_task_count': done_task_count,
             'analyzed_at': timezone.now().isoformat(),
         }
 
