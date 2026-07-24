@@ -12,21 +12,21 @@
     .chat-container {
         display: flex;
         height: calc(100vh - 60px);
-        background: #f5f5f5;
+        background: var(--bg-primary);
     }
-    
+
     .chat-sidebar {
         width: 300px;
         background: var(--card-bg);
-        border-right: 1px solid #ddd;
+        border-right: 1px solid var(--border-color);
         display: flex;
         flex-direction: column;
         overflow-y: auto;
     }
-    
+
     .chat-sidebar-header {
         padding: 20px;
-        border-bottom: 1px solid #ddd;
+        border-bottom: 1px solid var(--border-color);
     }
     
     .btn-new-session {
@@ -44,16 +44,16 @@
         border-left: 3px solid transparent;
         cursor: pointer;
         transition: all 0.3s ease;
-        border-bottom: 1px solid #f0f0f0;
+        border-bottom: 1px solid var(--border-light);
     }
-    
+
     .session-item:hover {
-        background: #f9f9f9;
+        background: var(--bg-tertiary);
         border-left-color: #667eea;
     }
-    
+
     .session-item.active {
-        background: #f0f4ff;
+        background: var(--bg-tertiary);
         border-left-color: #667eea;
     }
     
@@ -80,7 +80,7 @@
     
     .chat-header {
         background: var(--card-bg);
-        border-bottom: 1px solid #ddd;
+        border-bottom: 1px solid var(--border-color);
         padding: 15px 20px;
         display: flex;
         justify-content: space-between;
@@ -107,10 +107,12 @@
     .chat-title-edit {
         display: none;
         padding: 5px 10px;
-        border: 1px solid #ddd;
+        border: 1px solid var(--border-color);
         border-radius: 4px;
         font-size: 16px;
         width: 300px;
+        background: var(--input-bg);
+        color: var(--input-text);
     }
     
     .title-edit-icon {
@@ -133,11 +135,11 @@
     .model-selector {
         display: flex;
         gap: 10px;
-        background: #f5f5f5;
+        background: var(--bg-tertiary);
         border-radius: 20px;
         padding: 5px;
     }
-    
+
     .model-option {
         padding: 6px 15px;
         border-radius: 15px;
@@ -147,7 +149,7 @@
         font-size: 13px;
         font-weight: 600;
         transition: all 0.3s ease;
-        color: #666;
+        color: var(--text-muted);
     }
     
     .model-option.active {
@@ -202,11 +204,11 @@
     .message.assistant .message-content {
         background: var(--card-bg);
         color: var(--text-primary);
-        border: 1px solid #ddd;
+        border: 1px solid var(--border-color);
         max-width: 85%;
         padding: 16px 20px;
         border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        box-shadow: 0 2px 8px var(--shadow-color);
     }
     
     .message-info {
@@ -220,15 +222,15 @@
         gap: 4px;
         padding: 12px 16px;
         background: var(--card-bg);
-        border: 1px solid #ddd;
+        border: 1px solid var(--border-color);
         border-radius: 10px;
         width: fit-content;
     }
-    
+
     .typing-dot {
         width: 8px;
         height: 8px;
-        background: #999;
+        background: var(--text-muted);
         border-radius: 50%;
         animation: typing 1.4s infinite;
     }
@@ -248,25 +250,27 @@
     
     .chat-input-area {
         background: var(--card-bg);
-        border-top: 1px solid #ddd;
+        border-top: 1px solid var(--border-color);
         padding: 15px 20px;
     }
-    
+
     .input-group {
         display: flex;
         gap: 10px;
     }
-    
+
     #chat-input {
         flex: 1;
-        border: 1px solid #ddd;
+        border: 1px solid var(--border-color);
         border-radius: 20px;
         padding: 10px 16px;
         font-size: 14px;
         resize: none;
         max-height: 100px;
+        background: var(--input-bg);
+        color: var(--input-text);
     }
-    
+
     #chat-input:focus {
         outline: none;
         border-color: #667eea;
@@ -322,7 +326,7 @@
         margin-bottom: 0.5em;
         font-weight: 600;
         line-height: 1.3;
-        color: #1a1a2e;
+        color: var(--text-primary);
     }
     
     .message.assistant .message-content h1:first-child,
@@ -366,16 +370,16 @@
     
     .message.assistant .message-content strong {
         font-weight: 600;
-        color: #1a1a2e;
+        color: var(--text-primary);
     }
-    
+
     .message.assistant .message-content em {
         font-style: italic;
-        color: #555;
+        color: var(--text-secondary);
     }
-    
+
     .message.assistant .message-content code {
-        background: #f4f4f8;
+        background: var(--bg-tertiary);
         padding: 0.15em 0.4em;
         border-radius: 4px;
         font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
@@ -405,18 +409,18 @@
         border-left: 4px solid #667eea;
         margin: 1em 0;
         padding: 0.5em 1em;
-        background: #f8f9ff;
+        background: var(--bg-tertiary);
         border-radius: 0 8px 8px 0;
-        color: #555;
+        color: var(--text-secondary);
     }
-    
+
     .message.assistant .message-content blockquote p {
         margin: 0.25em 0;
     }
-    
+
     .message.assistant .message-content hr {
         border: none;
-        border-top: 1px solid #e0e0e0;
+        border-top: 1px solid var(--border-color);
         margin: 1.5em 0;
     }
     
@@ -437,14 +441,14 @@
         font-size: 0.9em;
         border-radius: 8px;
         overflow: hidden;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        box-shadow: 0 1px 3px var(--shadow-color);
     }
-    
+
     .message.assistant .message-content thead {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
     }
-    
+
     .message.assistant .message-content th {
         padding: 12px 15px;
         text-align: left;
@@ -453,18 +457,19 @@
         font-size: 0.85em;
         letter-spacing: 0.5px;
     }
-    
+
     .message.assistant .message-content td {
         padding: 10px 15px;
-        border-bottom: 1px solid #eee;
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-primary);
     }
-    
+
     .message.assistant .message-content tbody tr:nth-child(even) {
         background: var(--bg-tertiary);
     }
-    
+
     .message.assistant .message-content tbody tr:hover {
-        background: #f0f4ff;
+        background: var(--btn-hover-bg);
     }
     
     .message.assistant .message-content tbody tr:last-child td {
@@ -505,7 +510,7 @@
         gap: 8px;
         margin-top: 12px;
         padding-top: 12px;
-        border-top: 1px solid #eee;
+        border-top: 1px solid var(--border-color);
     }
     
     .suggested-action-btn {
@@ -552,6 +557,38 @@
         opacity: .75;
         font-weight: 400;
         line-height: 1;
+    }
+
+    /* Pale-tinted callouts hardcode light backgrounds with dark text — override
+       for dark mode per house rule that dark-mode text stays bright, never
+       faded-on-dark. */
+    [data-bs-theme="dark"] .message.assistant .message-content .insight-box {
+        background: rgba(255, 193, 7, 0.12);
+        color: var(--text-primary);
+    }
+    [data-bs-theme="dark"] .message.assistant .message-content .recommendation-box {
+        background: rgba(76, 175, 80, 0.12);
+        color: var(--text-primary);
+    }
+    [data-bs-theme="dark"] .search-badge {
+        background: rgba(255, 193, 7, 0.15);
+        color: #ffd670;
+    }
+
+    .spectra-suggestion-card {
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+    }
+
+    .spectra-file-badge {
+        background: #e8f4fd;
+        border: 1px solid #bee5eb;
+        color: #0c5460;
+    }
+    [data-bs-theme="dark"] .spectra-file-badge {
+        background: rgba(33, 150, 243, 0.15);
+        border-color: var(--border-color);
+        color: var(--text-primary);
     }
 </style>
 {% endblock %}
@@ -645,32 +682,32 @@
                 <div style="font-size: 40px; margin-bottom: 10px;">🤖</div>
                 <p id="welcome-message" style="margin-bottom: 18px;">Hello, I'm <strong style="color:#667eea;">Spectra</strong>. {% if is_viewing_demo %}You're in your <strong>Sandbox</strong>. I've analyzed {{ active_boards_count }} board{{ active_boards_count|pluralize }}. Feel free to experiment — this is your private copy! What can I help with?{% elif active_boards_count > 0 %}I've analyzed your {{ active_boards_count }} active board{{ active_boards_count|pluralize }} and documentation. What can I help with?{% else %}You have no active boards in your workspace yet. Ask me anything about your workspace!{% endif %}</p>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; margin: 0 auto 16px auto; max-width: 520px;">
-                    <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
+                    <div class="spectra-suggestion-card" style="border-radius: 10px; padding: 12px 14px;">
                         <div style="font-size: 15px; margin-bottom: 4px;">💬 <strong style="color:var(--text-secondary);">Ask Anything</strong></div>
                         <div style="font-size: 12px; color: var(--text-muted);">Project status, risks, tasks, resources, strategy</div>
                     </div>
-                    <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
+                    <div class="spectra-suggestion-card" style="border-radius: 10px; padding: 12px 14px;">
                         <div style="font-size: 15px; margin-bottom: 4px;">� <strong style="color:var(--text-secondary);">Reports & Insights</strong></div>
                         <div style="font-size: 12px; color: var(--text-muted);">Overdue tasks, workload, sprint health</div>
                     </div>
-                    <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
+                    <div class="spectra-suggestion-card" style="border-radius: 10px; padding: 12px 14px;">
                         <div style="font-size: 15px; margin-bottom: 4px;">🎯 <strong style="color:var(--text-secondary);">Goals & Strategy</strong></div>
                         <div style="font-size: 12px; color: var(--text-muted);">Mission, OKRs, strategic alignment</div>
                     </div>
-                    <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
+                    <div class="spectra-suggestion-card" style="border-radius: 10px; padding: 12px 14px;">
                         <div style="font-size: 15px; margin-bottom: 4px;">⚠️ <strong style="color:var(--text-secondary);">Risks & Blockers</strong></div>
                         <div style="font-size: 12px; color: var(--text-muted);">Identify risks, dependencies, bottlenecks</div>
                     </div>
-                    <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
+                    <div class="spectra-suggestion-card" style="border-radius: 10px; padding: 12px 14px;">
                         <div style="font-size: 15px; margin-bottom: 4px;">👥 <strong style="color:var(--text-secondary);">Team & Resources</strong></div>
                         <div style="font-size: 12px; color: var(--text-muted);">Who's working on what, capacity</div>
                     </div>
-                    <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
+                    <div class="spectra-suggestion-card" style="border-radius: 10px; padding: 12px 14px;">
                         <div style="font-size: 15px; margin-bottom: 4px;">📚 <strong style="color:var(--text-secondary);">Wiki & Docs</strong></div>
                         <div style="font-size: 12px; color: var(--text-muted);">Search your project documentation</div>
                     </div>
                 </div>
-                <p style="font-size: 12px; color: #bbb;">Try clicking a suggestion below, or type anything to get started.</p>
+                <p style="font-size: 12px; color: var(--text-muted);">Try clicking a suggestion below, or type anything to get started.</p>
             </div>
         </div>
         
@@ -686,7 +723,7 @@
                 <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">🔍 What needs attention?</button>
             </div>
             <!-- Active file badge (shown when a file is attached to this session) -->
-            <div id="active-file-badge" style="display:none; padding: 4px 12px; background:#e8f4fd; border-radius:6px 6px 0 0; border:1px solid #bee5eb; border-bottom:none; font-size:0.82rem; color:#0c5460; display:none; align-items:center; gap:6px;">
+            <div id="active-file-badge" class="spectra-file-badge" style="display:none; padding: 4px 12px; border-radius:6px 6px 0 0; border-bottom:none; font-size:0.82rem; display:none; align-items:center; gap:6px;">
                 <i class="fas fa-paperclip text-info"></i>
                 <span id="active-file-name" class="fw-semibold"></span>
                 <small class="text-muted">(active for this session)</small>
@@ -715,7 +752,7 @@
                 {% include 'partials/ai_disclaimer.html' with disclaimer_text="Spectra can make mistakes. Please verify important information." %}
             </div>
             <div style="text-align: center; padding: 4px 0 2px 0;">
-                <small style="color: #b0b0b0; font-size: 11px;">Spectra v1.0 — Query &amp; Insights · Actions coming in v2.0</small>
+                <small style="color: var(--text-muted); font-size: 11px;">Spectra v1.0 — Query &amp; Insights · Actions coming in v2.0</small>
             </div>
         </div>
         {% else %}
@@ -723,31 +760,31 @@
         <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; padding: 40px; text-align: center;">
             <div style="font-size: 80px; margin-bottom: 20px;">🤖</div>
             <h2 style="color: var(--text-primary); margin-bottom: 15px;">Welcome to Spectra</h2>
-            <p style="color: #666; max-width: 540px; margin-bottom: 20px;">
+            <p style="color: var(--text-muted); max-width: 540px; margin-bottom: 20px;">
                 Your AI project assistant — ask questions, get insights, and explore your project data.
             </p>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 560px; margin-bottom: 24px; text-align: left;">
-                <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
+                <div class="spectra-suggestion-card" style="border-radius: 10px; padding: 10px 12px;">
                     <div style="font-size: 14px;">💬 <strong style="color:var(--text-secondary);">Ask</strong></div>
                     <div style="font-size: 11px; color: var(--text-muted);">Status, risks, workload</div>
                 </div>
-                <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
+                <div class="spectra-suggestion-card" style="border-radius: 10px; padding: 10px 12px;">
                     <div style="font-size: 14px;">� <strong style="color:var(--text-secondary);">Reports</strong></div>
                     <div style="font-size: 11px; color: var(--text-muted);">Overdue, sprint health, trends</div>
                 </div>
-                <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
+                <div class="spectra-suggestion-card" style="border-radius: 10px; padding: 10px 12px;">
                     <div style="font-size: 14px;">🎯 <strong style="color:var(--text-secondary);">Goals</strong></div>
                     <div style="font-size: 11px; color: var(--text-muted);">OKRs, strategy, alignment</div>
                 </div>
-                <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
+                <div class="spectra-suggestion-card" style="border-radius: 10px; padding: 10px 12px;">
                     <div style="font-size: 14px;">⚠️ <strong style="color:var(--text-secondary);">Risks</strong></div>
                     <div style="font-size: 11px; color: var(--text-muted);">Blockers, dependencies</div>
                 </div>
-                <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
+                <div class="spectra-suggestion-card" style="border-radius: 10px; padding: 10px 12px;">
                     <div style="font-size: 14px;">👥 <strong style="color:var(--text-secondary);">Team</strong></div>
                     <div style="font-size: 11px; color: var(--text-muted);">Capacity, assignments</div>
                 </div>
-                <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
+                <div class="spectra-suggestion-card" style="border-radius: 10px; padding: 10px 12px;">
                     <div style="font-size: 14px;">📚 <strong style="color:var(--text-secondary);">Docs</strong></div>
                     <div style="font-size: 11px; color: var(--text-muted);">Wiki and documentation</div>
                 </div>

@@ -8,11 +8,21 @@
     .welcome-container {
         min-height: 100vh;
         display: flex;
-        align-items: center;
+        flex-direction: column;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
     }
-    
+
+    .welcome-back-link {
+        padding: 20px 20px 0 20px;
+    }
+
+    .welcome-content-wrapper {
+        flex: 1;
+        display: flex;
+        align-items: center;
+    }
+
     .welcome-content {
         max-width: 900px;
         margin: 0 auto;
@@ -166,11 +176,12 @@
 
 {% block content %}
 <div class="welcome-container">
-    <div class="mb-3">
+    <div class="welcome-back-link">
         <a href="{% url 'dashboard' %}" class="btn-prizm-back">
             <i class="fas fa-arrow-left"></i> Back to Dashboard
         </a>
     </div>
+    <div class="welcome-content-wrapper">
     <div class="welcome-content">
         <div class="assistant-icon">🤖</div>
         
@@ -247,6 +258,7 @@
             </div>
         </div>
         {% endif %}
+    </div>
     </div>
 </div>
 {% endblock %}
