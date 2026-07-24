@@ -284,7 +284,7 @@
                 </div>
                 <div class="mb-3">
                     <label for="memoryWhat" class="form-label">What happened? <span class="text-danger">*</span></label>
-                    <textarea id="memoryWhat" class="form-control" rows="4" maxlength="2000"
+                    <textarea id="memoryWhat" class="form-control" rows="12" maxlength="2000"
                               placeholder="Plain English — e.g. Vendor warned their API will be deprecated in Q3, so we should plan a migration."></textarea>
                     <!-- Spectra pre-save gap review (Part 1) -->
                     <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="askSpectraGapsBtn" style="display:none;">
@@ -371,6 +371,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let lastQuestion = '';
     let lastAnswer = '';
     let lastSourceTitles = [];
+    let lastSourceNodeId = null;
 
     // Titles can carry a trailing ellipsis when truncated — strip it so the
     // search box never shows a dangling fragment.
@@ -414,6 +415,12 @@ document.addEventListener('DOMContentLoaded', function() {
             answerText.textContent = data.answer || 'No answer generated.';
             lastAnswer = data.answer || '';
             lastSourceTitles = (data.source_details || []).map(s => s.title);
+            // The handoff strengthens ONE memory. Prefer a cited source that
+            // still has gaps (the one the "Expand this memory" loop targets),
+            // else fall back to the first cited source.
+            const _srcs = data.source_details || [];
+            const _gapped = _srcs.find(s => s.has_gaps);
+            lastSourceNodeId = (_gapped || _srcs[0] || {}).id || null;
 
             const conf = (data.confidence || 'Low');
             confidenceBadge.textContent = conf + ' confidence';
@@ -477,80 +484,72 @@ document.addEventListener('DOMContentLoaded', function() {
     feedbackUp.addEventListener('click', () => sendFeedback(true));
     feedbackDown.addEventListener('click', () => sendFeedback(false));
 
-    // Continue in Ask Spectra — hand off the Q+A and sources for a deeper dive.
+    // Continue in Ask Spectra — hand off ONE memory for a gap-strengthening
+    // review. The engineered ~250-word instruction is built SERVER-SIDE (it uses
+    // the memory's own stored gap questions) and handed to the chat via
+    // sessionStorage — never crafted here and never placed in the URL. The user
+    // only ever sees a single clean line ("Help me strengthen this memory: …").
     const continueSpectraBtn = document.getElementById('continueSpectraBtn');
     if (continueSpectraBtn) {
         continueSpectraBtn.addEventListener('click', function() {
             if (!lastAnswer) return;
-            // Reframe the hand-off as an auditor task: these are knowledge gaps to
-            // log, NOT facts already sitting in the database. Build the prompt as
-            // labelled sections separated by blank lines so it renders as readable
-            // paragraphs in the chat rather than one collapsed wall of text.
-            const lines = [];
-            lines.push("Do not summarise the board, its tasks, or its overall status. Respond only about the single Organizational Memory entry below — it is a high-level log, not a complete record, and the deeper details are most likely NOT yet documented in PrizmAI.");
-            lines.push("");
-            lines.push("What was asked: " + lastQuestion);
-            lines.push("");
-            lines.push("Memory summary: " + lastAnswer);
-            lines.push("");
-            if (lastSourceTitles.length) {
-                lines.push("Source memories: " + lastSourceTitles.join("; "));
-                lines.push("");
-            }
-            lines.push("Go straight to strengthening this memory — skip any board summary. Rather than assuming the answers already exist in our system, identify the key Knowledge Gaps — the specific details our team should add to make this record robust (e.g. root cause, owner, impact, follow-up actions) — and flag any critical blind spots worth investigating. Present them as 'Recommended details to log'.");
-            lines.push("");
-            lines.push("Close your reply by noting that once these details are gathered they can be added to the memory by opening its 'Gaps Noted' badge and clicking 'Expand this memory'.");
-            const prompt = lines.join("\n");
+            continueSpectraBtn.disabled = true;
 
             // Build a clean, human-readable session name from the original question.
             const cleanQ = (lastQuestion || '').replace(/[…\s]+$/, '').trim();
             const words = cleanQ.split(/\s+/).filter(Boolean);
             const sessionTitle = 'Memory Review: ' + (words.slice(0, 6).join(' ') || 'memory') + (words.length > 6 ? '…' : '');
 
-            // Each memory must get its OWN review thread. Redirecting with just a
-            // title (and no session) would fall through to "most recent session" on
-            // the chat side and stack a second memory's gaps into an unrelated
-            // thread. So create/reuse a dedicated session up front, then open it
-            // with an explicit session id. The deterministic per-memory title lets
-            // the duplicate-title check reuse the same thread on a re-click instead
-            // of spawning duplicates.
-            continueSpectraBtn.disabled = true;
-            openMemoryReviewSession(sessionTitle, prompt);
+            fetch("{% url 'memory_review_handoff' %}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                body: JSON.stringify({
+                    node_id: lastSourceNodeId,
+                    question: lastQuestion,
+                    answer: lastAnswer,
+                    source_titles: lastSourceTitles,
+                })
+            })
+            .then(r => r.json())
+            .then(payload => {
+                openMemoryReviewSession(sessionTitle, payload.display_message, payload.ai_prompt);
+            })
+            .catch(() => { continueSpectraBtn.disabled = false; });
         });
     }
 
     // Create (or reuse) a dedicated Spectra session for a single memory, then open
-    // it with the gap-review prompt queued. `force` skips the duplicate-title reuse
-    // path and always makes a fresh thread.
-    function openMemoryReviewSession(title, prompt, force) {
+    // it. The display line + hidden AI prompt are stashed in sessionStorage keyed
+    // by session id; the chat page reads them on load, shows the display line, and
+    // runs the hidden prompt. Nothing goes in the URL. The deterministic per-memory
+    // title lets create_session's duplicate-title check reuse the same review
+    // thread on a re-click instead of spawning duplicates.
+    function openMemoryReviewSession(title, displayMessage, aiPrompt) {
         const chatUrl = "{% url 'ai_assistant:chat' %}";
         const openWith = (sessionId) => {
-            window.location.href = chatUrl + "?session=" + sessionId +
-                "&q=" + encodeURIComponent(prompt);
-        };
-        const fallbackOpen = () => {
-            // Last resort if session creation fails — preserve the old behaviour so
-            // the user still reaches Spectra rather than getting stuck.
-            window.location.href = chatUrl + "?title=" +
-                encodeURIComponent(title) + "&q=" + encodeURIComponent(prompt);
+            try {
+                sessionStorage.setItem('spectraHandoff:' + sessionId, JSON.stringify({
+                    display: displayMessage, prompt: aiPrompt,
+                }));
+            } catch (e) { /* private mode / quota — fall through, chat just shows nothing */ }
+            window.location.href = chatUrl + "?session=" + sessionId + "&handoff=1";
         };
         fetch("{% url 'ai_assistant:create_session' %}", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-            body: JSON.stringify({ title: title, force: !!force })
+            body: JSON.stringify({ title: title, force: false })
         })
         .then(r => r.json())
         .then(data => {
             if (data.status === 'duplicate_warning' && data.existing_session_id) {
-                // This memory already has a review thread — reuse it.
                 openWith(data.existing_session_id);
             } else if (data.session_id) {
                 openWith(data.session_id);
-            } else {
-                fallbackOpen();
+            } else if (continueSpectraBtn) {
+                continueSpectraBtn.disabled = false;
             }
         })
-        .catch(fallbackOpen);
+        .catch(() => { if (continueSpectraBtn) continueSpectraBtn.disabled = false; });
     }
 
     // Recent query click — use the exact stored query (not parsed display text).

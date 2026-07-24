@@ -64,12 +64,14 @@ def _accessible_memory_qs(user):
 
 
 # Manual node types a user may pick when logging a memory (value, label).
+# Labels MUST match the model's NODE_TYPES display strings — otherwise the type
+# a user picks in the dropdown (e.g. "Decision") disagrees with the label the
+# saved card shows (e.g. "Decision Made"), which is exactly the mismatch the
+# Memory review flagged. Deriving from the model keeps them in lock-step.
+_MODEL_NODE_LABELS = dict(MemoryNode.NODE_TYPES)
 MANUAL_NODE_TYPES = [
-    ('decision', 'Decision'),
-    ('lesson', 'Lesson Learned'),
-    ('risk_event', 'Risk Event'),
-    ('milestone', 'Milestone'),
-    ('note', 'Note'),
+    (value, _MODEL_NODE_LABELS[value])
+    for value in ('decision', 'lesson', 'risk_event', 'milestone', 'note')
 ]
 # Types accepted by the create/edit endpoints. Includes 'manual_log' for
 # backward compatibility with the existing board-knowledge modal.
@@ -726,6 +728,146 @@ def review_memory_gaps(request):
         return JsonResponse({'questions': [], 'sufficient': False})
 
 
+# ── View 2e: Memory → Spectra Review Handoff ────────────────────────────────
+
+def build_memory_review_prompt(node, question, answer, source_titles):
+    """Assemble the engineered instruction that drives a Spectra memory-review
+    thread.
+
+    This is built SERVER-SIDE (never in the URL) and — crucially — anchors the
+    "recommended details to log" to the memory's OWN stored gap checklist
+    (``gap_questions_original``) rather than asking Spectra to regenerate a
+    fresh, divergent list. That keeps the chat's gap questions identical to the
+    ones the "Gaps Noted" popover and the edit modal already show for the same
+    memory (single source of truth).
+    """
+    stored_questions = node.gap_questions_original or node.gap_questions or []
+
+    lines = []
+    lines.append(
+        "Do not summarise the board, its tasks, or its overall status. Respond "
+        "only about the single Organizational Memory entry below — it is a "
+        "high-level log, not a complete record, and the deeper details are most "
+        "likely NOT yet documented in PrizmAI."
+    )
+    lines.append("")
+    if question:
+        lines.append("What was asked: " + question)
+        lines.append("")
+    lines.append("Memory title: " + (node.title or ''))
+    lines.append("")
+    lines.append("Memory entry: " + (node.content or answer or ''))
+    lines.append("")
+    if source_titles:
+        lines.append("Source memories: " + "; ".join(source_titles))
+        lines.append("")
+
+    if stored_questions:
+        # Hand Spectra the EXACT open questions already stored on this memory so
+        # its "Recommended details to log" cannot drift from the popover/modal.
+        numbered = "\n".join(f"{i + 1}. {q}" for i, q in enumerate(stored_questions))
+        lines.append(
+            "The following open questions have already been identified as the "
+            "knowledge gaps for this memory. Do NOT invent a different list — "
+            "work from exactly these:"
+        )
+        lines.append(numbered)
+        lines.append("")
+        lines.append(
+            "For each open question above, briefly explain what specific detail "
+            "the team should capture to answer it (e.g. root cause, owner, "
+            "impact, follow-up actions), and flag any critical blind spot worth "
+            "investigating. Present them under the heading 'Recommended details "
+            "to log'."
+        )
+    else:
+        lines.append(
+            "Go straight to strengthening this memory — skip any board summary. "
+            "Rather than assuming the answers already exist in our system, "
+            "identify the key Knowledge Gaps — the specific details our team "
+            "should add to make this record robust (e.g. root cause, owner, "
+            "impact, follow-up actions) — and flag any critical blind spots "
+            "worth investigating. Present them as 'Recommended details to log'."
+        )
+    lines.append("")
+    lines.append(
+        "Close your reply by noting that once these details are gathered they "
+        "can be added to the memory by opening its 'Gaps Noted' badge and "
+        "clicking 'Expand this memory'."
+    )
+    return "\n".join(lines)
+
+
+@login_required
+@require_POST
+def memory_review_handoff(request):
+    """Build the Spectra memory-review payload server-side.
+
+    The organizational-memory page calls this instead of hand-crafting a ~250
+    word prompt and stuffing it into the chat URL. It returns:
+
+    - ``display_message``: the single clean line the user sees in the chat
+      ("Help me strengthen this memory: <title>").
+    - ``ai_prompt``: the full engineered instruction (with the memory's stored
+      gap questions) that Spectra actually answers — never shown to the user and
+      never placed in the URL.
+
+    The caller creates/reuses the review session, then POSTs display_message +
+    ai_prompt to send_message.
+    """
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    node_id = data.get('node_id')
+    node = None
+    if node_id:
+        node = _accessible_memory_qs(request.user).filter(pk=node_id).first()
+
+    question = (data.get('question') or '').strip()
+    answer = (data.get('answer') or '').strip()
+    source_titles = data.get('source_titles') or []
+    if not isinstance(source_titles, list):
+        source_titles = []
+
+    if node is None:
+        # No resolvable node (e.g. a synthesized multi-source answer). Fall back
+        # to a lightweight prompt built from the supplied Q+A so the handoff
+        # still works, without any URL scaffolding.
+        display_title = question or 'this memory'
+        lines = [
+            "Do not summarise the board, its tasks, or its overall status. "
+            "Respond only about the single Organizational Memory topic below.",
+            "",
+            f"What was asked: {question}" if question else "",
+            "",
+            f"Memory summary: {answer}" if answer else "",
+        ]
+        if source_titles:
+            lines += ["", "Source memories: " + "; ".join(source_titles)]
+        lines += [
+            "",
+            "Identify the key Knowledge Gaps — the specific details our team "
+            "should add to make this record robust — and present them as "
+            "'Recommended details to log'. Close by noting these can be added by "
+            "opening the memory's 'Gaps Noted' badge and clicking 'Expand this "
+            "memory'.",
+        ]
+        ai_prompt = "\n".join(lines)
+    else:
+        display_title = node.title or question or 'this memory'
+        ai_prompt = build_memory_review_prompt(node, question, answer, source_titles)
+
+    short = display_title if len(display_title) <= 90 else display_title[:87] + '…'
+    display_message = f"Help me strengthen this memory: {short}"
+
+    return JsonResponse({
+        'display_message': display_message,
+        'ai_prompt': ai_prompt,
+    })
+
+
 # ── View 3: Organizational Memory Page ──────────────────────────────────────
 
 @login_required
@@ -856,8 +998,22 @@ def memory_browse(request):
     for _n in nodes:
         _n.manageable = _can_manage_memory(request, _n)
 
+    # Projects shown in the "Filter by project" list: the user's own boards that
+    # carry memories, PLUS any OTHER board in a workspace they belong to that
+    # holds workspace-wide memories they can already see. The second clause is
+    # what makes a cross-project memory source (e.g. an archived, wound-down
+    # project seeded org-wide) show up as a distinct project here — without it,
+    # "Organizational Memory" would only ever list the single board the current
+    # user happens to own, undercutting the cross-project pitch.
+    project_board_ids = set(board_ids)
+    accessible_board_ids = (
+        _accessible_memory_qs(request.user)
+        .values_list('board_id', flat=True)
+        .distinct()
+    )
+    project_board_ids.update(bid for bid in accessible_board_ids if bid)
     projects_qs = (
-        Board.objects.filter(id__in=board_ids)
+        Board.objects.filter(id__in=project_board_ids)
         .annotate(memory_count=Count('memory_nodes'))
         .filter(memory_count__gt=0)
         .order_by('-memory_count', 'name')

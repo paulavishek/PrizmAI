@@ -1059,7 +1059,7 @@
     // Send message
     let _sendInProgress = false;
 
-    function sendMessage(overrideMessage) {
+    function sendMessage(overrideMessage, displayMessage) {
         // Prevent duplicate submissions from double-click or Enter+click overlap
         if (_sendInProgress) return;
 
@@ -1073,13 +1073,18 @@
         // An explicit override (e.g. a multi-line hand-off from another page) is
         // used verbatim — the single-line #chat-input would strip its newlines.
         const message = (typeof overrideMessage === 'string' ? overrideMessage : input.value).trim();
-        
+        // When a short display line is supplied (memory-review handoff), show it
+        // to the user and persist it server-side instead of the full engineered
+        // instruction carried in `message`.
+        const shownMessage = (typeof displayMessage === 'string' && displayMessage.trim())
+            ? displayMessage.trim() : message;
+
         if (!message) return;
-        
+
         _sendInProgress = true;
         document.getElementById('send-btn').disabled = true;
         input.value = '';
-        addMessageToUI('user', message);
+        addMessageToUI('user', shownMessage);
         
         // Show typing indicator
         const container = document.getElementById('chat-messages');
@@ -1093,6 +1098,10 @@
             session_id: sessionId,
             // Note: history removed - each request is stateless to prevent token accumulation
         };
+        // Handoff: persist/show the short line, but let Spectra answer the full prompt.
+        if (shownMessage !== message) {
+            payload.display_message = shownMessage;
+        }
         // Include active attachment if present (session-scoped persistence)
         if (activeAttachmentId) {
             payload.attachment_id = activeAttachmentId;
@@ -1534,14 +1543,36 @@
         const urlQuery = urlParams.get('q');
         const urlTitle = urlParams.get('title');  // optional caller-supplied session name
         const initialQuery = "{{ initial_query|escapejs }}";
-        
+
+        // ── Memory-review handoff ─────────────────────────────────────────────
+        // The Organizational Memory page stashes {display, prompt} in
+        // sessionStorage (keyed by session id) and redirects here with
+        // ?session=<id>&handoff=1. Show the short display line, but send the full
+        // engineered prompt. Nothing sensitive/long ever rides in the URL.
+        if (urlParams.get('handoff') === '1' && sessionId) {
+            let handoff = null;
+            try {
+                const raw = sessionStorage.getItem('spectraHandoff:' + sessionId);
+                if (raw) handoff = JSON.parse(raw);
+            } catch (e) { handoff = null; }
+            if (handoff && handoff.prompt) {
+                sessionStorage.removeItem('spectraHandoff:' + sessionId);
+                // Strip the handoff params so a refresh doesn't re-fire it.
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState({}, '', '/assistant/chat/?session=' + sessionId);
+                }
+                setTimeout(() => sendMessage(handoff.prompt, handoff.display), 500);
+                return;
+            }
+        }
+
         console.log('DOMContentLoaded - URL query param:', urlQuery);
         console.log('DOMContentLoaded - Initial query from context:', initialQuery);
         console.log('DOMContentLoaded - Current sessionId:', sessionId);
-        
+
         // Use URL parameter if available, otherwise fall back to template variable
         const queryToSend = urlQuery || initialQuery;
-        
+
         if (queryToSend) {
             // Check if there's an active session
             if (!sessionId) {

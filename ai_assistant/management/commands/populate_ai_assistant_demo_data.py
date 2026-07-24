@@ -574,20 +574,20 @@ Mitigation Strategies:
                         'content': """Based on your current board status, I recommend prioritizing the following tasks:
 
 **High Priority (Complete First):**
-1. **Implement user authentication system** - This is blocking several other features and is marked as high priority
-2. **Design database schema for multi-tenancy** - Foundation task that other work depends on
-3. **Fix critical security vulnerability** - Security issues should always be addressed promptly
+1. **Authentication System** - This is blocking several other features and is marked urgent
+2. **Database Schema & Migrations** - Foundation task that other work depends on
+3. **Security Architecture Patterns** - Security work should always be addressed promptly
 
 **Medium Priority:**
-4. **Build REST API endpoints** - Can proceed once authentication is in place
-5. **Create responsive dashboard layout** - Good to start in parallel
+4. **Base API Structure** - Can proceed once authentication is in place
+5. **API Gateway Configuration** - Good to start in parallel
 
 **Considerations:**
 - Your team has 3 members with a combined capacity of ~120 hours
 - Current sprint has 2 weeks remaining
 - I noticed 2 tasks are at risk of being overdue
 
-Would you like me to help with task estimation or identify any blockers?""",
+Want me to break down the estimates for these tasks, or highlight which ones are currently blocked?""",
                         'is_helpful': True,
                     },
                     {
@@ -625,7 +625,7 @@ def protected_endpoint(request):
 
 **Timeline Impact:** This approach could save 2-3 days vs. sequential development.
 
-Would you like me to create subtasks for this parallel approach?""",
+Want me to walk through how this maps onto your current **Base API Structure** and **Authentication System** tasks?""",
                         'is_helpful': True,
                     },
                 ]
@@ -664,14 +664,14 @@ Marcus has 11 active implementation tasks with an estimated 44 hours of work, wh
 
 1. **Immediate:** Reassign 1-2 tasks from Marcus to Elena or Priya (who have capacity)
 2. **Tasks to consider moving:**
-   - "Error Tracking & Monitoring" (Medium priority, 3 hours) -> Elena
-   - "Security Audit & Fixes" (Medium priority, 4 hours) -> Elena
+   - "Logging & Observability Setup" (Medium priority, 3 hours) -> Elena
+   - "CI Test Coverage Gates" (Medium priority, 4 hours) -> Elena
 
 3. **Long-term:**
    - Review task estimation accuracy
    - Consider breaking down Marcus's complex tasks
 
-Would you like me to suggest specific task reassignments?""",
+Want me to show a side-by-side of each person's workload so you can see where the capacity is?""",
                         'is_helpful': True,
                     },
                     {
@@ -682,18 +682,18 @@ Would you like me to suggest specific task reassignments?""",
                         'role': 'assistant',
                         'content': """Based on skills matching and current priorities, here are my recommendations:
 
-**Recommended Reassignments:**
+**Candidate Moves:**
 
-**1. "Error Tracking & Monitoring" -> Elena**
+**1. "Logging & Observability Setup" -> Elena**
 - **Current Owner:** Marcus Chen
 - **Estimated Hours:** 3 hours
 - **Priority:** Medium
 - **Why Elena:**
-  - Monitoring setup aligns with Elena's DevOps/QA skills
+  - Observability setup aligns with Elena's DevOps/QA skills
   - Task is well-defined with clear scope
   - No technical blockers
 
-**2. "Security Audit & Fixes" -> Elena**
+**2. "CI Test Coverage Gates" -> Elena**
 - **Current Owner:** Marcus Chen
 - **Estimated Hours:** 4 hours
 - **Priority:** Medium
@@ -702,7 +702,7 @@ Would you like me to suggest specific task reassignments?""",
   - Testing-adjacent task, natural fit
   - Marcus can provide context on UX impact
 
-**After Reassignment:**
+**Projected Balance If You Move Them:**
 
 | Team Member | Tasks | Hours | Utilization |
 |-------------|-------|-------|-------------|
@@ -711,7 +711,7 @@ Would you like me to suggest specific task reassignments?""",
 
 **New Team Balance:** [OK] Healthy distribution
 
-Would you like me to help draft a message to the team about these changes?""",
+These are read-only suggestions — you can make the reassignments from the board's Gantt or Resource view whenever you're ready. Want me to double-check Elena's current load before you do?""",
                         'is_helpful': True,
                     },
                 ]
@@ -742,7 +742,7 @@ Would you like me to help draft a message to the team about these changes?""",
    - **Likelihood:** High | **Impact:** Critical
    - **Mitigation:** Consider adding a second developer
 
-2. **Resource Risk - Sam's Workload**
+2. **Resource Risk - Marcus's Workload**
    - 112% utilization detected
    - Risk of burnout or quality issues
    - **Likelihood:** Medium | **Impact:** High
@@ -958,7 +958,7 @@ Would you like suggestions for improving velocity?""",
 - Recurring issues decreasing
 - Action items completed rate > 80%
 
-Would you like a template for your next retrospective?""",
+Want me to walk through any of these retro formats in more detail?""",
                         'is_helpful': True,
                         'used_web_search': True,
                         'search_sources': [
@@ -996,9 +996,9 @@ Would you like a template for your next retrospective?""",
 
 **Phase 2: Integration & Testing (Weeks 3-4)**
 - [ ] Authentication Testing Suite
-- [ ] Integration Testing Suite
-- [ ] Core Features Code Review
-- [ ] API Rate Limiting implementation
+- [ ] End-to-End Test Suite
+- [ ] CI Test Coverage Gates
+- [ ] API Rate Limiting & Abuse Prevention
 
 **Phase 3: Polish & Hardening (Weeks 5-6)**
 - [ ] Performance Optimization
@@ -1007,11 +1007,11 @@ Would you like a template for your next retrospective?""",
 - [ ] Load Testing & Optimization
 
 **Phase 4: Launch Preparation (Weeks 7-8)**
-- [ ] User Onboarding Flow
-- [ ] Error Tracking & Monitoring setup
-- [ ] Accessibility Compliance
-- [ ] Final Documentation
-- [ ] Deployment Automation
+- [ ] Open Source Launch Preparation
+- [ ] Logging & Observability Setup
+- [ ] Accessibility Compliance (WCAG 2.1 AA)
+- [ ] API Reference Documentation
+- [ ] Production Deployment to Google Cloud Run
 
 **Phase 5: Go-Live (Week 9)**
 - [ ] Final launch checklist
@@ -1027,10 +1027,10 @@ Would you like a template for your next retrospective?""",
 
 **Risk Assessment:**
 - Authentication tasks are critical path - any delay impacts everything downstream
-- Sam's workload needs redistribution before Phase 2
-- Security audit should not be skipped for timeline pressure
+- Marcus's workload needs redistribution before Phase 2
+- Security work should not be skipped for timeline pressure
 
-Would you like me to create a detailed task breakdown for any of these phases?""",
+Want me to expand on the tasks and dependencies in any of these phases?""",
                         'is_helpful': True,
                     },
                 ]
@@ -1064,22 +1064,22 @@ Would you like me to create a detailed task breakdown for any of these phases?""
 
 ** Recommended Communication Framework**
 
-**1. Executive Summary (for Sarah Johnson, Product Owner)**
+**1. Executive Summary (for the Product Owner)**
 - Lead with outcomes, not activity
 - Highlight: 7 foundation tasks complete, architecture approved
-- Flag: Authentication system at 80%, needs 3 more days
+- Flag: Authentication System at 80%, needs 3 more days
 - Next milestone: Core Authentication Ready
 
-**2. Technical Update (for Mike Chen, Engineering Director)**
+**2. Technical Update (for Priya Sharma, Lead Engineer)**
 - Architecture design finalized and approved
 - CI/CD pipeline operational
-- Security architecture patterns defined
-- Key risk: Database migrations blocking downstream tasks
+- Security Architecture Patterns defined
+- Key risk: Database Schema & Migrations blocking downstream tasks
 
-**3. Quality Report (for Lisa Park, QA Lead)**
+**3. Quality Report (for Elena Vasquez, DevOps/QA)**
 - Testing strategy defined for all phases
-- Auth testing suite pending (blocked by auth completion)
-- Integration testing framework selected
+- Authentication Testing Suite pending (blocked by auth completion)
+- End-to-End Test Suite framework selected
 
 **Communication Cadence:**
 - 📧 Weekly status email to all stakeholders
@@ -1094,9 +1094,9 @@ Would you like me to create a detailed task breakdown for any of these phases?""
 > **On Track:** [OK] Budget, Architecture, Environment
 > **Attention Needed:** Authentication System (80% -> targeting completion this week)
 > **Next Week:** Complete auth, begin Phase 2 core features
-> **Risks:** Sam's workload at 112% - redistribution planned
+> **Risks:** Marcus's workload at 112% - redistribution planned
 
-Would you like me to draft the full stakeholder email?""",
+Want me to pull the exact task-level numbers behind any of these sections so your update is airtight?""",
                         'is_helpful': True,
                     },
                 ]
@@ -1202,7 +1202,7 @@ Would you like a detailed action plan for reducing this debt?""",
 **Estimated Total Effort:** 5 developer-days
 **Expected Impact:** 40% reduction in auth-related issues
 
-Shall I create these as subtasks on your board?""",
+When you're ready, you can add these as tasks on the board yourself. Want me to prioritise the four phases by risk-reduction-per-hour first?""",
                         'is_helpful': True,
                     },
                 ]

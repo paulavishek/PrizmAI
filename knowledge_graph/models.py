@@ -14,7 +14,7 @@ class MemoryNode(models.Model):
         ('scope_change', 'Scope Change'),
         ('milestone', 'Milestone Reached'),
         ('ai_recommendation', 'AI Recommendation'),
-        ('manual_log', 'Manual Decision Log'),
+        ('manual_log', 'Manual Log'),
         ('note', 'Note'),
     ]
 

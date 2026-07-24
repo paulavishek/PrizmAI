@@ -3596,6 +3596,10 @@ class Command(BaseCommand):
             'populate_commitment_demo_data',
             'populate_calendar_demo_data',
             'populate_knowledge_demo_data',
+            # Must run AFTER populate_knowledge_demo_data: it links its own
+            # (second-project) memories to the Software Development memories that
+            # seeder creates.
+            'populate_second_project_memory',
             'populate_discovery_demo_data',
             'populate_automation_demo_data',
             'populate_ai_assistant_demo_data',

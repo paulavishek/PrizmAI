@@ -245,6 +245,12 @@ def send_message(request):
         data = json.loads(request.body)
         
         message_text = data.get('message', '').strip()
+        # Handoff support (e.g. from the Organizational Memory "Continue in
+        # Spectra" flow): the caller may send a short ``display_message`` to show
+        # and persist as the user's turn, while ``message`` carries the full
+        # engineered instruction Spectra actually answers. This keeps the ~250
+        # word review scaffolding out of the visible chat and out of the URL.
+        display_message = (data.get('display_message') or '').strip()
         session_id = data.get('session_id')
         board_id = data.get('board_id')
         # Sanitize board_id - convert empty string to None
@@ -335,11 +341,13 @@ def send_message(request):
                 session.save()
                 board = None
         
-        # Save user message
+        # Save user message. When a short display_message is supplied (handoff
+        # flow), persist THAT as the visible user turn so the chat history shows
+        # the clean one-liner, not the full engineered instruction.
         user_message = AIAssistantMessage.objects.create(
             session=session,
             role='user',
-            content=message_text,
+            content=display_message or message_text,
             attachment=active_attachment,
         )
         
