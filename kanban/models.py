@@ -2348,11 +2348,31 @@ class TeamSkillProfile(models.Model):
     
     @property
     def utilization_percentage(self):
-        """Calculate team utilization"""
+        """Team-wide utilization: committed hours ÷ capacity, across the whole
+        team. This can exceed 100% (the team is collectively over-allocated) —
+        unlike a single member's ``UserProfile.utilization_percentage``, which
+        is capped at 100%. The two are different scopes and are expected to
+        differ; the template surfaces the hours/headcount so the number is not
+        presented bare."""
         if self.total_capacity_hours == 0:
             return 0
         return (self.utilized_capacity_hours / self.total_capacity_hours) * 100
-    
+
+    @property
+    def team_size(self):
+        """Distinct team members contributing to the skill inventory.
+
+        Derived from the deduplicated set of member user_ids across all skills
+        so the utilization figure can be shown as '… across N people'."""
+        member_ids = set()
+        for data in (self.skill_inventory or {}).values():
+            if isinstance(data, dict):
+                for m in data.get('members', []):
+                    uid = m.get('user_id') if isinstance(m, dict) else None
+                    if uid is not None:
+                        member_ids.add(uid)
+        return len(member_ids)
+
     @property
     def available_skills(self):
         """Get list of all available skill names"""

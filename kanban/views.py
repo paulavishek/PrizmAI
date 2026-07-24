@@ -6293,12 +6293,22 @@ def skill_gap_dashboard(request, board_id):
     active_plans = development_plans.filter(status__in=['approved', 'in_progress']).count()
     proposed_plans = development_plans.filter(status='proposed').count()
     completed_plans = development_plans.filter(status='completed').count()
-    
+
+    # Currency code for cost labels — match the board's budget currency so the
+    # Estimated Cost field is never a unitless number. Falls back to USD.
+    try:
+        from kanban.budget_models import ProjectBudget
+        _budget = ProjectBudget.objects.filter(board=board).only('currency').first()
+        currency_code = (_budget.currency if _budget and _budget.currency else 'USD')
+    except Exception:
+        currency_code = 'USD'
+
     context = {
         'board': board,
         'team_profile': team_profile,
         'skill_gaps': skill_gaps,
         'development_plans': development_plans,
+        'currency_code': currency_code,
         'critical_gaps': critical_gaps,
         'high_gaps': high_gaps,
         'medium_gaps': medium_gaps,

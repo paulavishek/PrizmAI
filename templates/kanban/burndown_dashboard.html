@@ -470,6 +470,7 @@
                 <div class="metric-subtext">{{ prediction.velocity_trend|title }}</div>
             </div>
 
+            {% if board_uses_story_points %}
             <div class="metric-card">
                 <div class="metric-label">Committed vs. Capacity</div>
                 <div class="metric-value {% if capacity_over_committed %}text-warning{% endif %}">
@@ -479,6 +480,7 @@
                     {% if capacity_has_baseline %}open story points vs avg pts/week{% else %}open story points (no velocity baseline yet){% endif %}
                 </div>
             </div>
+            {% endif %}
         </div>
 
         {% if capacity_over_committed %}

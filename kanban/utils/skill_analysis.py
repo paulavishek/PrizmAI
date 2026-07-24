@@ -292,10 +292,13 @@ def _canonicalize_skill_name(name: str) -> str:
 # Keys MUST already be canonicalized + lowercased (i.e. the output of
 # _canonicalize_skill_name(name).lower()) so the lookup is exact.
 #
-# DELIBERATELY UNMAPPED (so they remain genuine gaps): authentication,
-# authentication protocols, oauth, web security, cryptography, security
-# engineering — the demo team has no dedicated auth/security specialist, and the
-# feature should still surface that.
+# AUTH / SECURITY buckets (below) DELIBERATELY DO NOT collapse into backend/
+# frontend/etc — the demo team has no dedicated auth/security specialist, so
+# these must remain genuine, visible gaps. They ARE bucketed among themselves,
+# however, so trivial variants don't show up as separate duplicate gaps
+# (e.g. "OAuth" and "OAuth 2.0", "Authentication" and "Auth", "Web Security"
+# and "Application Security"). Cryptography stays on its own — it is a distinct
+# competency from general web security in the demo narrative.
 _SKILL_ALIASES = {
     # backend
     'backend development': 'backend',
@@ -344,6 +347,33 @@ _SKILL_ALIASES = {
     'cloud computing': 'devops',
     'kubernetes': 'devops',
     'test automation': 'devops',
+    # architecture (System Architecture IS Software Architecture — the team's
+    # "System Architecture" skill must cover "Software Architecture" tasks)
+    'system architecture': 'architecture',
+    'software architecture': 'architecture',
+    'architecture': 'architecture',
+    'solution architecture': 'architecture',
+    # auth (kept OUT of backend so it stays a genuine gap; variants collapse)
+    'oauth': 'oauth',
+    'oauth 2.0': 'oauth',
+    'oauth2': 'oauth',
+    'oauth 2': 'oauth',
+    'openid connect': 'oauth',
+    'authentication': 'authentication',
+    'auth': 'authentication',
+    'authentication protocols': 'authentication',
+    'authentication & authorization': 'authentication',
+    'authorization': 'authentication',
+    'user authentication': 'authentication',
+    # security (web/app security variants collapse; cryptography stays separate).
+    # NOTE: "security scanning" is intentionally NOT mapped here — it is a real
+    # team skill (running vulnerability scanners) and must not silently grant
+    # coverage for secure-design work ("Web Security"), which the team lacks.
+    'web security': 'security',
+    'application security': 'security',
+    'security': 'security',
+    'security engineering': 'security',
+    'appsec': 'security',
 }
 
 # Friendly display labels for canonical bucket keys (used as the gap's
@@ -354,6 +384,10 @@ _CANONICAL_DISPLAY = {
     'frontend': 'Frontend Development',
     'database': 'Database',
     'devops': 'DevOps / CI-CD',
+    'architecture': 'Software Architecture',
+    'oauth': 'OAuth',
+    'authentication': 'Authentication',
+    'security': 'Security',
 }
 
 
@@ -372,6 +406,28 @@ def _normalize_skill_name(name: str) -> str:
     """
     base = _canonicalize_skill_name(name).lower()
     return _SKILL_ALIASES.get(base, base)
+
+
+def _is_active_column(column) -> bool:
+    """True if a task's column represents work actively in flight.
+
+    Active = In Progress / Review / Blocked. Backlog, To Do and Done columns
+    are NOT active. Used to calibrate gap severity: a skill required only by
+    tasks sitting in the backlog is a *planning* gap, not a "cannot proceed"
+    blocker, so it must not be labelled Critical. Uses the shared column
+    semantics so column renames don't silently break the classification.
+    """
+    try:
+        from kanban.column_semantics import (
+            is_in_progress_column, is_review_column, is_blocked_column,
+        )
+        return (
+            is_in_progress_column(column)
+            or is_review_column(column)
+            or is_blocked_column(column)
+        )
+    except Exception:
+        return False
 
 
 def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
@@ -586,7 +642,13 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                                 'intermediate': 0,
                                 'beginner': 0,
                                 'tasks': [],
-                                'unique_tasks': set()
+                                'unique_tasks': set(),
+                                # Task IDs currently in an ACTIVE column (in
+                                # progress / review / blocked). A skill needed
+                                # only by backlog/to-do tasks is not blocking
+                                # work *right now*, so it should not be flagged
+                                # "Critical – Cannot proceed". See severity calc.
+                                'active_tasks': set(),
                             }
 
                         # Count requirement for this level
@@ -600,6 +662,8 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                             'level': skill_level
                         })
                         required_skills[skill_key]['unique_tasks'].add(task.id)
+                        if _is_active_column(task.column):
+                            required_skills[skill_key]['active_tasks'].add(task.id)
 
         # Frequency filter: drop skills that appear in only 1 unique task.
         # A skill needed by a single task is a one-off task requirement, not a
@@ -652,6 +716,11 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
             # Total tasks needing this skill (at any level)
             total_tasks_needing_skill = len(requirements.get('unique_tasks', set()))
             all_affected_tasks = requirements['tasks']
+            # How many affected tasks are ACTIVE (in progress / review / blocked).
+            # "Cannot proceed" (critical) is only truthful when the missing skill
+            # is blocking work that is actually in flight — a skill needed solely
+            # by backlog/to-do items is a planning gap, not a live blocker.
+            active_task_count = len(requirements.get('active_tasks', set()))
 
             # Determine the highest proficiency level required across all tasks for this skill
             highest_level = 'beginner'
@@ -669,6 +738,19 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                 # Cap to a reasonable number (not more than team size)
                 slots_needed = min(slots_needed, max(2, team_size))
 
+                # Severity: zero coverage is serious, but "Critical – Cannot
+                # proceed" is reserved for skills blocking ACTIVE work. With no
+                # active task, cap at 'high' (Blocking work) — the team can't do
+                # it, but nothing is stalled on it yet.
+                if active_task_count >= 1 and (
+                    total_tasks_needing_skill >= 3 or highest_level in ['expert', 'advanced']
+                ):
+                    zero_cov_severity = 'critical'
+                elif total_tasks_needing_skill >= 2 or highest_level in ['expert', 'advanced']:
+                    zero_cov_severity = 'high'
+                else:
+                    zero_cov_severity = 'medium'
+
                 gaps.append({
                     'skill_name': display_name,
                     'proficiency_level': highest_level.capitalize(),
@@ -677,8 +759,9 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                     'gap_count': slots_needed,
                     'affected_tasks': all_affected_tasks,
                     'task_count': total_tasks_needing_skill,
+                    'active_task_count': active_task_count,
                     'has_team_coverage': False,
-                    'severity': 'critical' if total_tasks_needing_skill >= 3 or highest_level in ['expert', 'advanced'] else 'high'
+                    'severity': zero_cov_severity,
                 })
                 continue
 
@@ -719,6 +802,7 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                     'gap_count': actual_gap,
                     'affected_tasks': all_affected_tasks,
                     'task_count': total_tasks_needing_skill,
+                    'active_task_count': active_task_count,
                     'has_team_coverage': True,
                     'thin_coverage': is_thin_coverage and actual_gap == 1,
                     'severity': severity

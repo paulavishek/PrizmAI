@@ -168,7 +168,15 @@
             <div class="stat-card {% if team_profile.utilization_percentage > 90 %}warning{% elif team_profile.utilization_percentage > 75 %}info{% else %}success{% endif %}">
                 <h3>{% if team_profile %}{{ team_profile.utilization_percentage|floatformat:0 }}%{% else %}0%{% endif %}</h3>
                 <p class="mb-0"><i class="fas fa-chart-line me-1"></i> Team Utilization</p>
-                <small>{% if team_profile.utilization_percentage > 100 %}Overallocated{% else %}Current capacity usage{% endif %}</small>
+                {% if team_profile %}
+                <small>
+                    {{ team_profile.utilized_capacity_hours|floatformat:0 }} / {{ team_profile.total_capacity_hours|floatformat:0 }} hrs/wk
+                    across {{ team_profile.team_size }} member{{ team_profile.team_size|pluralize }}
+                    {% if team_profile.utilization_percentage > 100 %}<span class="d-block">Team is over-allocated</span>{% endif %}
+                </small>
+                {% else %}
+                <small>Current capacity usage</small>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -328,7 +336,9 @@
                             <div class="d-flex justify-content-between align-items-center">
                                 <small class="text-muted">
                                     {% if plan.target_users.count == 0 %}No team members assigned{% else %}{{ plan.target_users.count }} team member{{ plan.target_users.count|pluralize }}{% endif %}
-                                    {% if plan.estimated_hours %} &bull; {{ plan.estimated_hours|floatformat:0 }}h{% endif %}
+                                    {% if plan.plan_type == 'hiring' or plan.plan_type == 'contractor' %}
+                                        {% if plan.estimated_cost %} &bull; {{ currency_code }} {{ plan.estimated_cost|floatformat:0 }}{% endif %}
+                                    {% elif plan.estimated_hours %} &bull; {{ plan.estimated_hours|floatformat:0 }}h{% endif %}
                                 </small>
                                 <div>
                                     <button class="btn btn-sm btn-outline-primary" onclick="viewPlanDetails({{ plan.id }})">
@@ -800,8 +810,8 @@
                     
                     <div class="row mb-4">
                         <div class="col-md-6">
-                            <p><strong>Estimated Hours:</strong> ${plan.estimated_hours ? plan.estimated_hours + 'h' : 'Not specified'}</p>
-                            <p><strong>Estimated Cost:</strong> ${plan.estimated_cost ? '$' + plan.estimated_cost : 'Not specified'}</p>
+                            <p><strong>Estimated Hours:</strong> ${plan.estimated_hours ? plan.estimated_hours + 'h' : (plan.plan_type === 'hiring' || plan.plan_type === 'contractor' ? 'N/A' : 'Not specified')}</p>
+                            <p><strong>Estimated Cost:</strong> ${plan.estimated_cost ? '{{ currency_code }} ' + plan.estimated_cost : 'Not specified'}</p>
                         </div>
                         <div class="col-md-6">
                             <p><strong>Start Date:</strong> ${plan.start_date ? new Date(plan.start_date).toLocaleDateString() : 'Not set'}</p>
@@ -1057,7 +1067,7 @@
                                         <input type="number" class="form-control" id="editPlanHours" name="estimated_hours" min="0" step="0.5">
                                     </div>
                                     <div class="col-md-6 mb-3">
-                                        <label for="editPlanCost" class="form-label">Estimated Cost</label>
+                                        <label for="editPlanCost" class="form-label">Estimated Cost ({{ currency_code }})</label>
                                         <input type="number" class="form-control" id="editPlanCost" name="estimated_cost" min="0" step="0.01">
                                     </div>
                                 </div>
@@ -1262,11 +1272,12 @@
                                     
                                     <div class="row">
                                         <div class="col-md-6 mb-3">
-                                            <label for="planHours" class="form-label">Estimated Hours</label>
+                                            <label for="planHours" class="form-label" id="planHoursLabel">Estimated Effort (hours)</label>
                                             <input type="number" class="form-control" id="planHours" name="estimated_hours" min="0" step="0.5">
+                                            <small class="form-text text-muted" id="planHoursHelp">Training/mentorship effort. Not applicable to hiring.</small>
                                         </div>
                                         <div class="col-md-6 mb-3">
-                                            <label for="planCost" class="form-label">Estimated Cost</label>
+                                            <label for="planCost" class="form-label">Estimated Cost ({{ currency_code }})</label>
                                             <input type="number" class="form-control" id="planCost" name="estimated_cost" min="0" step="0.01">
                                         </div>
                                     </div>
@@ -1285,14 +1296,24 @@
                     </div>
                 `;
                 document.body.appendChild(planModal);
+                // Adapt the "Estimated Hours" label to the selected plan type:
+                // hours are a training/mentorship effort estimate and are
+                // meaningless for hiring/contractor plans (you don't estimate a
+                // hire in hours). Relabel + guide instead of showing a stray "20h".
+                const _planTypeSelect = planModal.querySelector('#planType');
+                if (_planTypeSelect) {
+                    _planTypeSelect.addEventListener('change', () => window.adaptPlanHoursLabel());
+                }
             }
-            
+
             // Pre-fill form
             document.getElementById('planGapId').value = gap.id;
             document.getElementById('planSkillName').value = `${gap.skill_name} (${gap.proficiency_level})`;
             document.getElementById('planTitle').value = `Develop ${gap.skill_name} Skills`;
             document.getElementById('planDescription').value = `Address skill gap: Need ${gap.gap_count} more team member${gap.gap_count === 1 ? '' : 's'} with ${gap.proficiency_level} level ${gap.skill_name} skills.`;
-            
+            document.getElementById('planType').value = '';
+            window.adaptPlanHoursLabel();
+
             // Show modal
             const modal = new bootstrap.Modal(planModal);
             modal.show();
@@ -1303,6 +1324,31 @@
         }
     };
     
+    // Plan types where an "hours" estimate is meaningful (effort-based work)
+    // versus headcount-acquisition plans where hours don't apply.
+    const _EFFORT_PLAN_TYPES = ['training', 'mentorship', 'cross_training', 'redistribute'];
+    window.adaptPlanHoursLabel = function() {
+        const typeSel = document.getElementById('planType');
+        const label = document.getElementById('planHoursLabel');
+        const help = document.getElementById('planHoursHelp');
+        const input = document.getElementById('planHours');
+        if (!typeSel || !label || !input) return;
+        const type = typeSel.value;
+        const isEffort = _EFFORT_PLAN_TYPES.includes(type);
+        if (type === 'hiring' || type === 'contractor') {
+            label.textContent = 'Estimated Hours (n/a for hiring)';
+            input.disabled = true;
+            input.value = '';
+            if (help) help.textContent = 'Hours are not applicable to a ' + type + ' plan — leave blank.';
+        } else {
+            label.textContent = 'Estimated Effort (hours)';
+            input.disabled = false;
+            if (help) help.textContent = isEffort
+                ? 'Estimated hours of training/mentorship effort.'
+                : 'Estimated effort in hours (optional).';
+        }
+    };
+
     window.submitPlanForm = async function() {
         try {
             const form = document.getElementById('createPlanForm');

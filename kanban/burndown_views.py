@@ -78,6 +78,17 @@ def burndown_dashboard(request, board_id):
             column__board=board, item_type='task', progress__lt=100
         ).aggregate(total=Sum('story_points'))['total'] or 0
     )
+    # Whether this board tracks story points AT ALL. If every task has 0 points
+    # (many teams size in task count, not points), the "Committed vs Capacity"
+    # card is meaningless ("0 / 0.0") and is hidden entirely rather than shown
+    # empty. Checks the full board, not just open tasks, so a board that has
+    # completed all its pointed work still counts as point-tracking.
+    board_total_points = (
+        Task.objects.filter(
+            column__board=board, item_type='task'
+        ).aggregate(total=Sum('story_points'))['total'] or 0
+    )
+    board_uses_story_points = board_total_points > 0
     _point_snaps = [
         float(s.story_points_completed)
         for s in velocity_snapshots if s.story_points_completed is not None
@@ -87,7 +98,8 @@ def burndown_dashboard(request, board_id):
     )
     # Only warn when we have a real velocity baseline AND real commitments.
     capacity_over_committed = bool(
-        avg_points_capacity > 0
+        board_uses_story_points
+        and avg_points_capacity > 0
         and committed_points > 0
         and committed_points > avg_points_capacity
     )
@@ -95,7 +107,10 @@ def burndown_dashboard(request, board_id):
         'committed_points': committed_points,
         'avg_points_capacity': avg_points_capacity,
         'capacity_over_committed': capacity_over_committed,
-        'capacity_has_baseline': bool(_point_snaps),
+        # Baseline requires a non-zero points signal, not merely non-empty
+        # snapshots (all-zero snapshots are not a real points baseline).
+        'capacity_has_baseline': avg_points_capacity > 0,
+        'board_uses_story_points': board_uses_story_points,
     }
 
     # Build display label for alert timestamp ("Just now" vs "X minutes ago")

@@ -523,3 +523,66 @@ class SkillGapMatchingTests(TestCase):
         oauth = next((g for g in gaps if g['skill_name'].lower() == 'oauth'), None)
         self.assertIsNotNone(oauth, f"OAuth gap should be reported: {gaps}")
         self.assertFalse(oauth['has_team_coverage'])
+
+    def test_oauth_variants_collapse_to_one_gap(self):
+        """"OAuth" and "OAuth 2.0" are the same competency — they must not
+        appear as two separate duplicate gaps in the list."""
+        self.assertEqual(_normalize_skill_name('OAuth'), 'oauth')
+        self.assertEqual(_normalize_skill_name('OAuth 2.0'), 'oauth')
+        self.assertEqual(_normalize_skill_name('OAuth2'), 'oauth')
+        self._make_task('Google OAuth 2.0', [{'name': 'OAuth 2.0', 'level': 'Advanced'}])
+        self._make_task('GitHub OAuth', [{'name': 'OAuth', 'level': 'Advanced'}])
+        gaps = calculate_skill_gaps(self.board)
+        oauth_gaps = [g for g in gaps if g['skill_name'].lower().startswith('oauth')]
+        self.assertEqual(
+            len(oauth_gaps), 1,
+            f"OAuth variants must collapse to a single gap, got: {[g['skill_name'] for g in oauth_gaps]}"
+        )
+        # Both tasks fold into the one gap's affected task count.
+        self.assertEqual(oauth_gaps[0]['task_count'], 2)
+
+    def test_system_architecture_covers_software_architecture(self):
+        """A member with "System Architecture" covers "Software Architecture"
+        tasks — they are the same discipline under different labels."""
+        self.assertEqual(
+            _normalize_skill_name('System Architecture'),
+            _normalize_skill_name('Software Architecture'),
+        )
+
+    def test_critical_requires_active_work(self):
+        """"Critical – Cannot proceed" must be reserved for skills blocking work
+        that is actually in flight. A missing skill needed only by backlog / to-do
+        tasks is serious but not "cannot proceed" — it should cap at 'high'."""
+        # Two tasks needing a skill nobody has, both sitting in the To Do column.
+        self._make_task('Add Redis cache', [{'name': 'Redis', 'level': 'Advanced'}])
+        self._make_task('Redis pub/sub', [{'name': 'Redis', 'level': 'Advanced'}])
+        gaps = calculate_skill_gaps(self.board)
+        redis = next((g for g in gaps if g['skill_name'].lower() == 'redis'), None)
+        self.assertIsNotNone(redis, f"Redis gap expected: {gaps}")
+        self.assertEqual(redis['active_task_count'], 0)
+        self.assertNotEqual(
+            redis['severity'], 'critical',
+            "A backlog-only zero-coverage gap must not be Critical/Cannot-proceed"
+        )
+
+        # Now move the same work into an active (In Progress) column: it becomes
+        # a genuine blocker and may escalate to critical.
+        active_col = Column.objects.create(
+            name='In Progress', board=self.board, column_type='in_progress'
+        )
+        Task.objects.create(
+            title='Redis clustering', column=active_col, created_by=self.user,
+            required_skills=[{'name': 'Redis', 'level': 'Advanced'}],
+        )
+        Task.objects.create(
+            title='Redis failover', column=active_col, created_by=self.user,
+            required_skills=[{'name': 'Redis', 'level': 'Advanced'}],
+        )
+        gaps = calculate_skill_gaps(self.board)
+        redis = next((g for g in gaps if g['skill_name'].lower() == 'redis'), None)
+        self.assertIsNotNone(redis)
+        self.assertGreaterEqual(redis['active_task_count'], 2)
+        self.assertEqual(
+            redis['severity'], 'critical',
+            "Zero-coverage skill blocking active work should be Critical"
+        )
